@@ -306,10 +306,34 @@ function extractTextFromHtml(html: string): string {
 		}
 	}
 
-	return textSource
+	const raw = textSource
 		.replace(/<br\s*\/?>/gi, '\n')
 		.replace(/<[^>]+>/g, '')
 		.trim();
+
+	return decodeHtmlEntities(raw);
+}
+
+function decodeHtmlEntities(text: string): string {
+	return text
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;/g, "'")
+		.replace(/&apos;/g, "'")
+		.replace(/&lt;/g, '<')
+		.replace(/&gt;/g, '>')
+		.replace(/&hellip;/gi, '…')
+		.replace(/&nbsp;/gi, ' ')
+		.replace(/&mdash;/gi, '—')
+		.replace(/&ndash;/gi, '–')
+		.replace(/&ldquo;/gi, '“')
+		.replace(/&rdquo;/gi, '”')
+		.replace(/&lsquo;/gi, '‘')
+		.replace(/&rsquo;/gi, '’')
+		.replace(/&laquo;/gi, '«')
+		.replace(/&raquo;/gi, '»')
+		.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+		.replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+		.replace(/&amp;/g, '&'); // Must be last to avoid double-decoding
 }
 
 function deriveMediaType(media: FeedItemMedia[]): FeedItemMediaType {

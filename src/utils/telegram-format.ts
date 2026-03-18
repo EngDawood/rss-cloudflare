@@ -67,10 +67,39 @@ export function formatFeedItem(item: FeedItem, settings?: FormatSettings): Teleg
 function buildTelegramCaption(item: FeedItem, settings: FormatSettings): string {
 	let text = escapeHtml(item.text);
 
-	// Instagram-specific: link @mentions and #hashtags to Instagram URLs
+	// Handle TikTok views removal
+	if (settings.removeTikTokViews === 'enable' && isTikTokItem(item)) {
+		// Pattern matches " (123.4K views)" or " (1.2M views)" or " (100 views)"
+		text = text.replace(/\s?\(\d+(\.\d+)?[KM]?\s+views\)/gi, '').trim();
+	}
+
+	// Handle hashtags
+	if (settings.hashtags === 'disable') {
+		// Remove hashtags (word starting with # followed by alphanumeric)
+		text = text.replace(/#\w+/g, '').replace(/\s+/g, ' ').trim();
+	} else if (isInstagramItem(item)) {
+		// Link hashtags to Instagram URLs
+		text = text.replace(/#([\w]+)/g, '<a href="https://www.instagram.com/explore/tags/$1">#$1</a>');
+	}
+
+	// Instagram-specific: link @mentions
 	if (isInstagramItem(item)) {
 		text = text.replace(/@([\w.]+)/g, '<a href="https://www.instagram.com/$1">@$1</a>');
-		text = text.replace(/#([\w]+)/g, '<a href="https://www.instagram.com/explore/tags/$1">#$1</a>');
+	}
+
+	// Add custom header
+	if (settings.customHeader) {
+		text = settings.customHeader + '\n\n' + text;
+	}
+
+	// Add extra hashtags
+	if (settings.customHashtags) {
+		text = text + '\n\n' + settings.customHashtags;
+	}
+
+	// Add custom footer
+	if (settings.customFooter) {
+		text = text + '\n\n' + settings.customFooter;
 	}
 
 	const footer = buildFooter(item, settings);
@@ -114,6 +143,10 @@ function buildFooter(item: FeedItem, settings: FormatSettings): string {
 
 function isInstagramItem(item: FeedItem): boolean {
 	return item.link.includes('instagram.com') || item.feedLink.includes('instagram.com');
+}
+
+function isTikTokItem(item: FeedItem): boolean {
+	return item.link.includes('tiktok.com') || item.feedLink.includes('tiktok.com');
 }
 
 function escapeHtml(str: string): string {

@@ -49,13 +49,21 @@ export function registerDiagnosticCommands(bot: Bot, env: Env, kv: KVNamespace):
 	bot.command('test', async (ctx) => {
 		const arg = ctx.match?.trim() || '';
 		if (!arg) {
-			await ctx.reply('Usage: <code>/test @username</code> or <code>/test https://feed-url</code>', { parse_mode: 'HTML' });
+			await ctx.reply(
+				'Usage:\n' +
+				'<code>/test @username</code> (Instagram)\n' +
+				'<code>/test -i username</code> (Instagram)\n' +
+				'<code>/test -t username</code> (TikTok)\n' +
+				'<code>/test -rss https://...</code> (RSS)\n' +
+				'<code>/test https://...</code> (Profile or RSS link)',
+				{ parse_mode: 'HTML' }
+			);
 			return;
 		}
 
 		const parsed = parseSourceRef(arg);
 		if (!parsed) {
-			await ctx.reply('Invalid source. Use @username, #hashtag, or a feed URL.');
+			await ctx.reply('Invalid source. Use @username, -t username, -rss url, or a profile/feed URL.');
 			return;
 		}
 

@@ -11,6 +11,7 @@ export const RSS_BRIDGE_INSTANCES = [
 ];
 
 // RSS-Bridge instance known to have TikTokBridge enabled
+// We still prefer instances in the failover list, but we'll include this as an extra fallback
 const RSSBRIDGE_TIKTOK_INSTANCE = 'https://rss-bridge.org/bridge01';
 
 /**
@@ -86,12 +87,27 @@ function buildTikTokUserUrl(instance: string, username: string): string {
 }
 
 /**
- * Fetch TikTok user feed via RSS-Bridge.
+ * Fetch TikTok user feed via RSS-Bridge instances, with failover.
  */
 export async function fetchTikTokUser(username: string): Promise<FetchResult> {
-	const url = buildTikTokUserUrl(RSSBRIDGE_TIKTOK_INSTANCE, username);
-	console.log(`[TikTok] Fetching RSS-Bridge feed for @${username}...`);
-	return fetchFeed(url);
+	// Add the known TikTok instance to the front of the list just for this fetch
+	// to ensure we try the most likely one first, but still failover to others
+	const originalInstances = [...RSS_BRIDGE_INSTANCES];
+	if (!RSS_BRIDGE_INSTANCES.includes(RSSBRIDGE_TIKTOK_INSTANCE)) {
+		RSS_BRIDGE_INSTANCES.unshift(RSSBRIDGE_TIKTOK_INSTANCE);
+	}
+	
+	try {
+		return await fetchFromRSSBridgeInstances(
+			(instance) => buildTikTokUserUrl(instance, username),
+			`tiktok @${username}`,
+		);
+	} finally {
+		// Restore the original array to not pollute it for Instagram fetches
+		// (since some bridges might not support TikTok and vice versa)
+		RSS_BRIDGE_INSTANCES.length = 0;
+		RSS_BRIDGE_INSTANCES.push(...originalInstances);
+	}
 }
 
 /**

@@ -49,12 +49,14 @@ export const DEFAULT_FORMAT_SETTINGS: FormatSettings = {
 	linkPreview: 'disable',
 	lengthLimit: 0,
 	fallbackMode: 'thumbnail_link',
+	hashtags: 'enable',
+	removeTikTokViews: 'disable',
 };
 
 // Setting display names and ordered options for inline keyboard UI
 export const FORMAT_LABELS: Record<
-	keyof FormatSettings,
-	{ label: string; options: { value: string; text: string }[] }
+	string,
+	{ label: string; options?: { value: string; text: string }[] }
 > = {
 	notification: {
 		label: 'Notification',
@@ -111,4 +113,21 @@ export const FORMAT_LABELS: Record<
 			{ value: 'skip', text: 'Skip post' },
 		],
 	},
+	hashtags: {
+		label: 'Hashtags',
+		options: [
+			{ value: 'enable', text: 'Enable' },
+			{ value: 'disable', text: 'Disable' },
+		],
+	},
+	removeTikTokViews: {
+		label: 'TikTok views',
+		options: [
+			{ value: 'enable', text: 'Remove' },
+			{ value: 'disable', text: 'Keep' },
+		],
+	},
+	customHeader: { label: 'Header text' },
+	customFooter: { label: 'Footer text' },
+	customHashtags: { label: 'Extra hashtags' },
 };
