@@ -218,7 +218,7 @@ function filterItems(items: FeedItem[], filter: FeedMediaFilter): FeedItem[] {
  */
 function migrateMediaFilter(source: ChannelSource): FeedMediaFilter {
 	// Handle both old field name (mediaType) and new (mediaFilter)
-	const raw = source.mediaFilter ?? (source as any).mediaType ?? 'all';
+	const raw = (source.mediaFilter ?? (source as any).mediaType ?? 'all') as string;
 	switch (raw) {
 		case 'picture': return 'photo';
 		case 'multiple': return 'album';

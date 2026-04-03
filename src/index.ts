@@ -3,6 +3,7 @@ import { handleInstagramFeed } from './routes/instagram';
 import { handleTelegramWebhook } from './routes/telegram';
 import { handleSetup } from './routes/setup';
 import { handleFoloWebhook } from './routes/folo';
+import { handleTestBridges } from './routes/test-bridges';
 import { checkAllFeeds } from './cron/check-feeds';
 
 type HonoEnv = { Bindings: Env };
@@ -12,6 +13,12 @@ const app = new Hono<HonoEnv>();
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 app.get('/instagram', handleInstagramFeed);
+app.get('/test-bridges', handleTestBridges);
+app.get('/test-bridges/:u', handleTestBridges);
+app.get('/test-rssbridge', handleTestBridges);
+app.get('/test-rssbridge/:u', handleTestBridges);
+app.get('/test-rsshub', handleTestBridges);
+app.get('/test-rsshub/:u', handleTestBridges);
 
 app.post('/telegram/webhook', handleTelegramWebhook);
 app.post('/folo', handleFoloWebhook);

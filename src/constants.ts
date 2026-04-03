@@ -130,4 +130,5 @@ export const FORMAT_LABELS: Record<
 	customHeader: { label: 'Header text' },
 	customFooter: { label: 'Footer text' },
 	customHashtags: { label: 'Extra hashtags' },
+	cleanupText: { label: 'Cleanup text' },
 };
