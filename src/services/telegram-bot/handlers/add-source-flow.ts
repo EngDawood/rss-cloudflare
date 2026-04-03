@@ -50,6 +50,8 @@ export async function handleAddSourceValue(
 		id = `rss_${shortHash(value)}`;
 	} else if (sourceType === 'instagram_user') {
 		id = `usr_${shortHash(value)}`;
+	} else if (sourceType === 'instagram_story') {
+		id = `igst_${shortHash(value)}`;
 	} else if (sourceType === 'instagram_tag') {
 		id = `tag_${shortHash(value)}`;
 	} else if (sourceType === 'tiktok_user') {

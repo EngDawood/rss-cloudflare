@@ -27,7 +27,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 
 		if (!source.format) source.format = {};
 		const current = resolveFormatSettings(config.defaultFormat, source.format);
-		const nextVal = cycleFormatValue(setting, current[setting]);
+		const nextVal = cycleFormatValue(setting, current[setting] as string | number);
 		if (setting === 'lengthLimit') {
 			source.format[setting] = parseInt(nextVal, 10);
 		} else {
@@ -75,7 +75,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 
 		if (!config.defaultFormat) config.defaultFormat = {};
 		const current = resolveFormatSettings(config.defaultFormat);
-		const nextVal = cycleFormatValue(setting, current[setting]);
+		const nextVal = cycleFormatValue(setting, current[setting] as string | number);
 		if (setting === 'lengthLimit') {
 			config.defaultFormat[setting] = parseInt(nextVal, 10);
 		} else {

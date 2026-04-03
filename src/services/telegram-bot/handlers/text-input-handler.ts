@@ -1,6 +1,6 @@
 import { InlineKeyboard } from 'grammy';
 import type { Bot, Context } from 'grammy';
-import { getAdminState, setAdminState } from '../storage/admin-state';
+import { getAdminState, setAdminState, clearAdminState } from '../storage/admin-state';
 import { addChannelDirect } from './add-channel-flow';
 import { handleAddSourceValue, handleRemoveChannelConfirm } from './add-source-flow';
 import { detectMediaUrl } from '../../../utils/url-detector';
@@ -218,5 +218,5 @@ async function handleSetFormatCustom(
 		);
 	}
 
-	await setAdminState(kv, adminId, null);
+	await clearAdminState(kv, adminId);
 }

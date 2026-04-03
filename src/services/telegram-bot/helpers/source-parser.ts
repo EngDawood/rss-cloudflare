@@ -43,6 +43,13 @@ export function parseSourceRef(ref: string): { type: SourceType; value: string; 
 		return { type: 'instagram_user', value: igUser, id: `usr_${shortHash(igUser)}` };
 	}
 
+	// Instagram Story explicit: "-s username", "story username", or "igstory username"
+	const igStoryMatch = trimmed.match(/^(?:-s|story|igstory)\s+@?([\w.-]+)/i);
+	if (igStoryMatch) {
+		const igUser = igStoryMatch[1].toLowerCase();
+		return { type: 'instagram_story', value: igUser, id: `igst_${shortHash(igUser)}` };
+	}
+
 	// URLs: Profile routing or fallback to RSS
 	if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
 		// TikTok Profile Link
@@ -90,6 +97,8 @@ export function sourceTypeIcon(type: string): string {
 		case 'instagram_tag':
 		case 'hashtag': // legacy
 			return '#️⃣';
+		case 'instagram_story':
+			return '📸';
 		case 'tiktok_user':
 			return '🎵';
 		case 'rss_url':
@@ -110,6 +119,8 @@ export function sourceTypeLabel(type: string): string {
 		case 'instagram_tag':
 		case 'hashtag':
 			return 'IG Tag';
+		case 'instagram_story':
+			return 'IG Story';
 		case 'tiktok_user':
 			return 'TikTok';
 		case 'rss_url':

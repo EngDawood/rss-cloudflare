@@ -13,10 +13,11 @@ export interface FormatSettings {
 	customHeader?: string;
 	customFooter?: string;
 	customHashtags?: string;
+	cleanupText?: string;
 	removeTikTokViews: 'enable' | 'disable';
 }
 
-export type SourceType = 'instagram_user' | 'instagram_tag' | 'rss_url' | 'tiktok_user';
+export type SourceType = 'instagram_user' | 'instagram_tag' | 'instagram_story' | 'rss_url' | 'tiktok_user';
 
 // Channel source configuration
 export interface ChannelSource {

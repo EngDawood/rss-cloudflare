@@ -7,7 +7,7 @@ import type { Context, InlineKeyboard } from 'grammy';
 export async function editOrReply(
 	ctx: Context,
 	text: string,
-	opts?: { parse_mode?: string; reply_markup?: InlineKeyboard }
+	opts?: { parse_mode?: string; reply_markup?: InlineKeyboard; disable_web_page_preview?: boolean; link_preview_options?: { is_disabled: boolean } }
 ): Promise<void> {
 	try {
 		if (ctx.callbackQuery?.message) {

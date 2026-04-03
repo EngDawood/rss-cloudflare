@@ -65,7 +65,21 @@ export function formatFeedItem(item: FeedItem, settings?: FormatSettings): Teleg
 }
 
 function buildTelegramCaption(item: FeedItem, settings: FormatSettings): string {
-	let text = escapeHtml(item.text);
+	let rawText = item.text;
+
+	// Apply cleanup text (remove specified phrases)
+	if (settings.cleanupText) {
+		const phrases = settings.cleanupText.split('\n').map((p) => p.trim()).filter((p) => p.length > 0);
+		for (const phrase of phrases) {
+			// Case-insensitive global replacement of the phrase
+			const escapedPhrase = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			const regex = new RegExp(escapedPhrase, 'gi');
+			rawText = rawText.replace(regex, '');
+		}
+		rawText = rawText.replace(/\s+/g, ' ').trim();
+	}
+
+	let text = escapeHtml(rawText);
 
 	// Handle TikTok views removal
 	if (settings.removeTikTokViews === 'enable' && isTikTokItem(item)) {
@@ -138,11 +152,13 @@ function buildFooter(item: FeedItem, settings: FormatSettings): string {
 				: `\n\n${postUrl}`;
 		case 'disable':
 			return showAuthor ? `\n\n${escapeHtml(item.author)}` : '';
+		default:
+			return '';
 	}
 }
 
 function isInstagramItem(item: FeedItem): boolean {
-	return item.link.includes('instagram.com') || item.feedLink.includes('instagram.com');
+	return item.link.includes('instagram.com') || item.feedLink.includes('instagram.com') || item.feedLink.includes('picnob.info');
 }
 
 function isTikTokItem(item: FeedItem): boolean {

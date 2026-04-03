@@ -8,6 +8,7 @@ import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
 import { buildHeaders } from '../../../utils/headers';
 import { IG_WEB_PROFILE, IG_TOP_SEARCH } from '../../../constants';
 import { enrichFeedItems } from '../../../utils/media-enrichment';
+import { sendFallbackMessage } from '../helpers/fallback-sender';
 
 const BOT_COMMANDS = [
 	{ command: 'start', description: 'Show all commands' },
@@ -45,29 +46,44 @@ export function registerDiagnosticCommands(bot: Bot, env: Env, kv: KVNamespace):
 		}
 	});
 
-	// /test <source> — Fetch and send the latest post from any source
+	// /test [count] <source> — Fetch and send the latest post(s) from any source
 	bot.command('test', async (ctx) => {
 		const arg = ctx.match?.trim() || '';
 		if (!arg) {
 			await ctx.reply(
 				'Usage:\n' +
-				'<code>/test @username</code> (Instagram)\n' +
-				'<code>/test -i username</code> (Instagram)\n' +
-				'<code>/test -t username</code> (TikTok)\n' +
-				'<code>/test -rss https://...</code> (RSS)\n' +
-				'<code>/test https://...</code> (Profile or RSS link)',
+				'<code>/test [count] @username</code> (Instagram)\n' +
+				'<code>/test [count] -i username</code> (Instagram)\n' +
+				'<code>/test [count] -t username</code> (TikTok)\n' +
+				'<code>/test [count] -rss https://...</code> (RSS)\n' +
+				'<code>/test [count] https://...</code> (Profile or RSS link)\n\n' +
+				'Example: <code>/test 5 -t walidfitaihi6</code>',
 				{ parse_mode: 'HTML' }
 			);
 			return;
 		}
 
-		const parsed = parseSourceRef(arg);
+		let count = 1;
+		let sourceRef = arg;
+		
+		// If the command starts with a number, parse it and remove it from the sourceRef string
+		const match = arg.match(/^(\d+)\s+(.+)$/);
+		if (match) {
+			count = parseInt(match[1], 10);
+			sourceRef = match[2];
+			
+			// Put a reasonable upper limit to avoid API bans/flooding
+			if (count > 10) count = 10;
+			if (count < 1) count = 1;
+		}
+
+		const parsed = parseSourceRef(sourceRef);
 		if (!parsed) {
 			await ctx.reply('Invalid source. Use @username, -t username, -rss url, or a profile/feed URL.');
 			return;
 		}
 
-		await ctx.reply(`Fetching latest from <b>${escapeHtmlBot(parsed.value)}</b>...`, { parse_mode: 'HTML' });
+		await ctx.reply(`Fetching latest ${count} from <b>${escapeHtmlBot(parsed.value)}</b>...`, { parse_mode: 'HTML' });
 
 		try {
 			const source: ChannelSource = {
@@ -87,12 +103,45 @@ export function registerDiagnosticCommands(bot: Bot, env: Env, kv: KVNamespace):
 				return;
 			}
 
-			const items = [result.items[0]];
+			// Get the requested number of items
+			const items = result.items.slice(0, count).reverse(); // Reverse to send oldest first
 			await enrichFeedItems(items);
-			const latest = items[0];
-
-			const message = formatFeedItem(latest);
-			await sendMediaToChannel(bot, ctx.chat!.id, message);
+			
+			for (let i = 0; i < items.length; i++) {
+				const item = items[i];
+				const message = formatFeedItem(item);
+				try {
+					await sendMediaToChannel(bot, ctx.chat!.id, message);
+				} catch (err: any) {
+					// Handle specific errors like FileTooLargeError gracefully in test command
+					console.error(`[Test Command] Failed to send item ${item.id}:`, err);
+					
+					// ONLY trigger fallback for oversized files during tests to avoid hiding other systemic errors
+					if (err.name === 'FileTooLargeError' || (err instanceof Error && err.message.includes('File too large'))) {
+						try {
+							// Use the same fallback message formatting as /sub to send the thumbnail with caption
+							// We intentionally do not pass 'err' here to hide the 50MB warning for manual tests
+							await sendFallbackMessage(bot, ctx.chat!.id, item, 'thumbnail_link');
+						} catch (fallbackErr) {
+							console.error(`[Test Command] Fallback also failed for ${item.id}:`, fallbackErr);
+							const fallbackUrl = item.link;
+							await ctx.reply(
+								`⚠️ <b>File exceeds Telegram's 50MB limit.</b>\n` +
+								`Cannot send media directly. <a href="${fallbackUrl}">View original post</a>`,
+								{ parse_mode: 'HTML' }
+							);
+						}
+					} else {
+						// Rethrow to be caught by the outer try-catch
+						throw err;
+					}
+				}
+				
+				// Add a small delay between sending multiple messages to prevent Telegram rate limits
+				if (i < items.length - 1) {
+					await new Promise(resolve => setTimeout(resolve, 1500));
+				}
+			}
 		} catch (err: any) {
 			await ctx.reply(`Error: ${err.message || String(err)}`);
 		}

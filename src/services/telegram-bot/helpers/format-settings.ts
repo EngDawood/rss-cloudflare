@@ -6,7 +6,7 @@ export const FORMAT_SETTING_KEYS: (keyof FormatSettings)[] = [
 ];
 
 export const CUSTOM_TEXT_SETTING_KEYS: (keyof FormatSettings)[] = [
-	'customHeader', 'customFooter', 'customHashtags',
+	'customHeader', 'customFooter', 'customHashtags', 'cleanupText',
 ];
 
 /**

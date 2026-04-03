@@ -89,7 +89,7 @@ export function parseXML(xml: string, overrideFeedTitle?: string): FetchResult {
 }
 
 function parseAtomEntry(
-	entry: cheerio.Cheerio<cheerio.Element>,
+	entry: cheerio.Cheerio<any>,
 	$: cheerio.CheerioAPI,
 	feedTitle: string,
 	feedLink: string,
@@ -129,7 +129,7 @@ function parseAtomEntry(
 }
 
 function parseRSSItem(
-	entry: cheerio.Cheerio<cheerio.Element>,
+	entry: cheerio.Cheerio<any>,
 	$: cheerio.CheerioAPI,
 	feedTitle: string,
 	feedLink: string,
@@ -171,7 +171,7 @@ function parseRSSItem(
  * Extract media from Atom entries: enclosures, content HTML (video/img).
  */
 function extractMedia(
-	entry: cheerio.Cheerio<cheerio.Element>,
+	entry: cheerio.Cheerio<any>,
 	$: cheerio.CheerioAPI,
 	contentHtml: string,
 ): FeedItemMedia[] {
@@ -225,7 +225,7 @@ function extractMedia(
  * Extract media from RSS items: <enclosure>, <media:content>, content HTML.
  */
 function extractMediaFromRSS(
-	entry: cheerio.Cheerio<cheerio.Element>,
+	entry: cheerio.Cheerio<any>,
 	$: cheerio.CheerioAPI,
 	contentHtml: string,
 ): FeedItemMedia[] {

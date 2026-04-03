@@ -132,5 +132,5 @@ export async function showFailedPosts(
 	}
 	keyboard.text('« Back', `ch:${channelId}`);
 
-	await editOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: keyboard, disable_web_page_preview: true });
+	await editOrReply(ctx, text, { parse_mode: 'HTML', reply_markup: keyboard, link_preview_options: { is_disabled: true } });
 }

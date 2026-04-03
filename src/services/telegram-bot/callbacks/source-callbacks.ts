@@ -19,6 +19,7 @@ export function registerSourceCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		const channelId = ctx.match[1];
 		const keyboard = new InlineKeyboard()
 			.text('👤 Instagram User', `src_type:${channelId}:instagram_user`)
+			.text('📸 Instagram Story', `src_type:${channelId}:instagram_story`)
 			.row()
 			.text('#️⃣ Instagram Tag', `src_type:${channelId}:instagram_tag`)
 			.row()
@@ -44,6 +45,7 @@ export function registerSourceCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		const prompts: Record<string, string> = {
 			instagram_user: '👤 Send the Instagram <b>username</b> (without @):',
 			instagram_tag: '#️⃣ Send the <b>hashtag</b> (without #):',
+			instagram_story: '📸 Send the Instagram <b>username</b> for stories (without @):',
 			tiktok_user: '🎵 Send the TikTok <b>username</b> (without @):',
 			rss_url: '🌐 Send the <b>RSS/Atom feed URL</b>:',
 		};

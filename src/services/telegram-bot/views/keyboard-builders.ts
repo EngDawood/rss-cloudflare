@@ -25,7 +25,8 @@ export function buildFormatKeyboard(
 	for (const key of CUSTOM_TEXT_SETTING_KEYS) {
 		const label = FORMAT_LABELS[key].label;
 		const val = current[key];
-		const display = val ? (val.length > 20 ? val.substring(0, 17) + '...' : val) : 'Not set';
+		const strVal = String(val);
+		const display = val ? (strVal.length > 20 ? strVal.substring(0, 17) + '...' : strVal) : 'Not set';
 		// Prefix 'fsc' (format setting custom) to distinguish from cycling ones
 		kb.text(`${label}: ${display}`, `${callbackPrefix.replace('fs', 'fsc').replace('fd', 'fdc')}:${key}`).row();
 	}
