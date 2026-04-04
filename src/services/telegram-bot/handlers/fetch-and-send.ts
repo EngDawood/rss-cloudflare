@@ -31,7 +31,8 @@ export async function fetchAndSendLatest(
 	env: Env,
 	chatId: number,
 	source: ChannelSource,
-	count: number = 1
+	count: number = 1,
+	useQueue: boolean = false
 ): Promise<void> {
 	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
 	try {
@@ -59,6 +60,15 @@ export async function fetchAndSendLatest(
 
 		let failures = 0;
 		for (const item of items) {
+			if (useQueue) {
+				await env.TELEGRAM_SEND_QUEUE.send({
+					type: 'send',
+					channelId: chatId.toString(),
+					item,
+					settings
+				});
+				continue;
+			}
 			try {
 				const message = formatFeedItem(item, settings);
 				await sendMediaToChannel(bot, chatId, message, settings);

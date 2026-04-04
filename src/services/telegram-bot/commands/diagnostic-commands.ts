@@ -83,68 +83,23 @@ export function registerDiagnosticCommands(bot: Bot, env: Env, kv: KVNamespace):
 			return;
 		}
 
-		await ctx.reply(`Fetching latest ${count} from <b>${escapeHtmlBot(parsed.value)}</b>...`, { parse_mode: 'HTML' });
-
-		try {
-			const source: ChannelSource = {
-				id: parsed.id,
-				type: parsed.type,
-				value: parsed.value,
-				mediaFilter: 'all',
-				enabled: true,
-			};
-			const result = await fetchForSource(source, env);
-
-			if (result.items.length === 0) {
-				const errorInfo = result.errors.length > 0
-					? result.errors.map((e) => `- ${e.tier}: ${e.message}`).join('\n')
-					: 'No items found';
-				await ctx.reply(`No data for <b>${escapeHtmlBot(parsed.value)}</b>:\n<pre>${errorInfo}</pre>`, { parse_mode: 'HTML' });
-				return;
-			}
-
-			// Get the requested number of items
-			const items = result.items.slice(0, count).reverse(); // Reverse to send oldest first
-			await enrichFeedItems(items);
-			
-			for (let i = 0; i < items.length; i++) {
-				const item = items[i];
-				const message = formatFeedItem(item);
-				try {
-					await sendMediaToChannel(bot, ctx.chat!.id, message);
-				} catch (err: any) {
-					// Handle specific errors like FileTooLargeError gracefully in test command
-					console.error(`[Test Command] Failed to send item ${item.id}:`, err);
-					
-					// ONLY trigger fallback for oversized files during tests to avoid hiding other systemic errors
-					if (err.name === 'FileTooLargeError' || (err instanceof Error && err.message.includes('File too large'))) {
-						try {
-							// Use the same fallback message formatting as /sub to send the thumbnail with caption
-							// We intentionally do not pass 'err' here to hide the 50MB warning for manual tests
-							await sendFallbackMessage(bot, ctx.chat!.id, item, 'thumbnail_link');
-						} catch (fallbackErr) {
-							console.error(`[Test Command] Fallback also failed for ${item.id}:`, fallbackErr);
-							const fallbackUrl = item.link;
-							await ctx.reply(
-								`⚠️ <b>File exceeds Telegram's 50MB limit.</b>\n` +
-								`Cannot send media directly. <a href="${fallbackUrl}">View original post</a>`,
-								{ parse_mode: 'HTML' }
-							);
-						}
-					} else {
-						// Rethrow to be caught by the outer try-catch
-						throw err;
-					}
-				}
-				
-				// Add a small delay between sending multiple messages to prevent Telegram rate limits
-				if (i < items.length - 1) {
-					await new Promise(resolve => setTimeout(resolve, 1500));
-				}
-			}
-		} catch (err: any) {
-			await ctx.reply(`Error: ${err.message || String(err)}`);
+		let useQueue = false;
+		if (sourceRef.includes('-q')) {
+			useQueue = true;
+			sourceRef = sourceRef.replace('-q', '').trim();
 		}
+
+		await ctx.reply(`Fetching latest ${count} from <b>${escapeHtmlBot(parsed.value)}</b>${useQueue ? ' via Queue' : ''}...`, { parse_mode: 'HTML' });
+
+		const source: ChannelSource = {
+			id: parsed.id,
+			type: parsed.type,
+			value: parsed.value,
+			mediaFilter: 'all',
+			enabled: true,
+		};
+
+		await fetchAndSendLatest(bot, env, ctx.chat!.id, source, count, useQueue);
 	});
 
 	// /debug [@username] — Quick Instagram connectivity test

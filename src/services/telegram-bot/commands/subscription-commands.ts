@@ -154,7 +154,7 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 				`✅ <b>${resolved.title}</b> subscribed to ${typeLabel}: <b>${escapeHtmlBot(parsed.value)}</b>\n\nFetching latest ${postCount} post(s)...`,
 				{ parse_mode: 'HTML' }
 			);
-			await fetchAndSendLatest(bot, env, parseInt(resolved.id, 10), source, postCount);
+			await fetchAndSendLatest(bot, env, parseInt(resolved.id, 10), source, postCount, false);
 		} else {
 			await ctx.reply(
 				`✅ <b>${resolved.title}</b> subscribed to ${typeLabel}: <b>${escapeHtmlBot(parsed.value)}</b>\n\nNew posts will arrive on next cron check.`,
