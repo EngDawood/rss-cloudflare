@@ -1,12 +1,36 @@
 import * as cheerio from 'cheerio';
 import type { FeedItem, FeedItemMedia, FeedItemMediaType, FetchResult } from '../types/feed';
 
+import { CACHE_PREFIX_FEED } from '../constants';
+
 const FETCH_TIMEOUT_MS = 10000;
 
 /**
  * Fetch and parse any RSS/Atom feed URL into normalized FeedItem[].
+ * Includes optional KV caching.
  */
-export async function fetchFeed(url: string, overrideFeedTitle?: string): Promise<FetchResult> {
+export async function fetchFeed(
+	url: string,
+	overrideFeedTitle?: string,
+	kv?: KVNamespace,
+	cacheTtl?: number
+): Promise<FetchResult> {
+	const cacheKey = `${CACHE_PREFIX_FEED}${url}`;
+
+	// 1. Try to get from cache first
+	if (kv) {
+		try {
+			const cachedXml = await kv.get(cacheKey);
+			if (cachedXml) {
+				console.log(`[Cache] Hit: ${url}`);
+				return parseXML(cachedXml, overrideFeedTitle);
+			}
+		} catch (err) {
+			console.warn(`[Cache] Error reading from KV for ${url}:`, err);
+		}
+	}
+
+	// 2. Cache miss: Perform HTTP fetch
 	try {
 		const controller = new AbortController();
 		const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -50,6 +74,16 @@ export async function fetchFeed(url: string, overrideFeedTitle?: string): Promis
 				feedLink: '',
 				errors: [{ tier: 'parse', message: 'Response is not RSS or Atom XML' }],
 			};
+		}
+
+		// 3. Store successful result in cache if KV is provided
+		if (kv && cacheTtl && cacheTtl > 0) {
+			try {
+				await kv.put(cacheKey, xml, { expirationTtl: cacheTtl });
+				console.log(`[Cache] Stored: ${url} (TTL: ${cacheTtl}s)`);
+			} catch (err) {
+				console.warn(`[Cache] Error writing to KV for ${url}:`, err);
+			}
 		}
 
 		return parseXML(xml, overrideFeedTitle);
