@@ -39,6 +39,28 @@
 		"crons": [
 			"*/5 * * * *"
 		]
+	},
+	"queues": {
+		"producers": [
+			{
+				"binding": "FEED_FETCH_QUEUE",
+				"queue": "rss-bot-fetch-queue"
+			},
+			{
+				"binding": "TELEGRAM_SEND_QUEUE",
+				"queue": "rss-bot-send-queue"
+			}
+		],
+		"consumers": [
+			{
+				"queue": "rss-bot-fetch-queue",
+				"max_batch_size": 10
+			},
+			{
+				"queue": "rss-bot-send-queue",
+				"max_batch_size": 1
+			}
+		]
 	}
 	// Secrets (set via wrangler secret put):
 	// - IG_SESSION_ID
