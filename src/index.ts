@@ -5,6 +5,9 @@ import { handleSetup } from './routes/setup';
 import { handleFoloWebhook } from './routes/folo';
 import { handleTestBridges } from './routes/test-bridges';
 import { checkAllFeeds } from './cron/check-feeds';
+import { handleQueue } from './queue-handler';
+import { QueueTask } from './types/queue';
+import { MessageBatch } from '@cloudflare/workers-types';
 
 type HonoEnv = { Bindings: Env };
 
@@ -48,5 +51,8 @@ export default {
 	fetch: app.fetch,
 	scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
 		ctx.waitUntil(checkAllFeeds(env));
+	},
+	queue: async (batch: MessageBatch<QueueTask>, env: Env): Promise<void> => {
+		await handleQueue(batch, env);
 	},
 };

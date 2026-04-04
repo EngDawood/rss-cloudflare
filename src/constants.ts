@@ -34,6 +34,9 @@ export const CACHE_PREFIX_TELEGRAM_STATE = 'telegram:state:';
 // Telegram config KV TTL (1 year — effectively permanent)
 export const TELEGRAM_CONFIG_TTL = 86400 * 365;
 
+// Feed cache TTL (15 minutes)
+export const FEED_CACHE_TTL = 900;
+
 // Defaults
 export const RSS_ITEMS_LIMIT = 12;
 export const TITLE_MAX_LENGTH = 120;
