@@ -1,4 +1,5 @@
 import { Context } from 'hono';
+import { CACHE_PREFIX_FEED } from '../constants';
 
 type HonoEnv = { Bindings: Env };
 
@@ -40,6 +41,11 @@ const RSSHUB_INSTANCES = [
 	'https://rss.4040940.xyz'
 ];
 
+const RSS_BRIDGE_TIKTOK_INSTANCES = [
+	'https://rss-bridge.org/bridge01',
+	...FULL_RSS_BRIDGE_INSTANCES
+];
+
 const timeoutMs = 15000; // 15 seconds
 
 export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> {
@@ -59,6 +65,7 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
     const platform = c.req.query('platform') || defaultPlatform; // 'instagram', 'tiktok', or 'instagram_story'
     const instancesType = c.req.query('instances') || defaultInstances; // 'all', 'rssbridge', 'rsshub'
     const shouldRun = c.req.query('run') === 'true';
+    const useCache = c.req.query('cache') === 'true';
 
     let instancesToTest: string[] = [];
     let engine = '';
@@ -96,11 +103,23 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
             if (isRSSHub) {
                 url = `${instance}/picnob.info/user/${encodeURIComponent(username)}/stories?limit=10`;
             } else {
-                // RSS-Bridge doesn't have a specific native stories bridge endpoint in this configuration, fallback to normal feed
                 url = `${instance}/?action=display&bridge=InstagramBridge&format=Atom&direct_links=on&context=Username&u=${encodeURIComponent(username)}&media_type=all`;
             }
         }
         
+        let cacheStatus = 'Bypassed';
+        if (useCache && c.env.CACHE) {
+            try {
+                const cached = await c.env.CACHE.get(`${CACHE_PREFIX_FEED}${url}`);
+                if (cached) {
+                    return { instance, url, status: 'Success', durationMs: 0, items: (cached.match(/<entry>|<item>/g) || []).length, cacheStatus: 'Hit' };
+                }
+                cacheStatus = 'Miss';
+            } catch (e) {
+                cacheStatus = 'Error';
+            }
+        }
+
         const start = Date.now();
         
         try {
@@ -123,14 +142,14 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
                 const text = await response.text();
                 const isAtom = text.includes('<entry>');
                 const itemCount = (text.match(isAtom ? /<entry>/g : /<item>/g) || []).length;
-                return { instance, url, status: 'Success', durationMs: duration, items: itemCount };
+                return { instance, url, status: 'Success', durationMs: duration, items: itemCount, cacheStatus };
             } else {
-                return { instance, url, status: `HTTP ${response.status}`, durationMs: duration, items: 0 };
+                return { instance, url, status: `HTTP ${response.status}`, durationMs: duration, items: 0, cacheStatus };
             }
         } catch (error: any) {
             const end = Date.now();
             const duration = end - start;
-            return { instance, url, status: `Error: ${error.name === 'AbortError' ? 'Timeout' : error.message}`, durationMs: duration, items: 0 };
+            return { instance, url, status: `Error: ${error.name === 'AbortError' ? 'Timeout' : error.message}`, durationMs: duration, items: 0, cacheStatus };
         }
     }
 
@@ -139,7 +158,6 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
         const promises = instancesToTest.map(instance => testInstance(instance));
         results = await Promise.all(promises);
         
-        // Sort by status (Success first) then by duration
         results.sort((a, b) => {
             if (a.status === 'Success' && b.status !== 'Success') return -1;
             if (a.status !== 'Success' && b.status === 'Success') return 1;
@@ -156,7 +174,7 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
         <title>Bridge Benchmark Tool</title>
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; background: #f9f9f9; color: #333; }
-            table { border-collapse: collapse; width: 100%; max-width: 1200px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-top: 20px; }
+            table { border-collapse: collapse; width: 100%; max-width: 1300px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-top: 20px; }
             th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }
             th { background-color: #f1f1f1; font-weight: bold; }
             tr:hover { background-color: #f5f5f5; }
@@ -164,16 +182,19 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
             .error { color: red; }
             .fast { color: #008000; font-weight: bold; }
             .slow { color: #d35400; }
-            .controls { margin-bottom: 20px; padding: 15px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 1200px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
+            .controls { margin-bottom: 20px; padding: 15px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 1300px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
             button { padding: 6px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; height: 32px; }
             button:hover { background: #0056b3; }
             select, input { padding: 6px; border: 1px solid #ccc; border-radius: 4px; height: 32px; box-sizing: border-box; }
             .input-group { display: flex; flex-direction: column; gap: 5px; }
             .input-group label { font-size: 12px; font-weight: bold; color: #555; }
-            .feed-url { font-size: 11px; word-break: break-all; max-width: 350px; }
+            .input-group-row { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: bold; color: #555; }
+            .feed-url { font-size: 11px; word-break: break-all; max-width: 300px; }
             .feed-url a { color: #0066cc; text-decoration: none; }
             .feed-url a:hover { text-decoration: underline; }
-            .empty-state { padding: 40px; text-align: center; color: #666; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 1200px; border-radius: 4px; }
+            .empty-state { padding: 40px; text-align: center; color: #666; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 1300px; border-radius: 4px; }
+            .cache-hit { color: #2980b9; font-weight: bold; }
+            .cache-miss { color: #7f8c8d; }
         </style>
     </head>
     <body>
@@ -204,6 +225,14 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
                     <option value="tiktok" ${platform === 'tiktok' ? 'selected' : ''}>TikTok</option>
                 </select>
             </div>
+
+            <div class="input-group">
+                <label>Options:</label>
+                <div class="input-group-row">
+                    <input type="checkbox" id="cache" name="cache" value="true" ${useCache ? 'checked' : ''}>
+                    <label for="cache" style="font-weight: normal;">Use Edge Cache</label>
+                </div>
+            </div>
             
             <div class="input-group" style="justify-content: flex-end;">
                 <button type="submit">Run Benchmark</button>
@@ -225,7 +254,6 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
                     optStory.disabled = false;
                 }
             }
-            // Ensure state is correct on page load
             document.addEventListener('DOMContentLoaded', updateFormState);
         </script>
         
@@ -237,6 +265,7 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
                     <th>Status</th>
                     <th>Response Time</th>
                     <th>Items Found</th>
+                    <th>Cache Status</th>
                     <th>Feed URL</th>
                 </tr>
             </thead>
@@ -247,6 +276,7 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
                     <td class="${r.status === 'Success' ? 'success' : 'error'}">${r.status}</td>
                     <td class="${r.durationMs < 3000 ? 'fast' : 'slow'}">${r.durationMs} ms</td>
                     <td>${r.items}</td>
+                    <td class="${r.cacheStatus === 'Hit' ? 'cache-hit' : 'cache-miss'}">${r.cacheStatus}</td>
                     <td class="feed-url"><a href="${r.url}" target="_blank" rel="noopener noreferrer">${r.url}</a></td>
                 </tr>
                 `).join('')}
@@ -255,7 +285,7 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
         ` : `
         <div class="empty-state">
             <p>Click "Run Benchmark" to start testing latency across instances.</p>
-            <p><small>This prevents unnecessary background fetching when you just want to open the page or configure settings.</small></p>
+            <p><small>Checking "Use Edge Cache" will show you results already stored in your Cloudflare KV (0ms latency).</small></p>
         </div>
         `}
         
