@@ -35,33 +35,30 @@ function truncErr(err: unknown, maxLen = 300): string {
 }
 
 /**
- * Cron handler: iterate all channels, check due sources, send new posts.
+ * Cron handler: iterate all channels, and push fetch tasks to the queue.
  */
 export async function checkAllFeeds(env: Env): Promise<void> {
-
 	const channelsRaw = await getCached(env.CACHE, CACHE_KEY_TELEGRAM_CHANNELS);
 	if (!channelsRaw) return;
 
 	const channels: string[] = JSON.parse(channelsRaw);
 	if (channels.length === 0) return;
 
-	const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
-	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
 	const now = Date.now();
 
 	for (const channelId of channels) {
 		try {
-			await checkChannel(channelId, now, bot, env, adminId);
+			await scheduleChannelCheck(channelId, now, env);
 		} catch (err) {
-			console.error(`Error checking channel ${channelId}:`, err);
-			await alertAdmin(bot, adminId,
-				`❌ <b>Channel sync error</b>\nChannel: <code>${channelId}</code>\n\n<pre>${truncErr(err)}</pre>`
-			);
+			console.error(`Error scheduling channel ${channelId}:`, err);
 		}
 	}
 }
 
-async function checkChannel(channelId: string, now: number, bot: Bot, env: Env, adminId: number): Promise<void> {
+/**
+ * Check if a channel is due for a sync, and if so, queue its enabled sources.
+ */
+async function scheduleChannelCheck(channelId: string, now: number, env: Env): Promise<void> {
 	const config = await getChannelConfig(env.CACHE, channelId);
 	if (!config || !config.enabled) return;
 
@@ -69,141 +66,28 @@ async function checkChannel(channelId: string, now: number, bot: Bot, env: Env, 
 	const intervalMs = config.checkIntervalMinutes * 60 * 1000;
 	if (now - config.lastCheckTimestamp < intervalMs) return;
 
-	// Update last check timestamp
+	// Update last check timestamp immediately to prevent concurrent cron runs from double-queuing
 	config.lastCheckTimestamp = now;
 	await saveChannelConfig(env.CACHE, channelId, config);
 
-	// Check each enabled source
+	// Queue each enabled source for Tier 1 fetching
 	for (const source of config.sources) {
 		if (!source.enabled) continue;
 		try {
-			await checkSource(channelId, source, bot, env, config, adminId);
+			await env.FEED_FETCH_QUEUE.send({
+				type: 'fetch',
+				channelId,
+				sourceId: source.id
+			});
+			console.log(`[Queue] Pushed fetch task for ${source.value} in channel ${channelId}`);
 		} catch (err) {
-			console.error(`Error checking source ${source.value} for channel ${channelId}:`, err);
-			await alertAdmin(bot, adminId,
-				`❌ <b>Source fetch error</b>\nChannel: <code>${channelId}</code>\nSource: <code>${source.value}</code>\n\n<pre>${truncErr(err)}</pre>`
-			);
+			console.error(`[Queue] Failed to push fetch task for ${source.value}:`, err);
 		}
 	}
 }
 
-async function checkSource(channelId: string, source: ChannelSource, bot: Bot, env: Env, config: ChannelConfig, adminId: number): Promise<void> {
-	const result = await fetchForSource(source, env);
-	if (result.items.length === 0) {
-		if (result.errors.length > 0) {
-			console.error(`[Cron] All tiers failed for ${source.value}:`, JSON.stringify(result.errors));
-			const errorSummary = result.errors
-				.map((e) => `[${e.tier}] ${e.message ?? 'unknown'}`)
-				.join('\n');
-			await alertAdmin(bot, adminId,
-				`⚠️ <b>Connection lost — all instances down</b>\nSource: <code>${source.value}</code>\nChannel: <code>${channelId}</code>\n\n<pre>${truncErr(errorSummary, 500)}</pre>`
-			);
-		}
-		return;
-	}
+// (Removed checkChannel and checkSource as they are replaced by the Queue Handler)
 
-	// Filter by media type
-	const items = filterItems(result.items, migrateMediaFilter(source));
-	if (items.length === 0) return;
-
-	// Get set of already-sent post links
-	const sentKey = `${CACHE_PREFIX_TELEGRAM_SENT}${channelId}:${source.id}`;
-	const sentRaw = await getCached(env.CACHE, sentKey);
-	let sentLinks: string[] = [];
-	try {
-		const parsed = sentRaw ? JSON.parse(sentRaw) : [];
-		if (Array.isArray(parsed)) sentLinks = parsed;
-	} catch {
-		// Old lastSeenId format or corrupt data — start fresh
-	}
-	const sentSet = new Set(sentLinks);
-
-	// Find new items (not in sent set)
-	const newItems = items.filter(item => !sentSet.has(item.link));
-
-	if (newItems.length === 0) return;
-
-	// Send oldest first
-	newItems.reverse();
-
-	// Limit to 5 posts per check to avoid flooding
-	const postsToSend = newItems.slice(0, 5);
-
-	// Enrich items that link to supported platforms (e.g. TikTok) but have no media
-	await enrichFeedItems(postsToSend);
-
-	const chatId = parseInt(channelId, 10);
-
-	// Resolve format settings: hardcoded < channel defaults < source overrides
-	const settings = resolveFormatSettings(config.defaultFormat, source.format);
-
-	const sentItemLinks: string[] = [];
-	for (let i = 0; i < postsToSend.length; i++) {
-		const item = postsToSend[i];
-		if (i > 0) await sleep(1500);
-		try {
-			const message = formatFeedItem(item, settings);
-			await sendMediaToChannel(bot, chatId, message, settings);
-			sentItemLinks.push(item.link);
-		} catch (err) {
-			if (err instanceof GrammyError && err.error_code === 429) {
-				console.error(`[Cron] Rate limited on ${channelId}, stopping sends`);
-				break;
-			}
-			console.error(`Failed to send item ${item.id} to ${channelId}:`, err);
-
-			// Check fallback setting
-			if (settings.fallbackMode === 'skip') {
-				console.log(`[Cron] Skipping fallback for ${item.id} as per settings`);
-				await addFailedPost(env.CACHE, channelId, item);
-				sentItemLinks.push(item.link); // Mark as seen so we don't retry every time
-				continue;
-			}
-
-			// Fallback: send thumbnail + link
-			try {
-				await sendFallbackMessage(bot, chatId, item, settings.fallbackMode as 'thumbnail_link' | 'thumbnail');
-				sentItemLinks.push(item.link);
-			} catch (fallbackErr) {
-				console.error(`Fallback also failed for ${item.id}:`, fallbackErr);
-				await addFailedPost(env.CACHE, channelId, item);
-				
-				if (fallbackErr instanceof GrammyError && fallbackErr.error_code === 429) {
-					console.error(`[Cron] Rate limited on ${channelId}, stopping sends`);
-					break;
-				}
-
-				let errorSuffix = '';
-				if (fallbackErr instanceof FileTooLargeError) {
-					errorSuffix = `\n\n<b>File exceeds Telegram's size limit</b>\nDirect URL: <a href="${fallbackErr.url}">Download here</a>`;
-				} else if (fallbackErr instanceof GrammyError && fallbackErr.error_code === 403) {
-					if (fallbackErr.description.includes('bot is not a member')) {
-						errorSuffix = '\n\n<b>Action required:</b> Add the bot to your channel as an administrator.';
-					} else if (fallbackErr.description.includes('blocked by the user')) {
-						errorSuffix = '\n\n<b>Action required:</b> The recipient has blocked the bot.';
-					}
-				}
-
-				await alertAdmin(bot, adminId,
-					`❌ <b>Failed to deliver post</b> (main + fallback)\nChannel: <code>${channelId}</code>\nSource: <code>${source.value}</code>\nItem: <code>${item.id}</code>\n\n<pre>${truncErr(fallbackErr)}</pre>${errorSuffix}`
-				);
-			}
-		}
-	}
-
-	// Update sent links set — only record successfully sent items
-	if (sentItemLinks.length > 0) {
-		const merged = [...sentLinks, ...sentItemLinks];
-		// Cap at 50 entries to prevent unbounded growth
-		const capped = merged.slice(-50);
-		await setCached(env.CACHE, sentKey, JSON.stringify(capped), TELEGRAM_CONFIG_TTL);
-	} else {
-		// All posts failed to send — don't update so they're retried
-		await alertAdmin(bot, adminId,
-			`⚠️ <b>Feed delivery failed</b>\nChannel: <code>${channelId}</code>\nSource: <code>${source.value}</code>\nItems: ${postsToSend.length}`
-		);
-	}
-}
 
 /**
  * Filter items by media type. Handles both new and legacy filter values.
@@ -218,7 +102,7 @@ function filterItems(items: FeedItem[], filter: FeedMediaFilter): FeedItem[] {
  */
 function migrateMediaFilter(source: ChannelSource): FeedMediaFilter {
 	// Handle both old field name (mediaType) and new (mediaFilter)
-	const raw = source.mediaFilter ?? (source as any).mediaType ?? 'all';
+	const raw = (source.mediaFilter ?? (source as any).mediaType ?? 'all') as string;
 	switch (raw) {
 		case 'picture': return 'photo';
 		case 'multiple': return 'album';

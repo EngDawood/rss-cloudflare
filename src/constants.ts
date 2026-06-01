@@ -34,6 +34,9 @@ export const CACHE_PREFIX_TELEGRAM_STATE = 'telegram:state:';
 // Telegram config KV TTL (1 year — effectively permanent)
 export const TELEGRAM_CONFIG_TTL = 86400 * 365;
 
+// Feed cache TTL (15 minutes)
+export const FEED_CACHE_TTL = 900;
+
 // Defaults
 export const RSS_ITEMS_LIMIT = 12;
 export const TITLE_MAX_LENGTH = 120;
@@ -49,12 +52,14 @@ export const DEFAULT_FORMAT_SETTINGS: FormatSettings = {
 	linkPreview: 'disable',
 	lengthLimit: 0,
 	fallbackMode: 'thumbnail_link',
+	hashtags: 'enable',
+	removeTikTokViews: 'disable',
 };
 
 // Setting display names and ordered options for inline keyboard UI
 export const FORMAT_LABELS: Record<
-	keyof FormatSettings,
-	{ label: string; options: { value: string; text: string }[] }
+	string,
+	{ label: string; options?: { value: string; text: string }[] }
 > = {
 	notification: {
 		label: 'Notification',
@@ -111,4 +116,22 @@ export const FORMAT_LABELS: Record<
 			{ value: 'skip', text: 'Skip post' },
 		],
 	},
+	hashtags: {
+		label: 'Hashtags',
+		options: [
+			{ value: 'enable', text: 'Enable' },
+			{ value: 'disable', text: 'Disable' },
+		],
+	},
+	removeTikTokViews: {
+		label: 'TikTok views',
+		options: [
+			{ value: 'enable', text: 'Remove' },
+			{ value: 'disable', text: 'Keep' },
+		],
+	},
+	customHeader: { label: 'Header text' },
+	customFooter: { label: 'Footer text' },
+	customHashtags: { label: 'Extra hashtags' },
+	cleanupText: { label: 'Cleanup text' },
 };

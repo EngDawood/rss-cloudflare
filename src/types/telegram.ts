@@ -9,9 +9,15 @@ export interface FormatSettings {
 	linkPreview: 'enable' | 'disable';
 	lengthLimit: number; // 0 = unlimited, or 256/512/1024
 	fallbackMode: 'thumbnail_link' | 'thumbnail' | 'skip';
+	hashtags: 'enable' | 'disable';
+	customHeader?: string;
+	customFooter?: string;
+	customHashtags?: string;
+	cleanupText?: string;
+	removeTikTokViews: 'enable' | 'disable';
 }
 
-export type SourceType = 'instagram_user' | 'instagram_tag' | 'rss_url' | 'tiktok_user';
+export type SourceType = 'instagram_user' | 'instagram_tag' | 'instagram_story' | 'rss_url' | 'tiktok_user';
 
 // Channel source configuration
 export interface ChannelSource {
@@ -35,9 +41,11 @@ export interface ChannelConfig {
 
 // Admin conversation state for multi-step flows
 export interface AdminState {
-	action: 'adding_channel' | 'adding_source' | 'removing_channel' | 'downloading_media';
+	action: 'adding_channel' | 'adding_source' | 'removing_channel' | 'downloading_media' | 'setting_format_custom';
 	context?: {
 		channelId?: string;
+		sourceId?: string;
+		settingKey?: keyof FormatSettings;
 		sourceType?: SourceType;
 		downloadUrl?: string;
 		downloadPlatform?: string;

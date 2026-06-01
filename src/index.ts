@@ -3,7 +3,11 @@ import { handleInstagramFeed } from './routes/instagram';
 import { handleTelegramWebhook } from './routes/telegram';
 import { handleSetup } from './routes/setup';
 import { handleFoloWebhook } from './routes/folo';
+import { handleTestBridges } from './routes/test-bridges';
 import { checkAllFeeds } from './cron/check-feeds';
+import { handleQueue } from './queue-handler';
+import { QueueTask } from './types/queue';
+import { MessageBatch } from '@cloudflare/workers-types';
 
 type HonoEnv = { Bindings: Env };
 
@@ -12,6 +16,12 @@ const app = new Hono<HonoEnv>();
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 app.get('/instagram', handleInstagramFeed);
+app.get('/test-bridges', handleTestBridges);
+app.get('/test-bridges/:u', handleTestBridges);
+app.get('/test-rssbridge', handleTestBridges);
+app.get('/test-rssbridge/:u', handleTestBridges);
+app.get('/test-rsshub', handleTestBridges);
+app.get('/test-rsshub/:u', handleTestBridges);
 
 app.post('/telegram/webhook', handleTelegramWebhook);
 app.post('/folo', handleFoloWebhook);
@@ -41,5 +51,8 @@ export default {
 	fetch: app.fetch,
 	scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
 		ctx.waitUntil(checkAllFeeds(env));
+	},
+	queue: async (batch: MessageBatch<QueueTask>, env: Env): Promise<void> => {
+		await handleQueue(batch, env);
 	},
 };

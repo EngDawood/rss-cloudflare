@@ -1,12 +1,36 @@
 import * as cheerio from 'cheerio';
 import type { FeedItem, FeedItemMedia, FeedItemMediaType, FetchResult } from '../types/feed';
 
+import { CACHE_PREFIX_FEED } from '../constants';
+
 const FETCH_TIMEOUT_MS = 10000;
 
 /**
  * Fetch and parse any RSS/Atom feed URL into normalized FeedItem[].
+ * Includes optional KV caching.
  */
-export async function fetchFeed(url: string, overrideFeedTitle?: string): Promise<FetchResult> {
+export async function fetchFeed(
+	url: string,
+	overrideFeedTitle?: string,
+	kv?: KVNamespace,
+	cacheTtl?: number
+): Promise<FetchResult> {
+	const cacheKey = `${CACHE_PREFIX_FEED}${url}`;
+
+	// 1. Try to get from cache first
+	if (kv) {
+		try {
+			const cachedXml = await kv.get(cacheKey);
+			if (cachedXml) {
+				console.log(`[Cache] Hit: ${url}`);
+				return parseXML(cachedXml, overrideFeedTitle);
+			}
+		} catch (err) {
+			console.warn(`[Cache] Error reading from KV for ${url}:`, err);
+		}
+	}
+
+	// 2. Cache miss: Perform HTTP fetch
 	try {
 		const controller = new AbortController();
 		const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -52,6 +76,16 @@ export async function fetchFeed(url: string, overrideFeedTitle?: string): Promis
 			};
 		}
 
+		// 3. Store successful result in cache if KV is provided
+		if (kv && cacheTtl && cacheTtl > 0) {
+			try {
+				await kv.put(cacheKey, xml, { expirationTtl: cacheTtl });
+				console.log(`[Cache] Stored: ${url} (TTL: ${cacheTtl}s)`);
+			} catch (err) {
+				console.warn(`[Cache] Error writing to KV for ${url}:`, err);
+			}
+		}
+
 		return parseXML(xml, overrideFeedTitle);
 	} catch (err: any) {
 		const message = err.name === 'AbortError' ? 'Timeout' : err.message || 'Unknown error';
@@ -89,7 +123,7 @@ export function parseXML(xml: string, overrideFeedTitle?: string): FetchResult {
 }
 
 function parseAtomEntry(
-	entry: cheerio.Cheerio<cheerio.Element>,
+	entry: cheerio.Cheerio<any>,
 	$: cheerio.CheerioAPI,
 	feedTitle: string,
 	feedLink: string,
@@ -129,7 +163,7 @@ function parseAtomEntry(
 }
 
 function parseRSSItem(
-	entry: cheerio.Cheerio<cheerio.Element>,
+	entry: cheerio.Cheerio<any>,
 	$: cheerio.CheerioAPI,
 	feedTitle: string,
 	feedLink: string,
@@ -171,7 +205,7 @@ function parseRSSItem(
  * Extract media from Atom entries: enclosures, content HTML (video/img).
  */
 function extractMedia(
-	entry: cheerio.Cheerio<cheerio.Element>,
+	entry: cheerio.Cheerio<any>,
 	$: cheerio.CheerioAPI,
 	contentHtml: string,
 ): FeedItemMedia[] {
@@ -225,7 +259,7 @@ function extractMedia(
  * Extract media from RSS items: <enclosure>, <media:content>, content HTML.
  */
 function extractMediaFromRSS(
-	entry: cheerio.Cheerio<cheerio.Element>,
+	entry: cheerio.Cheerio<any>,
 	$: cheerio.CheerioAPI,
 	contentHtml: string,
 ): FeedItemMedia[] {
@@ -306,10 +340,34 @@ function extractTextFromHtml(html: string): string {
 		}
 	}
 
-	return textSource
+	const raw = textSource
 		.replace(/<br\s*\/?>/gi, '\n')
 		.replace(/<[^>]+>/g, '')
 		.trim();
+
+	return decodeHtmlEntities(raw);
+}
+
+function decodeHtmlEntities(text: string): string {
+	return text
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;/g, "'")
+		.replace(/&apos;/g, "'")
+		.replace(/&lt;/g, '<')
+		.replace(/&gt;/g, '>')
+		.replace(/&hellip;/gi, '…')
+		.replace(/&nbsp;/gi, ' ')
+		.replace(/&mdash;/gi, '—')
+		.replace(/&ndash;/gi, '–')
+		.replace(/&ldquo;/gi, '“')
+		.replace(/&rdquo;/gi, '”')
+		.replace(/&lsquo;/gi, '‘')
+		.replace(/&rsquo;/gi, '’')
+		.replace(/&laquo;/gi, '«')
+		.replace(/&raquo;/gi, '»')
+		.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+		.replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+		.replace(/&amp;/g, '&'); // Must be last to avoid double-decoding
 }
 
 function deriveMediaType(media: FeedItemMedia[]): FeedItemMediaType {

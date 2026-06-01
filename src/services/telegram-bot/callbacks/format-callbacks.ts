@@ -7,11 +7,14 @@ import { buildFormatKeyboard } from '../views/keyboard-builders';
 import { editOrReply } from '../helpers/edit-or-reply';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
 import { FORMAT_LABELS } from '../../../constants';
+import { setAdminState } from '../storage/admin-state';
 
 /**
  * Register callback query handlers for format settings management.
  */
 export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): void {
+	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
+
 	// Cycle source format setting: fs:CHID:SRCID:SETTING
 	bot.callbackQuery(/^fs:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
@@ -24,7 +27,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 
 		if (!source.format) source.format = {};
 		const current = resolveFormatSettings(config.defaultFormat, source.format);
-		const nextVal = cycleFormatValue(setting, current[setting]);
+		const nextVal = cycleFormatValue(setting, current[setting] as string | number);
 		if (setting === 'lengthLimit') {
 			source.format[setting] = parseInt(nextVal, 10);
 		} else {
@@ -47,6 +50,22 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		await ctx.answerCallbackQuery({ text: `${FORMAT_LABELS[setting].label}: ${formatValueText(setting, nextVal)}` });
 	});
 
+	// Trigger custom text input for source: fsc:CHID:SRCID:SETTING
+	bot.callbackQuery(/^fsc:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
+		const channelId = ctx.match[1];
+		const sourceId = ctx.match[2];
+		const setting = ctx.match[3] as keyof FormatSettings;
+		const label = FORMAT_LABELS[setting].label;
+
+		await setAdminState(kv, adminId, {
+			action: 'setting_format_custom',
+			context: { channelId, sourceId, settingKey: setting },
+		});
+
+		await ctx.reply(`Please send the text for <b>${label}</b> (or send /skip to clear it):`, { parse_mode: 'HTML' });
+		await ctx.answerCallbackQuery();
+	});
+
 	// Cycle channel default format setting: fd:CHID:SETTING
 	bot.callbackQuery(/^fd:([^:]+):([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
@@ -56,7 +75,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 
 		if (!config.defaultFormat) config.defaultFormat = {};
 		const current = resolveFormatSettings(config.defaultFormat);
-		const nextVal = cycleFormatValue(setting, current[setting]);
+		const nextVal = cycleFormatValue(setting, current[setting] as string | number);
 		if (setting === 'lengthLimit') {
 			config.defaultFormat[setting] = parseInt(nextVal, 10);
 		} else {
@@ -77,6 +96,21 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 			{ parse_mode: 'HTML', reply_markup: keyboard }
 		);
 		await ctx.answerCallbackQuery({ text: `${FORMAT_LABELS[setting].label}: ${formatValueText(setting, nextVal)}` });
+	});
+
+	// Trigger custom text input for channel default: fdc:CHID:SETTING
+	bot.callbackQuery(/^fdc:([^:]+):([^:]+)$/, async (ctx) => {
+		const channelId = ctx.match[1];
+		const setting = ctx.match[2] as keyof FormatSettings;
+		const label = FORMAT_LABELS[setting].label;
+
+		await setAdminState(kv, adminId, {
+			action: 'setting_format_custom',
+			context: { channelId, settingKey: setting },
+		});
+
+		await ctx.reply(`Please send the default text for <b>${label}</b> (or send /skip to clear it):`, { parse_mode: 'HTML' });
+		await ctx.answerCallbackQuery();
 	});
 
 	// View source format settings: fs_v:CHID:SRCID

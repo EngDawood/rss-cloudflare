@@ -12,12 +12,20 @@ export class TelegramUrlFetchError extends Error {
 	}
 }
 
-function isTelegramUrlError(err: unknown): boolean {
-	return (
-		err instanceof GrammyError &&
-		(err.description.includes('failed to get HTTP URL') ||
-			err.description.includes('wrong file identifier'))
-	);
+function isTerminalError(err: unknown): boolean {
+	if (!(err instanceof GrammyError)) return false;
+	// 403 (blocked), 429 (rate limit), or specific 400s like "chat not found"
+	if (err.error_code === 403 || err.error_code === 429) return true;
+	if (err.error_code === 400) {
+		const desc = err.description.toLowerCase();
+		return (
+			desc.includes('chat not found') ||
+			desc.includes('user not found') ||
+			desc.includes('bot was blocked') ||
+			desc.includes('not enough rights')
+		);
+	}
+	return false;
 }
 
 /** If caption fits, attach it to media. If too long, send media without caption then post caption as separate text. */
@@ -29,14 +37,19 @@ async function sendWithCaption(
 	disableNotification: boolean
 ): Promise<void> {
 	const text = caption || '';
-	if (text.length <= MEDIA_CAPTION_LIMIT) {
-		await send(text);
-	} else {
-		await send('');
-		await bot.api.sendMessage(chatId, text, {
-			parse_mode: 'HTML',
-			disable_notification: disableNotification,
-		});
+	try {
+		if (text.length <= MEDIA_CAPTION_LIMIT) {
+			await send(text);
+		} else {
+			await send('');
+			await bot.api.sendMessage(chatId, text, {
+				parse_mode: 'HTML',
+				disable_notification: disableNotification,
+			});
+		}
+	} catch (err) {
+		console.error(`[sendWithCaption] Error sending media to ${chatId}:`, err);
+		throw err;
 	}
 }
 
@@ -107,8 +120,10 @@ async function sendPhotoMessage(
 			bot, chatId, message.caption, disableNotification
 		);
 	} catch (err) {
-		if (!isTelegramUrlError(err)) throw err;
+		if (isTerminalError(err)) throw err;
 		if (interactive) throw new TelegramUrlFetchError(url);
+		
+		console.log(`[sendPhoto] URL fetch failed, trying download fallback for ${url}: ${err}`);
 		const file = await downloadAsInputFile(url, 'photo.jpg');
 		await sendWithCaption(
 			(caption) => bot.api.sendPhoto(chatId, file, { caption, parse_mode: 'HTML', disable_notification: disableNotification }),
@@ -132,8 +147,10 @@ async function sendVideoMessage(
 			bot, chatId, message.caption, disableNotification
 		);
 	} catch (err) {
-		if (!isTelegramUrlError(err)) throw err;
+		if (isTerminalError(err)) throw err;
 		if (interactive) throw new TelegramUrlFetchError(url);
+
+		console.log(`[sendVideo] URL fetch failed, trying download fallback for ${url}: ${err}`);
 		const file = await downloadAsInputFile(url, 'video.mp4');
 		await sendWithCaption(
 			(caption) => bot.api.sendVideo(chatId, file, { caption, parse_mode: 'HTML', disable_notification: disableNotification }),
@@ -157,8 +174,10 @@ async function sendAudioMessage(
 			bot, chatId, message.caption, disableNotification
 		);
 	} catch (err) {
-		if (!isTelegramUrlError(err)) throw err;
+		if (isTerminalError(err)) throw err;
 		if (interactive) throw new TelegramUrlFetchError(url);
+
+		console.log(`[sendAudio] URL fetch failed, trying download fallback for ${url}: ${err}`);
 		const file = await downloadAsInputFile(url, 'audio.mp3');
 		await sendWithCaption(
 			(caption) => bot.api.sendAudio(chatId, file, { caption, parse_mode: 'HTML', disable_notification: disableNotification }),
@@ -178,35 +197,31 @@ async function sendMediaGroupMessage(
 		return;
 	}
 
-	const resolvedMedia = await Promise.all(
-		message.media.map(async (item) => {
-			const ext = item.type === 'video' ? 'mp4' : 'jpg';
-			// Always try URL first; if Telegram rejects it, fall back to download+upload
-			let source: string | InputFile = item.media;
-			try {
-				// Validate by attempting a dummy resolve — actual rejection caught during sendMediaGroup
-				source = item.media;
-			} catch {
-				source = await downloadAsInputFile(item.media, `media.${ext}`);
-			}
-			const opts = { caption: item.caption, parse_mode: item.parse_mode as 'HTML' | undefined };
-			return item.type === 'video'
-				? InputMediaBuilder.video(source, opts)
-				: InputMediaBuilder.photo(source, opts);
-		})
-	);
+	const resolvedMedia = message.media.map((item) => {
+		const ext = item.type === 'video' ? 'mp4' : 'jpg';
+		return { ...item, ext };
+	});
 
 	try {
-		await bot.api.sendMediaGroup(chatId, resolvedMedia, {
+		const mediaGroup = resolvedMedia.map(item => {
+			const opts = { caption: item.caption, parse_mode: item.parse_mode as 'HTML' | undefined };
+			return item.type === 'video'
+				? InputMediaBuilder.video(item.media, opts)
+				: InputMediaBuilder.photo(item.media, opts);
+		});
+
+		await bot.api.sendMediaGroup(chatId, mediaGroup, {
 			disable_notification: disableNotification,
 		});
 	} catch (err) {
-		if (!isTelegramUrlError(err)) throw err;
+		if (isTerminalError(err)) throw err;
+		
+		console.log(`[sendMediaGroup] URL fetch failed for group, trying download fallback for items: ${err}`);
+
 		// Re-resolve all items as uploaded files and retry
 		const uploadedMedia = await Promise.all(
-			message.media.slice(0, 10).map(async (item) => {
-				const ext = item.type === 'video' ? 'mp4' : 'jpg';
-				const file = await downloadAsInputFile(item.media, `media.${ext}`);
+			resolvedMedia.slice(0, 10).map(async (item) => {
+				const file = await downloadAsInputFile(item.media, `media.${item.ext}`);
 				const opts = { caption: item.caption, parse_mode: item.parse_mode as 'HTML' | undefined };
 				return item.type === 'video'
 					? InputMediaBuilder.video(file, opts)

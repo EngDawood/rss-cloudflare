@@ -7,6 +7,8 @@ declare namespace Cloudflare {
 	}
 	interface Env {
 		CACHE: KVNamespace;
+		FEED_FETCH_QUEUE: Queue<any>;
+		TELEGRAM_SEND_QUEUE: Queue<any>;
 		USER_ID_CACHE_TTL: "86400";
 		FEED_CACHE_TTL: "900";
 		ADMIN_TELEGRAM_ID: "REPLACE_WITH_YOUR_TELEGRAM_USER_ID";

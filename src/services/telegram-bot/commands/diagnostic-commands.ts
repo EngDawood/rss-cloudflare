@@ -8,6 +8,7 @@ import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
 import { buildHeaders } from '../../../utils/headers';
 import { IG_WEB_PROFILE, IG_TOP_SEARCH } from '../../../constants';
 import { enrichFeedItems } from '../../../utils/media-enrichment';
+import { sendFallbackMessage } from '../helpers/fallback-sender';
 
 const BOT_COMMANDS = [
 	{ command: 'start', description: 'Show all commands' },
@@ -45,49 +46,60 @@ export function registerDiagnosticCommands(bot: Bot, env: Env, kv: KVNamespace):
 		}
 	});
 
-	// /test <source> — Fetch and send the latest post from any source
+	// /test [count] <source> — Fetch and send the latest post(s) from any source
 	bot.command('test', async (ctx) => {
 		const arg = ctx.match?.trim() || '';
 		if (!arg) {
-			await ctx.reply('Usage: <code>/test @username</code> or <code>/test https://feed-url</code>', { parse_mode: 'HTML' });
+			await ctx.reply(
+				'Usage:\n' +
+				'<code>/test [count] @username</code> (Instagram)\n' +
+				'<code>/test [count] -i username</code> (Instagram)\n' +
+				'<code>/test [count] -t username</code> (TikTok)\n' +
+				'<code>/test [count] -rss https://...</code> (RSS)\n' +
+				'<code>/test [count] https://...</code> (Profile or RSS link)\n\n' +
+				'Example: <code>/test 5 -t walidfitaihi6</code>',
+				{ parse_mode: 'HTML' }
+			);
 			return;
 		}
 
-		const parsed = parseSourceRef(arg);
+		let count = 1;
+		let sourceRef = arg;
+		
+		// If the command starts with a number, parse it and remove it from the sourceRef string
+		const match = arg.match(/^(\d+)\s+(.+)$/);
+		if (match) {
+			count = parseInt(match[1], 10);
+			sourceRef = match[2];
+			
+			// Put a reasonable upper limit to avoid API bans/flooding
+			if (count > 10) count = 10;
+			if (count < 1) count = 1;
+		}
+
+		const parsed = parseSourceRef(sourceRef);
 		if (!parsed) {
-			await ctx.reply('Invalid source. Use @username, #hashtag, or a feed URL.');
+			await ctx.reply('Invalid source. Use @username, -t username, -rss url, or a profile/feed URL.');
 			return;
 		}
 
-		await ctx.reply(`Fetching latest from <b>${escapeHtmlBot(parsed.value)}</b>...`, { parse_mode: 'HTML' });
-
-		try {
-			const source: ChannelSource = {
-				id: parsed.id,
-				type: parsed.type,
-				value: parsed.value,
-				mediaFilter: 'all',
-				enabled: true,
-			};
-			const result = await fetchForSource(source, env);
-
-			if (result.items.length === 0) {
-				const errorInfo = result.errors.length > 0
-					? result.errors.map((e) => `- ${e.tier}: ${e.message}`).join('\n')
-					: 'No items found';
-				await ctx.reply(`No data for <b>${escapeHtmlBot(parsed.value)}</b>:\n<pre>${errorInfo}</pre>`, { parse_mode: 'HTML' });
-				return;
-			}
-
-			const items = [result.items[0]];
-			await enrichFeedItems(items);
-			const latest = items[0];
-
-			const message = formatFeedItem(latest);
-			await sendMediaToChannel(bot, ctx.chat!.id, message);
-		} catch (err: any) {
-			await ctx.reply(`Error: ${err.message || String(err)}`);
+		let useQueue = false;
+		if (sourceRef.includes('-q')) {
+			useQueue = true;
+			sourceRef = sourceRef.replace('-q', '').trim();
 		}
+
+		await ctx.reply(`Fetching latest ${count} from <b>${escapeHtmlBot(parsed.value)}</b>${useQueue ? ' via Queue' : ''}...`, { parse_mode: 'HTML' });
+
+		const source: ChannelSource = {
+			id: parsed.id,
+			type: parsed.type,
+			value: parsed.value,
+			mediaFilter: 'all',
+			enabled: true,
+		};
+
+		await fetchAndSendLatest(bot, env, ctx.chat!.id, source, count, useQueue);
 	});
 
 	// /debug [@username] — Quick Instagram connectivity test

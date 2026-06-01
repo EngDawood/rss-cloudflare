@@ -22,8 +22,54 @@ export function parseSourceRef(ref: string): { type: SourceType; value: string; 
 
 	const trimmed = ref.trim();
 
-	// RSS/Atom URL
+	// Explicit RSS override: "-rss url"
+	const rssMatch = trimmed.match(/^-rss\s+(https?:\/\/[^\s]+)/i);
+	if (rssMatch) {
+		const url = rssMatch[1];
+		return { type: 'rss_url', value: url, id: `rss_${shortHash(url)}` };
+	}
+
+	// TikTok explicit: "-t username" or "tiktok username"
+	const tiktokExplicitMatch = trimmed.match(/^(?:-t|tiktok)\s+@?([\w.-]+)/i);
+	if (tiktokExplicitMatch) {
+		const tiktokUser = tiktokExplicitMatch[1];
+		return { type: 'tiktok_user', value: tiktokUser, id: `tiktok_${shortHash(tiktokUser)}` };
+	}
+
+	// Instagram explicit: "-i username" or "instagram username"
+	const igExplicitMatch = trimmed.match(/^(?:-i|instagram)\s+@?([\w.-]+)/i);
+	if (igExplicitMatch) {
+		const igUser = igExplicitMatch[1];
+		return { type: 'instagram_user', value: igUser, id: `usr_${shortHash(igUser)}` };
+	}
+
+	// Instagram Story explicit: "-s username", "story username", or "igstory username"
+	const igStoryMatch = trimmed.match(/^(?:-s|story|igstory)\s+@?([\w.-]+)/i);
+	if (igStoryMatch) {
+		const igUser = igStoryMatch[1].toLowerCase();
+		return { type: 'instagram_story', value: igUser, id: `igst_${shortHash(igUser)}` };
+	}
+
+	// URLs: Profile routing or fallback to RSS
 	if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+		// TikTok Profile Link
+		const tiktokUrlMatch = trimmed.match(/^https?:\/\/(?:www\.)?tiktok\.com\/@([\w.-]+)/i);
+		if (tiktokUrlMatch) {
+			const tiktokUser = tiktokUrlMatch[1];
+			return { type: 'tiktok_user', value: tiktokUser, id: `tiktok_${shortHash(tiktokUser)}` };
+		}
+
+		// Instagram Profile Link
+		const igUrlMatch = trimmed.match(/^https?:\/\/(?:www\.)?instagram\.com\/([\w.-]+)/i);
+		if (igUrlMatch) {
+			const igUser = igUrlMatch[1];
+			// Avoid matching sub-pages like /p/ or /reel/
+			if (!['p', 'reel', 'tv', 'explore', 'stories'].includes(igUser)) {
+				return { type: 'instagram_user', value: igUser, id: `usr_${shortHash(igUser)}` };
+			}
+		}
+
+		// Generic RSS/Atom URL
 		return { type: 'rss_url', value: trimmed, id: `rss_${shortHash(trimmed)}` };
 	}
 
@@ -34,14 +80,7 @@ export function parseSourceRef(ref: string): { type: SourceType; value: string; 
 		return { type: 'instagram_tag', value, id: `tag_${shortHash(value)}` };
 	}
 
-	// TikTok user: "tiktok @username" or "tiktok username"
-	const tiktokMatch = trimmed.match(/^tiktok\s+@?([\w.]+)$/i);
-	if (tiktokMatch) {
-		const tiktokUser = tiktokMatch[1];
-		return { type: 'tiktok_user', value: tiktokUser, id: `tiktok_${shortHash(tiktokUser)}` };
-	}
-
-	// Instagram user (default, strip @ if present)
+	// Default fallback (Instagram user, strip @ if present)
 	const value = trimmed.replace(/^@/, '');
 	if (!value) return null; // Prevent empty username
 	return { type: 'instagram_user', value, id: `usr_${shortHash(value)}` };
@@ -58,6 +97,8 @@ export function sourceTypeIcon(type: string): string {
 		case 'instagram_tag':
 		case 'hashtag': // legacy
 			return '#️⃣';
+		case 'instagram_story':
+			return '📸';
 		case 'tiktok_user':
 			return '🎵';
 		case 'rss_url':
@@ -78,6 +119,8 @@ export function sourceTypeLabel(type: string): string {
 		case 'instagram_tag':
 		case 'hashtag':
 			return 'IG Tag';
+		case 'instagram_story':
+			return 'IG Story';
 		case 'tiktok_user':
 			return 'TikTok';
 		case 'rss_url':

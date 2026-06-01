@@ -258,7 +258,19 @@ export async function downloadMedia(url: string, mode: 'auto' | 'audio' | 'hd' |
 // ─── Platform handlers ───────────────────────────────────────────
 
 async function downloadTikTok(url: string, mode: string): Promise<DownloaderResult> {
-	// Try richer 'tiktok' endpoint first for quality options
+	// Try AIO first as it often provides direct CDN URLs without proxies
+	const aioResult = await tryAIO(url, mode);
+	if (aioResult && aioResult.media && aioResult.media.length > 0) {
+		const videos = aioResult.media.filter(m => m.type === 'video');
+		// AIO sometimes returns multiple qualities
+		if (videos.length > 1) {
+			const selected = mode === 'sd' ? videos[videos.length - 1] : videos[0];
+			return { ...aioResult, media: [selected] };
+		}
+		return aioResult;
+	}
+
+	// Try richer 'tiktok' endpoint
 	try {
 		const res = await btchFetch('tiktok', url);
 		const data = res.data;
@@ -276,15 +288,27 @@ async function downloadTikTok(url: string, mode: string): Promise<DownloaderResu
 				}
 			}
 
+			const resolveUrl = (mediaUrl: string) => {
+				const decoded = decodeTiktokDirectUrl(mediaUrl);
+				if (decoded) return decoded;
+				// If we can't decode it and it's a tiktokio proxy, it will 530 block us
+				if (mediaUrl.includes('tiktokio.com/api/')) return null;
+				return mediaUrl;
+			};
+
 			if (mode === 'audio' && isUrl(data.music)) {
-				return { status: 'success', media: [{ type: 'audio', url: data.music }], caption, thumbnail };
+				const resolvedMusic = resolveUrl(data.music);
+				if (resolvedMusic) return { status: 'success', media: [{ type: 'audio', url: resolvedMusic }], caption, thumbnail };
 			}
 			if (mode === 'sd' && isUrl(data.play)) {
-				return { status: 'success', media: [{ type: 'video', url: data.play }], caption, thumbnail };
+				const resolvedPlay = resolveUrl(data.play);
+				if (resolvedPlay) return { status: 'success', media: [{ type: 'video', url: resolvedPlay }], caption, thumbnail };
 			}
+			
 			// Default: use play (H.264, Telegram-compatible)
 			if (isUrl(data.play)) {
-				return { status: 'success', media: [{ type: 'video', url: data.play }], caption, thumbnail };
+				const resolvedPlay = resolveUrl(data.play);
+				if (resolvedPlay) return { status: 'success', media: [{ type: 'video', url: resolvedPlay }], caption, thumbnail };
 			}
 		}
 	} catch (e) {
@@ -294,13 +318,21 @@ async function downloadTikTok(url: string, mode: string): Promise<DownloaderResu
 	// Fallback to 'ttdl' (alternative endpoint)
 	const res = await btchFetch('ttdl', url);
 	const caption = res.title || '';
+	
+	const resolveUrl = (mediaUrl: string) => {
+		const decoded = decodeTiktokDirectUrl(mediaUrl);
+		if (decoded) return decoded;
+		if (mediaUrl.includes('tiktokio.com/api/')) return null;
+		return mediaUrl;
+	};
+
 	if (mode === 'audio' && Array.isArray(res.audio) && isUrl(res.audio[0])) {
-		const directAudio = decodeTiktokDirectUrl(res.audio[0]) || res.audio[0];
-		return { status: 'success', media: [{ type: 'audio', url: directAudio }], caption };
+		const resolvedAudio = resolveUrl(res.audio[0]);
+		if (resolvedAudio) return { status: 'success', media: [{ type: 'audio', url: resolvedAudio }], caption };
 	}
 	if (Array.isArray(res.video) && isUrl(res.video[0])) {
-		const directVideo = decodeTiktokDirectUrl(res.video[0]) || res.video[0];
-		return { status: 'success', media: [{ type: 'video', url: directVideo }], caption };
+		const resolvedVideo = resolveUrl(res.video[0]);
+		if (resolvedVideo) return { status: 'success', media: [{ type: 'video', url: resolvedVideo }], caption };
 	}
 	return { status: 'error', error: 'No TikTok media found' };
 }

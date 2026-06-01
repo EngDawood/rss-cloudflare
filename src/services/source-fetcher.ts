@@ -1,7 +1,7 @@
 import type { FeedItem, FetchResult } from '../types/feed';
 import type { ChannelSource } from '../types/telegram';
 import { fetchFeed } from './feed-fetcher';
-import { RSS_ITEMS_LIMIT } from '../constants';
+import { RSS_ITEMS_LIMIT, FEED_CACHE_TTL } from '../constants';
 
 // --- RSS-Bridge Public Instances (failover list) ---
 export const RSS_BRIDGE_INSTANCES = [
@@ -10,8 +10,26 @@ export const RSS_BRIDGE_INSTANCES = [
 	'https://rss.bloat.cat',
 ];
 
-// RSS-Bridge instance known to have TikTokBridge enabled
-const RSSBRIDGE_TIKTOK_INSTANCE = 'https://rss-bridge.org/bridge01';
+// RSS-Bridge instances known to have TikTokBridge enabled
+export const RSS_BRIDGE_TIKTOK_INSTANCES = [
+	'https://rss-bridge.org/bridge01',
+	...RSS_BRIDGE_INSTANCES
+];
+
+// RSSHub public instances for Instagram Stories fallback
+export const RSSHUB_INSTANCES = [
+	'https://rsshub.rssforever.com',
+	'https://hub.slarker.me',
+	'https://rsshub.pseudoyu.com',
+	'https://rsshub.ktachibana.party',
+	'https://rss.owo.nz',
+	'https://rsshub.umzzz.com',
+	'https://rsshub.isrss.com',
+	'https://rsshub-balancer.virworks.moe',
+	'https://rss.spriple.org',
+	'https://rsshub.cups.moe',
+	'https://rss.4040940.xyz'
+];
 
 /**
  * Route to correct fetcher based on source type.
@@ -22,14 +40,16 @@ export async function fetchForSource(source: ChannelSource, env?: Env): Promise<
 	switch (type) {
 		case 'instagram_user':
 		case 'username': // legacy
-			return await fetchInstagramUser(source.value);
+			return await fetchInstagramUser(source.value, env);
 		case 'instagram_tag':
 		case 'hashtag': // legacy
-			return await fetchInstagramTag(source.value);
+			return await fetchInstagramTag(source.value, env);
+		case 'instagram_story':
+			return await fetchInstagramStory(source.value, env);
 		case 'rss_url':
-			return await fetchRssUrl(source.value);
+			return await fetchRssUrl(source.value, env);
 		case 'tiktok_user':
-			return await fetchTikTokUser(source.value);
+			return await fetchTikTokUser(source.value, env);
 		default:
 			return {
 				items: [],
@@ -44,9 +64,9 @@ export async function fetchForSource(source: ChannelSource, env?: Env): Promise<
  * Fetch an RSS URL, with RSS-Bridge instance failover for known bridge URLs.
  * If the URL is from a known RSS-Bridge instance and fails, try other instances.
  */
-async function fetchRssUrl(url: string): Promise<FetchResult> {
+async function fetchRssUrl(url: string, env?: Env): Promise<FetchResult> {
 	// Try the original URL first
-	const result = await fetchFeed(url);
+	const result = await fetchFeed(url, undefined, env?.CACHE, FEED_CACHE_TTL);
 	if (result.items.length > 0) return result;
 
 	// Check if this is a known RSS-Bridge URL that can failover
@@ -64,7 +84,7 @@ async function fetchRssUrl(url: string): Promise<FetchResult> {
 				if (instance === matchedInstance) continue;
 				const altUrl = instance + queryPath;
 				console.log(`[RSSBridge] Failover trying ${instance}...`);
-				const altResult = await fetchFeed(altUrl);
+				const altResult = await fetchFeed(altUrl, undefined, env?.CACHE, FEED_CACHE_TTL);
 				if (altResult.items.length > 0) {
 					console.log(`[RSSBridge] Failover success with ${instance}`);
 					return altResult;
@@ -86,12 +106,41 @@ function buildTikTokUserUrl(instance: string, username: string): string {
 }
 
 /**
- * Fetch TikTok user feed via RSS-Bridge.
+ * Fetch TikTok user feed via RSS-Bridge instances, with failover.
  */
-export async function fetchTikTokUser(username: string): Promise<FetchResult> {
-	const url = buildTikTokUserUrl(RSSBRIDGE_TIKTOK_INSTANCE, username);
-	console.log(`[TikTok] Fetching RSS-Bridge feed for @${username}...`);
-	return fetchFeed(url);
+export async function fetchTikTokUser(username: string, env?: Env): Promise<FetchResult> {
+	return fetchFromRSSBridgeInstances(
+		(instance) => buildTikTokUserUrl(instance, username),
+		`tiktok @${username}`,
+		RSS_BRIDGE_TIKTOK_INSTANCES,
+		env
+	);
+}
+
+/**
+ * Build the RSSHub URL for an Instagram Story feed.
+ */
+export function buildRSSHubStoryUrl(instance: string, username: string): string {
+	return `${instance}/picnob.info/user/${encodeURIComponent(username)}/stories?limit=10`;
+}
+
+/**
+ * Build the RSSHub URL for an Instagram Post feed.
+ */
+export function buildRSSHubPostUrl(instance: string, username: string): string {
+	return `${instance}/picnob.info/user/${encodeURIComponent(username)}/posts?limit=10`;
+}
+
+/**
+ * Fetch Instagram Story feed via RSSHub instances, with failover.
+ */
+export async function fetchInstagramStory(username: string, env?: Env): Promise<FetchResult> {
+	return fetchFromRSSBridgeInstances(
+		(instance) => buildRSSHubStoryUrl(instance, username),
+		`${username} (Stories)`,
+		RSSHUB_INSTANCES,
+		env
+	);
 }
 
 /**
@@ -111,20 +160,24 @@ function buildRSSBridgeTagUrl(instance: string, hashtag: string): string {
 /**
  * Fetch Instagram user feed via RSS-Bridge instances, with failover.
  */
-export async function fetchInstagramUser(username: string): Promise<FetchResult> {
+export async function fetchInstagramUser(username: string, env?: Env): Promise<FetchResult> {
 	return fetchFromRSSBridgeInstances(
 		(instance) => buildRSSBridgeUserUrl(instance, username),
 		username,
+		RSS_BRIDGE_INSTANCES,
+		env
 	);
 }
 
 /**
  * Fetch Instagram hashtag feed via RSS-Bridge instances, with failover.
  */
-export async function fetchInstagramTag(hashtag: string): Promise<FetchResult> {
+export async function fetchInstagramTag(hashtag: string, env?: Env): Promise<FetchResult> {
 	return fetchFromRSSBridgeInstances(
 		(instance) => buildRSSBridgeTagUrl(instance, hashtag),
 		`#${hashtag}`,
+		RSS_BRIDGE_INSTANCES,
+		env
 	);
 }
 
@@ -134,14 +187,16 @@ export async function fetchInstagramTag(hashtag: string): Promise<FetchResult> {
 async function fetchFromRSSBridgeInstances(
 	buildUrl: (instance: string) => string,
 	label: string,
+	instances: string[] = RSS_BRIDGE_INSTANCES,
+	env?: Env
 ): Promise<FetchResult> {
 	const allErrors: FetchResult['errors'] = [];
 
-	for (const instance of RSS_BRIDGE_INSTANCES) {
+	for (const instance of instances) {
 		const url = buildUrl(instance);
 		console.log(`[RSSBridge] Trying ${instance} for ${label}...`);
 
-		const result = await fetchFeed(url);
+		const result = await fetchFeed(url, undefined, env?.CACHE, FEED_CACHE_TTL);
 
 		if (result.items.length > 0) {
 			console.log(`[RSSBridge] Success with ${instance}`);
