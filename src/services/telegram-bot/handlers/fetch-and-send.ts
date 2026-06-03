@@ -55,8 +55,8 @@ export async function fetchAndSendLatest(
 		// Send latest posts (oldest first)
 		const items = result.items.slice(0, count).reverse();
 
-		// Enrich items that link to supported platforms (e.g. TikTok) but have no media
-		await enrichFeedItems(items);
+		// Enrich items that link to supported platforms (e.g. TikTok) or need Telegraph Instant View
+		await enrichFeedItems(items, settings.telegraphToken || env.TELEGRAPH_ACCESS_TOKEN);
 
 		let failures = 0;
 		for (const item of items) {

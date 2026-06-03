@@ -148,6 +148,13 @@ function parseAtomEntry(
 
 	const mediaType = deriveMediaType(media);
 
+	// Extract topics from <category> elements (term attr or text content)
+	const topics: string[] = [];
+	entry.find('category').each((_, el) => {
+		const term = $(el).attr('term') || $(el).text().trim();
+		if (term) topics.push(term);
+	});
+
 	return {
 		id: id || link || '',
 		link,
@@ -159,6 +166,8 @@ function parseAtomEntry(
 		timestamp,
 		mediaType,
 		media,
+		topics: topics.length > 0 ? topics : undefined,
+		contentHtml: contentHtml ? contentHtml : undefined,
 	};
 }
 
@@ -187,6 +196,13 @@ function parseRSSItem(
 	const text = extractTextFromHtml(contentHtml);
 	const mediaType = deriveMediaType(media);
 
+	// Extract topics from <category> text content
+	const topics: string[] = [];
+	entry.find('category').each((_, el) => {
+		const term = $(el).text().trim();
+		if (term) topics.push(term);
+	});
+
 	return {
 		id: guid || link || '',
 		link,
@@ -198,6 +214,8 @@ function parseRSSItem(
 		timestamp,
 		mediaType,
 		media,
+		topics: topics.length > 0 ? topics : undefined,
+		contentHtml: contentHtml ? contentHtml : undefined,
 	};
 }
 

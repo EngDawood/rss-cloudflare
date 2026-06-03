@@ -1,13 +1,24 @@
 import type { FeedItem, FeedItemMedia, FeedItemMediaType } from '../types/feed';
 import { downloadMedia } from '../services/media-downloader';
+import { createTelegraphPage } from './telegraph';
 
 /**
  * Enrich feed items that have no media but link to a supported platform (e.g. TikTok).
  * Uses the media downloader to resolve actual video/image URLs.
  * Mutates items in-place. Non-fatal: failures leave items unchanged (sent as text).
+ * If telegraphToken is provided, also converts lengthy text articles into Telegraph pages.
  */
-export async function enrichFeedItems(items: FeedItem[]): Promise<void> {
+export async function enrichFeedItems(items: FeedItem[], telegraphToken?: string): Promise<void> {
 	for (const item of items) {
+		// 1. Telegraph Article Enrichment
+		if (telegraphToken && item.contentHtml && item.mediaType === 'none' && item.text.length > 500) {
+			const url = await createTelegraphPage(item.title, item.author || item.feedTitle || 'RSS-Bridge', item.contentHtml, telegraphToken);
+			if (url) {
+				item.telegraphUrl = url;
+			}
+		}
+
+		// 2. Media Enrichment
 		// If it's TikTok or Douyin, we ALWAYS want to try enrichment because the RSS enclosure is usually just a cover photo.
 		// For other platforms, we only enrich if media is missing.
 		const isShortVideo = item.link.includes('tiktok.com') || item.link.includes('douyin.com');
@@ -31,7 +42,7 @@ export async function enrichFeedItems(items: FeedItem[]): Promise<void> {
 			item.media = enriched;
 			item.mediaType = deriveMediaType(enriched);
 		} catch (err) {
-			console.warn(`[Enrich] TikTok enrichment failed for ${item.link}:`, (err as Error).message);
+			console.warn(`[Enrich] Media enrichment failed for ${item.link}:`, (err as Error).message);
 		}
 	}
 }

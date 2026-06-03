@@ -134,4 +134,5 @@ export const FORMAT_LABELS: Record<
 	customFooter: { label: 'Footer text' },
 	customHashtags: { label: 'Extra hashtags' },
 	cleanupText: { label: 'Cleanup text' },
+	telegraphToken: { label: 'Telegraph Token' },
 };

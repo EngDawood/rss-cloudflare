@@ -137,23 +137,28 @@ function buildFooter(item: FeedItem, settings: FormatSettings): string {
 	const postUrl = item.link;
 	const sourceName = item.feedTitle || 'Source';
 
+	let base = '\n\n';
+	if (item.telegraphUrl) {
+		base += `⚡️ <a href="${item.telegraphUrl}">Instant View</a>\n`;
+	}
+
 	switch (settings.sourceFormat) {
 		case 'title_link':
 			return showAuthor
-				? `\n\n<a href="${postUrl}">View on ${escapeHtml(sourceName)}</a> | ${escapeHtml(item.author)}`
-				: `\n\n<a href="${postUrl}">View on ${escapeHtml(sourceName)}</a>`;
+				? `${base}<a href="${postUrl}">View on ${escapeHtml(sourceName)}</a> | ${escapeHtml(item.author)}`
+				: `${base}<a href="${postUrl}">View on ${escapeHtml(sourceName)}</a>`;
 		case 'link_only':
 			return showAuthor
-				? `\n\n<a href="${postUrl}">${escapeHtml(item.author)} \u2014 ${escapeHtml(sourceName)}</a>`
-				: `\n\n<a href="${postUrl}">${escapeHtml(sourceName)}</a>`;
+				? `${base}<a href="${postUrl}">${escapeHtml(item.author)} \u2014 ${escapeHtml(sourceName)}</a>`
+				: `${base}<a href="${postUrl}">${escapeHtml(sourceName)}</a>`;
 		case 'bare_url':
 			return showAuthor
-				? `\n\n${escapeHtml(item.author)}\n${postUrl}`
-				: `\n\n${postUrl}`;
+				? `${base}${escapeHtml(item.author)}\n${postUrl}`
+				: `${base}${postUrl}`;
 		case 'disable':
-			return showAuthor ? `\n\n${escapeHtml(item.author)}` : '';
+			return showAuthor ? `${base}${escapeHtml(item.author)}` : (item.telegraphUrl ? base.trimEnd() : '');
 		default:
-			return '';
+			return item.telegraphUrl ? base.trimEnd() : '';
 	}
 }
 

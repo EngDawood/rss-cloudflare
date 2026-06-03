@@ -67,11 +67,11 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 	newItems.reverse();
 	const postsToQueue = newItems.slice(0, 5);
 
-	// Enrich metadata (TikTok, etc.) before queuing to Send tier
-	await enrichFeedItems(postsToQueue);
-
 	// Resolve format settings
 	const settings = resolveFormatSettings(config.defaultFormat, source.format);
+
+	// Enrich metadata (TikTok, Telegraph, etc.) before queuing to Send tier
+	await enrichFeedItems(postsToQueue, settings.telegraphToken || env.TELEGRAPH_ACCESS_TOKEN);
 
 	// Push each item to the Send Queue
 	for (const item of postsToQueue) {

@@ -1,5 +1,5 @@
 import type { Bot } from 'grammy';
-import { clearAdminState } from '../storage/admin-state';
+import { getAdminState, clearAdminState } from '../storage/admin-state';
 import { BOT_COMMANDS } from '../../../routes/setup';
 
 /**
@@ -63,7 +63,14 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 	});
 
 	bot.command('cancel', async (ctx) => {
+		const state = await getAdminState(kv, adminId);
 		await clearAdminState(kv, adminId);
+		// Edit any stuck in-progress status message (e.g. "Fetching available qualities...")
+		if (state?.context?.statusMessageId) {
+			try {
+				await bot.api.editMessageText(ctx.chat!.id, state.context.statusMessageId, 'Cancelled.');
+			} catch { /* message may already be gone */ }
+		}
 		await ctx.reply('Current action cancelled. How else can I help?');
 	});
 }

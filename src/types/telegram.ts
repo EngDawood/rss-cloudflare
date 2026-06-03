@@ -15,9 +15,10 @@ export interface FormatSettings {
 	customHashtags?: string;
 	cleanupText?: string;
 	removeTikTokViews: 'enable' | 'disable';
+	telegraphToken?: string;
 }
 
-export type SourceType = 'instagram_user' | 'instagram_tag' | 'instagram_story' | 'rss_url' | 'tiktok_user';
+export type SourceType = 'instagram_user' | 'instagram_tag' | 'instagram_story' | 'rss_url' | 'rsshub_url' | 'tiktok_user';
 
 // Channel source configuration
 export interface ChannelSource {
@@ -55,6 +56,8 @@ export interface AdminState {
 		downloadCaption?: string;
 		/** Direct CDN media URL that Telegram rejected (for dl:confirm fallback) */
 		directMediaUrl?: string;
+		/** Message ID of the in-progress status message (e.g. "Fetching..."), for /cancel cleanup */
+		statusMessageId?: number;
 	};
 }
 

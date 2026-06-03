@@ -18,6 +18,17 @@ import type { AdminState } from '../../../types/telegram';
 export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): void {
 	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
 
+	// Handle forwarded messages from channels — lets admins register private channels
+	// by simply forwarding any message from the channel to the bot.
+	bot.on('message', async (ctx, next) => {
+		const origin = (ctx.message as any).forward_origin;
+		if (origin?.type === 'channel' && origin.chat) {
+			await addChannelDirect(ctx, bot, kv, adminId, String(origin.chat.id));
+			return;
+		}
+		await next();
+	});
+
 	bot.on('message:text', async (ctx) => {
 		const text = ctx.message.text;
 		if (text.startsWith('/')) {
@@ -39,6 +50,12 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 			// YouTube — fetch qualities and show picker
 			if (platform === 'YouTube') {
 				const statusMsg = await ctx.reply('Fetching available qualities...');
+				// Store state before the slow fetch so /cancel can clean up the message
+				// even if the Worker times out before fetchYouTubeQualities returns.
+				await setAdminState(kv, adminId, {
+					action: 'downloading_media',
+					context: { downloadUrl: url, downloadPlatform: platform, statusMessageId: statusMsg.message_id },
+				});
 				const ytInfo = await fetchYouTubeQualities(url);
 				if (ytInfo && ytInfo.qualities.length > 0) {
 					const keyboard = new InlineKeyboard();
@@ -61,6 +78,7 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 							downloadPlatform: platform,
 							qualities: ytInfo.qualities,
 							downloadCaption: ytInfo.caption,
+							statusMessageId: statusMsg.message_id,
 						},
 					});
 				} else {
@@ -76,7 +94,7 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 					);
 					await setAdminState(kv, adminId, {
 						action: 'downloading_media',
-						context: { downloadUrl: url, downloadPlatform: platform },
+						context: { downloadUrl: url, downloadPlatform: platform, statusMessageId: statusMsg.message_id },
 					});
 				}
 				return;

@@ -11,24 +11,30 @@ export async function handleTelegramWebhook(c: Context<HonoEnv>): Promise<Respon
 		return c.json({ error: 'Unauthorized' }, 401);
 	}
 
+	let update: unknown;
 	try {
-		const update = await c.req.json();
-		console.log('[Webhook] Received update:', JSON.stringify(update).substring(0, 200));
-
-		const bot = createBot(c.env);
-		console.log('[Webhook] Bot created');
-
-		// Initialize bot (required when calling handleUpdate directly)
-		await bot.init();
-		console.log('[Webhook] Bot initialized');
-
-		// Process update directly, bypassing grammY adapters
-		await bot.handleUpdate(update);
-		console.log('[Webhook] Update processed');
-
-		return c.json({ ok: true });
-	} catch (error) {
-		console.error('[Webhook] Error processing update:', error);
-		return c.json({ ok: false, error: String(error) }, 500);
+		update = await c.req.json();
+	} catch {
+		return c.json({ error: 'Invalid JSON' }, 400);
 	}
+
+	console.log('[Webhook] Received update:', JSON.stringify(update).substring(0, 200));
+
+	// Process the update in the background so we return 200 OK to Telegram immediately.
+	// Without this, long-running handlers (e.g. YouTube quality fetch) cause Telegram
+	// to retry the same update indefinitely when the Worker times out.
+	c.executionCtx.waitUntil(
+		(async () => {
+			try {
+				const bot = createBot(c.env);
+				await bot.init();
+				await bot.handleUpdate(update as any);
+				console.log('[Webhook] Update processed');
+			} catch (error) {
+				console.error('[Webhook] Error processing update:', error);
+			}
+		})()
+	);
+
+	return c.json({ ok: true });
 }
