@@ -14,6 +14,48 @@ const SUPPORTED_TAGS = new Set([
 	'pre', 's', 'strong', 'u', 'ul', 'video'
 ]);
 
+const BLOCK_TAGS = new Set([
+	'aside', 'blockquote', 'figure', 'h3', 'h4', 'hr', 'ol', 'p', 'pre', 'ul',
+]);
+
+function isBlockNode(node: TelegraphNode): boolean {
+	return typeof node !== 'string' && BLOCK_TAGS.has((node as TelegraphNodeElement).tag);
+}
+
+function isBrNode(node: TelegraphNode): boolean {
+	return typeof node !== 'string' && (node as TelegraphNodeElement).tag === 'br';
+}
+
+/**
+ * Wrap consecutive inline/text nodes at root level in <p> elements.
+ * Block nodes pass through unchanged; leading/trailing <br> are trimmed from each group.
+ */
+function wrapLooseAtRoot(nodes: TelegraphNode[]): TelegraphNode[] {
+	const result: TelegraphNode[] = [];
+	let buffer: TelegraphNode[] = [];
+
+	function flushBuffer(): void {
+		while (buffer.length > 0 && isBrNode(buffer[0])) buffer.shift();
+		while (buffer.length > 0 && isBrNode(buffer[buffer.length - 1])) buffer.pop();
+		if (buffer.length > 0) {
+			result.push({ tag: 'p', children: [...buffer] });
+			buffer = [];
+		}
+	}
+
+	for (const node of nodes) {
+		if (isBlockNode(node)) {
+			flushBuffer();
+			result.push(node);
+		} else {
+			buffer.push(node);
+		}
+	}
+	flushBuffer();
+
+	return result;
+}
+
 /**
  * Converts an HTML string into an array of Telegraph Node objects.
  */
@@ -21,82 +63,87 @@ export function htmlToTelegraphNodes(html: string): TelegraphNode[] {
 	const $ = cheerio.load(html);
 	const nodes: TelegraphNode[] = [];
 
-	function parseNode(el: cheerio.Element | cheerio.Node): TelegraphNode | null {
+	function hasBlockChildren(el: any): boolean {
+		return !!(el.childNodes?.some(
+			(child: any) => child.type === 'tag' && BLOCK_TAGS.has(child.name.toLowerCase())
+		));
+	}
+
+	function parseNode(el: any): TelegraphNode | TelegraphNode[] | null {
 		if (el.type === 'text') {
-			const text = (el as any).data;
-			return text ? text : null;
+			const text = (el as any).data as string;
+			if (!text) return null;
+			// No newlines: return as-is
+			if (!text.includes('\n')) return text;
+			// Split on newlines, insert <br> between lines so whitespace isn't collapsed
+			const lines = text.split('\n');
+			const result: TelegraphNode[] = [];
+			for (let i = 0; i < lines.length; i++) {
+				if (lines[i]) result.push(lines[i]);
+				if (i < lines.length - 1) result.push({ tag: 'br' });
+			}
+			if (result.length === 0) return null;
+			return result.length === 1 ? result[0] : result;
 		}
 
 		if (el.type === 'tag') {
 			let tag = el.name.toLowerCase();
 
-			// Map unsupported tags to supported ones
 			if (tag === 'h1' || tag === 'h2') tag = 'h3';
 			if (tag === 'h5' || tag === 'h6') tag = 'h4';
-			if (tag === 'div' || tag === 'section' || tag === 'article') tag = 'p';
-			if (tag === 'span') return parseChildren(el); // Ignore tag, keep children
 
-			if (!SUPPORTED_TAGS.has(tag)) {
-				// Strip unsupported tag but keep children
-				return parseChildren(el) as any;
+			// Container tags: if they contain block-level children, promote children
+			// to avoid invalid nested blocks (e.g. <p><p>…</p></p>)
+			if (tag === 'div' || tag === 'section' || tag === 'article') {
+				if (hasBlockChildren(el)) return parseChildrenArray(el);
+				tag = 'p';
 			}
 
+			if (tag === 'span') return parseChildrenArray(el);
+
+			if (!SUPPORTED_TAGS.has(tag)) return parseChildrenArray(el);
+
 			const attrs: Record<string, string> = {};
-			if (tag === 'a' && el.attribs.href) attrs.href = el.attribs.href;
-			if (tag === 'img' && el.attribs.src) attrs.src = el.attribs.src;
-			if (tag === 'video' && el.attribs.src) attrs.src = el.attribs.src;
-			if (tag === 'iframe' && el.attribs.src) attrs.src = el.attribs.src;
+			if (tag === 'a' && el.attribs?.href) attrs.href = el.attribs.href;
+			if (tag === 'img' && el.attribs?.src) attrs.src = el.attribs.src;
+			if (tag === 'video' && el.attribs?.src) attrs.src = el.attribs.src;
+			if (tag === 'iframe' && el.attribs?.src) attrs.src = el.attribs.src;
 
 			const children = parseChildrenArray(el);
-
 			const node: TelegraphNodeElement = { tag };
 			if (Object.keys(attrs).length > 0) node.attrs = attrs;
 			if (children.length > 0) node.children = children;
-
 			return node;
 		}
 
 		return null;
 	}
 
-	function parseChildrenArray(el: cheerio.Element | cheerio.Node): TelegraphNode[] {
+	function parseChildrenArray(el: any): TelegraphNode[] {
 		const children: TelegraphNode[] = [];
-		if ((el as cheerio.Element).childNodes) {
-			for (const child of (el as cheerio.Element).childNodes) {
+		if (el.childNodes) {
+			for (const child of el.childNodes) {
 				const parsed = parseNode(child);
 				if (parsed) {
-					if (Array.isArray(parsed)) {
-						children.push(...parsed);
-					} else {
-						children.push(parsed);
-					}
+					if (Array.isArray(parsed)) children.push(...parsed);
+					else children.push(parsed);
 				}
 			}
 		}
 		return children;
 	}
 
-	function parseChildren(el: cheerio.Element | cheerio.Node): TelegraphNode[] {
-		return parseChildrenArray(el);
-	}
-
 	$('body').contents().each((_, el) => {
 		const parsed = parseNode(el);
 		if (parsed) {
-			if (Array.isArray(parsed)) {
-				nodes.push(...parsed);
-			} else {
-				nodes.push(parsed);
-			}
+			if (Array.isArray(parsed)) nodes.push(...parsed);
+			else nodes.push(parsed);
 		}
 	});
 
-	// Telegraph requires at least one node
-	if (nodes.length === 0) {
-		nodes.push({ tag: 'p', children: ['(No content)'] });
-	}
-
-	return nodes;
+	// Wrap any loose text/inline nodes at root level into <p> elements
+	const result = wrapLooseAtRoot(nodes);
+	return result.length > 0 ? result : [{ tag: 'p', children: ['(No content)'] }];
 }
 
 /**

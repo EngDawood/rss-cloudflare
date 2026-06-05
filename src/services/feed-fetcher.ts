@@ -360,7 +360,9 @@ function extractTextFromHtml(html: string): string {
 
 	const raw = textSource
 		.replace(/<br\s*\/?>/gi, '\n')
+		.replace(/<\/p>|<\/div>|<\/section>|<\/article>|<\/li>|<\/h[1-6]>|<\/blockquote>/gi, '\n\n')
 		.replace(/<[^>]+>/g, '')
+		.replace(/\n{3,}/g, '\n\n')
 		.trim();
 
 	return decodeHtmlEntities(raw);
