@@ -5,7 +5,9 @@ import { handleSetup } from './routes/setup';
 import { handleFoloWebhook } from './routes/folo';
 import { handleTestBridges } from './routes/test-bridges';
 import { checkAllFeeds } from './cron/check-feeds';
+import { refreshSavedFeeds } from './cron/refresh-feeds';
 import { handleQueue } from './queue-handler';
+import { RSSReaderMCP } from './mcp/index';
 import { QueueTask } from './types/queue';
 import { MessageBatch } from '@cloudflare/workers-types';
 
@@ -27,6 +29,11 @@ app.post('/telegram/webhook', handleTelegramWebhook);
 app.post('/folo', handleFoloWebhook);
 app.get('/telegram/setup', handleSetup);
 
+// MCP server
+app.on(['GET', 'POST', 'DELETE'], ['/mcp', '/mcp/*'], async (c) => {
+	return RSSReaderMCP.serve('/mcp', { binding: 'RSSReaderMCP' }).fetch(c.req.raw, c.env, c.executionCtx as any);
+});
+
 app.notFound((c) =>
 	c.json(
 		{
@@ -36,6 +43,7 @@ app.notFound((c) =>
 				hashtag: '/instagram?h=hashtag',
 				location: '/instagram?l=location_id',
 				params: 'media_type=all|video|picture|multiple, direct_links=true|false',
+				mcp: '/mcp',
 			},
 		},
 		404
@@ -47,10 +55,13 @@ app.onError((err, c) => {
 	return c.json({ error: 'Internal Server Error' }, 500);
 });
 
+export { RSSReaderMCP };
+
 export default {
 	fetch: app.fetch,
 	scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
 		ctx.waitUntil(checkAllFeeds(env));
+		ctx.waitUntil(refreshSavedFeeds(env));
 	},
 	queue: async (batch: MessageBatch<QueueTask>, env: Env): Promise<void> => {
 		await handleQueue(batch, env);

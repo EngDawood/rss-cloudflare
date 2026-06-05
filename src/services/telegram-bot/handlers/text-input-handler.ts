@@ -10,6 +10,7 @@ import { getChannelConfig, saveChannelConfig } from '../storage/kv-operations';
 import { resolveFormatSettings } from '../../../utils/telegram-format';
 import { buildFormatKeyboard } from '../views/keyboard-builders';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
+import { handleSetTelegraphToken } from '../commands/telegraph-commands';
 import type { AdminState } from '../../../types/telegram';
 
 /**
@@ -18,14 +19,30 @@ import type { AdminState } from '../../../types/telegram';
 export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): void {
 	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
 
+	// Handle forwarded messages from channels — lets admins register private channels
+	// by simply forwarding any message from the channel to the bot.
+	bot.on('message', async (ctx, next) => {
+		const origin = (ctx.message as any).forward_origin;
+		if (origin?.type === 'channel' && origin.chat) {
+			await addChannelDirect(ctx, bot, kv, adminId, String(origin.chat.id));
+			return;
+		}
+		await next();
+	});
+
 	bot.on('message:text', async (ctx) => {
 		const text = ctx.message.text;
 		if (text.startsWith('/')) {
-			// Special case for /skip in custom format input
 			const state = await getAdminState(kv, adminId);
-			if (state?.action === 'setting_format_custom' && text === '/skip') {
-				await handleSetFormatCustom(ctx, bot, kv, adminId, state, '');
-				return;
+			if (text === '/skip') {
+				if (state?.action === 'setting_format_custom') {
+					await handleSetFormatCustom(ctx, bot, kv, adminId, state, '');
+					return;
+				}
+				if (state?.action === 'setting_telegraph_token') {
+					await handleSetTelegraphToken(ctx, kv, adminId, '', env.TELEGRAPH_ACCESS_TOKEN);
+					return;
+				}
 			}
 			return;
 		}
@@ -39,6 +56,12 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 			// YouTube — fetch qualities and show picker
 			if (platform === 'YouTube') {
 				const statusMsg = await ctx.reply('Fetching available qualities...');
+				// Store state before the slow fetch so /cancel can clean up the message
+				// even if the Worker times out before fetchYouTubeQualities returns.
+				await setAdminState(kv, adminId, {
+					action: 'downloading_media',
+					context: { downloadUrl: url, downloadPlatform: platform, statusMessageId: statusMsg.message_id },
+				});
 				const ytInfo = await fetchYouTubeQualities(url);
 				if (ytInfo && ytInfo.qualities.length > 0) {
 					const keyboard = new InlineKeyboard();
@@ -61,6 +84,7 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 							downloadPlatform: platform,
 							qualities: ytInfo.qualities,
 							downloadCaption: ytInfo.caption,
+							statusMessageId: statusMsg.message_id,
 						},
 					});
 				} else {
@@ -76,7 +100,7 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 					);
 					await setAdminState(kv, adminId, {
 						action: 'downloading_media',
-						context: { downloadUrl: url, downloadPlatform: platform },
+						context: { downloadUrl: url, downloadPlatform: platform, statusMessageId: statusMsg.message_id },
 					});
 				}
 				return;
@@ -155,6 +179,9 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 				break;
 			case 'setting_format_custom':
 				await handleSetFormatCustom(ctx, bot, kv, adminId, state, text);
+				break;
+			case 'setting_telegraph_token':
+				await handleSetTelegraphToken(ctx, kv, adminId, text, env.TELEGRAPH_ACCESS_TOKEN);
 				break;
 		}
 	});

@@ -9,6 +9,7 @@ import { buildHeaders } from '../../../utils/headers';
 import { IG_WEB_PROFILE, IG_TOP_SEARCH } from '../../../constants';
 import { enrichFeedItems } from '../../../utils/media-enrichment';
 import { sendFallbackMessage } from '../helpers/fallback-sender';
+import { fetchAndSendLatest } from '../handlers/fetch-and-send';
 
 const BOT_COMMANDS = [
 	{ command: 'start', description: 'Show all commands' },
@@ -28,6 +29,7 @@ const BOT_COMMANDS = [
 	{ command: 'test', description: 'Fetch & send latest post' },
 	{ command: 'debug', description: 'Test Instagram connectivity' },
 	{ command: 'setup', description: 'Sync bot commands & menu' },
+	{ command: 'telegraph', description: 'Configure Telegraph Instant View' },
 	{ command: 'cancel', description: 'Cancel current action' },
 ];
 

@@ -17,7 +17,16 @@ export interface FormatSettings {
 	removeTikTokViews: 'enable' | 'disable';
 }
 
-export type SourceType = 'instagram_user' | 'instagram_tag' | 'instagram_story' | 'rss_url' | 'tiktok_user';
+// Global admin configuration stored in KV
+export interface AdminConfig {
+	telegraph: {
+		enabled: boolean;
+		threshold: number; // min chars to trigger Telegraph page creation
+		token?: string;    // overrides TELEGRAPH_ACCESS_TOKEN env var when set
+	};
+}
+
+export type SourceType = 'instagram_user' | 'instagram_tag' | 'instagram_story' | 'rss_url' | 'rsshub_url' | 'tiktok_user';
 
 // Channel source configuration
 export interface ChannelSource {
@@ -41,7 +50,7 @@ export interface ChannelConfig {
 
 // Admin conversation state for multi-step flows
 export interface AdminState {
-	action: 'adding_channel' | 'adding_source' | 'removing_channel' | 'downloading_media' | 'setting_format_custom';
+	action: 'adding_channel' | 'adding_source' | 'removing_channel' | 'downloading_media' | 'setting_format_custom' | 'setting_telegraph_token';
 	context?: {
 		channelId?: string;
 		sourceId?: string;
@@ -55,6 +64,8 @@ export interface AdminState {
 		downloadCaption?: string;
 		/** Direct CDN media URL that Telegram rejected (for dl:confirm fallback) */
 		directMediaUrl?: string;
+		/** Message ID of the in-progress status message (e.g. "Fetching..."), for /cancel cleanup */
+		statusMessageId?: number;
 	};
 }
 

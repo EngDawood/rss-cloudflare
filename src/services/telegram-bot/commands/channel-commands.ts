@@ -44,12 +44,8 @@ export function registerChannelCommands(bot: Bot, env: Env, kv: KVNamespace): vo
 			const config = await getChannelConfig(kv, channelId);
 			if (!config) continue;
 			const status = config.enabled ? '✅' : '❌';
-			const lastCheck = config.lastCheckTimestamp
-				? new Date(config.lastCheckTimestamp).toLocaleString()
-				: 'Never';
 			text += `${status} <b>${config.channelTitle}</b>\n`;
-			text += `   Sources: ${config.sources.length} | Delay: ${config.checkIntervalMinutes}m\n`;
-			text += `   Last check: ${lastCheck}\n\n`;
+			text += `   Sources: ${config.sources.length} | Delay: ${config.checkIntervalMinutes}m\n\n`;
 		}
 		await ctx.reply(text, { parse_mode: 'HTML' });
 	});

@@ -3,24 +3,28 @@
 	"name": "rss-bridge",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-02-10",
+	"workers_dev": true,
+
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
-		"observability": {
+	
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1,
+		"logs": {
 			"enabled": true,
 			"head_sampling_rate": 1,
-			"logs": {
-				"enabled": true,
-				"head_sampling_rate": 1,
-				"persist": true,
-				"invocation_logs": true
-			},
-			"traces": {
-				"enabled": true,
-				"persist": true,
-				"head_sampling_rate": 1
-			}
+			"persist": true,
+			"invocation_logs": true
 		},
+		"traces": {
+			"enabled": true,
+			"persist": true,
+			"head_sampling_rate": 1
+		}
+	},
+	
 	// KV namespace for caching (create with: npx wrangler kv namespace create CACHE)
 	"kv_namespaces": [
 		{
@@ -28,12 +32,47 @@
 			"id": "66a6f30828f94d508b4f55e93c8d1b7f"
 		}
 	],
+	// D1 database for RSS reader MCP
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "rss-reader",
+			"database_id": "aaf791f2-3ff0-4c55-b9c1-047842843091"
+		}
+	],
+	// Durable Object for the MCP server (McpAgent requires SQLite-backed DO)
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "RSSReaderMCP",
+				"class_name": "RSSReaderMCP"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": [
+				"RSSReaderMCP"
+			]
+		}
+	],
 	"vars": {
 		"USER_ID_CACHE_TTL": "86400",
 		"FEED_CACHE_TTL": "900",
 		"ADMIN_TELEGRAM_ID": "801062947",
-		"WORKER_URL": "https://instagram-rss-bridge.engdawood.workers.dev"
+		"WORKER_URL": "https://rss-bridge.engdawood.workers.dev",
+		// Placeholder — override with: npx wrangler secret put MCP_AUTH_TOKEN
+		// "MCP_AUTH_TOKEN": ""
 	},
+	
+	"routes": [
+		
+		{
+			"pattern": "rss.feed.engdawood.com",
+			"custom_domain": true
+		}
+	],
 	// Cron trigger: check feeds every 5 minutes
 	"triggers": {
 		"crons": [
@@ -68,4 +107,5 @@
 	// - TELEGRAM_BOT_TOKEN
 	// - TELEGRAM_WEBHOOK_SECRET
 	// - FOLO_WEBHOOK_SECRET  (optional: if set, Folo webhook requests must include ?token=<secret>)
+	// - MCP_AUTH_TOKEN       (overrides the empty var above for production auth)
 }

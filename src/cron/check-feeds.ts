@@ -62,17 +62,32 @@ async function scheduleChannelCheck(channelId: string, now: number, env: Env): P
 	const config = await getChannelConfig(env.CACHE, channelId);
 	if (!config || !config.enabled) return;
 
-	// Check if enough time has passed since last check
-	const intervalMs = config.checkIntervalMinutes * 60 * 1000;
-	if (now - config.lastCheckTimestamp < intervalMs) return;
+	// Skip if no active sources exist
+	const activeSources = config.sources.filter(s => s.enabled);
+	if (activeSources.length === 0) return;
 
-	// Update last check timestamp immediately to prevent concurrent cron runs from double-queuing
-	config.lastCheckTimestamp = now;
-	await saveChannelConfig(env.CACHE, channelId, config);
+	const bucketSizeMinutes = 5; // Cron runs every 5 minutes
+	
+	if (config.checkIntervalMinutes > bucketSizeMinutes) {
+		const currentMinute = Math.floor(now / 60000);
+		const currentBucket = Math.floor(currentMinute / bucketSizeMinutes);
+		const bucketsInInterval = Math.floor(config.checkIntervalMinutes / bucketSizeMinutes);
+		
+		// Create deterministic offset for this channel to spread load
+		let hash = 0;
+		for (let i = 0; i < channelId.length; i++) {
+			hash = (hash << 5) - hash + channelId.charCodeAt(i);
+			hash |= 0;
+		}
+		const offsetBucket = Math.abs(hash) % bucketsInInterval;
+		
+		if (currentBucket % bucketsInInterval !== offsetBucket) {
+			return; // Not this channel's turn
+		}
+	}
 
 	// Queue each enabled source for Tier 1 fetching
-	for (const source of config.sources) {
-		if (!source.enabled) continue;
+	for (const source of activeSources) {
 		try {
 			await env.FEED_FETCH_QUEUE.send({
 				type: 'fetch',

@@ -2,9 +2,11 @@ import { getCached, setCached } from '../../../utils/cache';
 import {
 	CACHE_KEY_TELEGRAM_CHANNELS,
 	CACHE_PREFIX_TELEGRAM_CHANNEL,
+	CACHE_KEY_ADMIN_CONFIG,
 	TELEGRAM_CONFIG_TTL,
+	DEFAULT_ADMIN_CONFIG,
 } from '../../../constants';
-import type { ChannelConfig } from '../../../types/telegram';
+import type { ChannelConfig, AdminConfig } from '../../../types/telegram';
 import type { FeedItem } from '../../../types/feed';
 
 /**
@@ -90,4 +92,25 @@ export async function addFailedPost(kv: KVNamespace, channelId: string, item: Fe
  */
 export async function clearFailedPosts(kv: KVNamespace, channelId: string): Promise<void> {
 	await kv.delete(`${CACHE_PREFIX_TELEGRAM_CHANNEL}${channelId}:failed_posts`);
+}
+
+/**
+ * Get global admin configuration (Telegraph settings, etc.).
+ */
+export async function getAdminConfig(kv: KVNamespace): Promise<AdminConfig> {
+	const raw = await getCached(kv, CACHE_KEY_ADMIN_CONFIG);
+	if (!raw) return { ...DEFAULT_ADMIN_CONFIG };
+	try {
+		const parsed = JSON.parse(raw);
+		return { ...DEFAULT_ADMIN_CONFIG, ...parsed };
+	} catch {
+		return { ...DEFAULT_ADMIN_CONFIG };
+	}
+}
+
+/**
+ * Save global admin configuration.
+ */
+export async function saveAdminConfig(kv: KVNamespace, config: AdminConfig): Promise<void> {
+	await setCached(kv, CACHE_KEY_ADMIN_CONFIG, JSON.stringify(config), TELEGRAM_CONFIG_TTL);
 }

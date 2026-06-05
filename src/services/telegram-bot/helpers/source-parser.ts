@@ -1,5 +1,26 @@
 import type { SourceType } from '../../../types/telegram';
-import { RSS_BRIDGE_INSTANCES } from '../../source-fetcher';
+import { RSS_BRIDGE_INSTANCES, RSSHUB_INSTANCES } from '../../source-fetcher';
+
+// rsshub.app is the official instance — always redirect to alternatives
+const RSSHUB_APP = 'https://rsshub.app';
+
+/**
+ * Detect if a URL is from rsshub.app or a known RSSHub instance.
+ * Returns the path+search string (e.g. "/anthropic/news") or null.
+ */
+function detectRSSHubPath(url: string): string | null {
+	try {
+		const parsed = new URL(url);
+		const origin = parsed.origin;
+		const isRSSHub =
+			origin === RSSHUB_APP ||
+			RSSHUB_INSTANCES.some((inst) => origin === inst || url.startsWith(inst));
+		if (!isRSSHub) return null;
+		return parsed.pathname + (parsed.search || '');
+	} catch {
+		return null;
+	}
+}
 
 /**
  * Generate a short hash for a URL to use as source ID suffix.
@@ -69,6 +90,12 @@ export function parseSourceRef(ref: string): { type: SourceType; value: string; 
 			}
 		}
 
+		// RSSHub URL (rsshub.app or known instance) → extract path for instance failover
+		const rsshubPath = detectRSSHubPath(trimmed);
+		if (rsshubPath) {
+			return { type: 'rsshub_url', value: rsshubPath, id: `rsshub_${shortHash(rsshubPath)}` };
+		}
+
 		// Generic RSS/Atom URL
 		return { type: 'rss_url', value: trimmed, id: `rss_${shortHash(trimmed)}` };
 	}
@@ -101,6 +128,8 @@ export function sourceTypeIcon(type: string): string {
 			return '📸';
 		case 'tiktok_user':
 			return '🎵';
+		case 'rsshub_url':
+			return '📡';
 		case 'rss_url':
 			return '🌐';
 		default:
@@ -123,6 +152,8 @@ export function sourceTypeLabel(type: string): string {
 			return 'IG Story';
 		case 'tiktok_user':
 			return 'TikTok';
+		case 'rsshub_url':
+			return 'RSSHub';
 		case 'rss_url':
 			return 'RSS';
 		default:

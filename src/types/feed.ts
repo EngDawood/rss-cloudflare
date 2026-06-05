@@ -15,6 +15,10 @@ export interface FeedItem {
 	title: string;
 	/** Plain text caption/body (HTML stripped) */
 	text: string;
+	/** Raw HTML content (for articles) */
+	contentHtml?: string;
+	/** Telegraph URL for Instant View */
+	telegraphUrl?: string;
 	/** Author name (feed-level or per-entry) */
 	author: string;
 	/** Feed channel title (e.g. "natgeo — Instagram", "BBC News") */
@@ -25,6 +29,8 @@ export interface FeedItem {
 	mediaType: FeedItemMediaType;
 	/** Empty = text only, [1] = single, [n] = album */
 	media: FeedItemMedia[];
+	/** Categories / topics parsed from <category> tags */
+	topics?: string[];
 }
 
 export interface FetchResult {

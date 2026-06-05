@@ -48,6 +48,8 @@ export async function fetchForSource(source: ChannelSource, env?: Env): Promise<
 			return await fetchInstagramStory(source.value, env);
 		case 'rss_url':
 			return await fetchRssUrl(source.value, env);
+		case 'rsshub_url':
+			return await fetchRSSHubUrl(source.value, env);
 		case 'tiktok_user':
 			return await fetchTikTokUser(source.value, env);
 		default:
@@ -96,6 +98,19 @@ async function fetchRssUrl(url: string, env?: Env): Promise<FetchResult> {
 	}
 
 	return result;
+}
+
+/**
+ * Fetch a RSSHub path via all known RSSHub instances, with failover.
+ * The value stored is the path+query (e.g. "/anthropic/news"), not a full URL.
+ */
+async function fetchRSSHubUrl(path: string, env?: Env): Promise<FetchResult> {
+	return fetchFromRSSBridgeInstances(
+		(instance) => `${instance}${path}`,
+		`rsshub:${path}`,
+		RSSHUB_INSTANCES,
+		env
+	);
 }
 
 /**

@@ -8,7 +8,7 @@ import { CACHE_PREFIX_TELEGRAM_SENT, TELEGRAM_CONFIG_TTL } from '../../../consta
 import { sendMediaToChannel, FileTooLargeError } from './send-media';
 import { sendFallbackMessage } from '../helpers/fallback-sender';
 import { enrichFeedItems } from '../../../utils/media-enrichment';
-import { getChannelConfig, addFailedPost } from '../storage/kv-operations';
+import { getChannelConfig, addFailedPost, getAdminConfig } from '../storage/kv-operations';
 
 /**
  * Send an alert DM to the admin. Silently fails if notification itself errors.
@@ -55,8 +55,13 @@ export async function fetchAndSendLatest(
 		// Send latest posts (oldest first)
 		const items = result.items.slice(0, count).reverse();
 
-		// Enrich items that link to supported platforms (e.g. TikTok) but have no media
-		await enrichFeedItems(items);
+		// Enrich items that link to supported platforms (e.g. TikTok) or need Telegraph Instant View
+		const adminConfig = await getAdminConfig(env.CACHE);
+		await enrichFeedItems(items, {
+			token: adminConfig.telegraph.token || env.TELEGRAPH_ACCESS_TOKEN,
+			enabled: adminConfig.telegraph.enabled,
+			threshold: adminConfig.telegraph.threshold,
+		});
 
 		let failures = 0;
 		for (const item of items) {

@@ -2,6 +2,7 @@ import type { MessageBatch } from '@cloudflare/workers-types';
 import type { QueueTask, FetchTask, SendTask } from './types/queue';
 import { Bot, GrammyError } from 'grammy';
 import { getChannelConfig, sendMediaToChannel, addFailedPost } from './services/telegram-bot';
+import { getAdminConfig } from './services/telegram-bot/storage/kv-operations';
 import { fetchForSource } from './services/source-fetcher';
 import { getCached, setCached } from './utils/cache';
 import {
@@ -67,11 +68,16 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 	newItems.reverse();
 	const postsToQueue = newItems.slice(0, 5);
 
-	// Enrich metadata (TikTok, etc.) before queuing to Send tier
-	await enrichFeedItems(postsToQueue);
-
 	// Resolve format settings
 	const settings = resolveFormatSettings(config.defaultFormat, source.format);
+
+	// Enrich metadata (TikTok, Telegraph, etc.) before queuing to Send tier
+	const adminConfig = await getAdminConfig(env.CACHE);
+	await enrichFeedItems(postsToQueue, {
+		token: adminConfig.telegraph.token || env.TELEGRAPH_ACCESS_TOKEN,
+		enabled: adminConfig.telegraph.enabled,
+		threshold: adminConfig.telegraph.threshold,
+	});
 
 	// Push each item to the Send Queue
 	for (const item of postsToQueue) {

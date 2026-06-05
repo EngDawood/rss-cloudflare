@@ -48,18 +48,29 @@ Inspired by [RSS-Bridge's InstagramBridge](https://github.com/RSS-Bridge/rss-bri
 - `npx wrangler secret put IG_SESSION_ID` — Set Instagram session cookie
 - `npx wrangler secret put IG_DS_USER_ID` — Set Instagram user ID cookie
 - `npx wrangler kv namespace create CACHE` — Create KV namespace
+- `npx wrangler d1 migrations apply rss-reader --local` — Apply D1 migrations locally
+- `npx wrangler d1 migrations apply rss-reader --remote` — Apply D1 migrations to production
 
 ## Architecture
 
 ```
+migrations/
+├── 0001_init.sql             # feeds, items, config tables
+└── 0002_chats_notes.sql      # chats, notes, post_log tables
+
 src/
-├── index.ts                  # Hono app entry point, routes
+├── index.ts                  # Hono app entry point, routes (incl. /mcp)
 ├── constants.ts              # Instagram API endpoints, query hashes, Telegram defaults
 ├── types/                    # TypeScript interfaces
 │   ├── instagram.ts          # Instagram API response types
 │   ├── rss.ts                # RSS feed/item types
 │   ├── telegram.ts           # Telegram bot types (ChannelConfig, FormatSettings, etc.)
 │   └── feed.ts               # Universal feed item types
+├── db/
+│   └── d1.ts                 # D1 helpers: feeds, items, config, chats, notes, post_log, recall
+├── mcp/
+│   ├── index.ts              # RSSReaderMCP extends McpAgent — served at /mcp
+│   └── tools.ts              # 26 MCP tool registrations + resolveTarget/logAndSend helpers
 ├── routes/
 │   ├── instagram.ts          # /instagram route handler (RSS endpoint)
 │   └── telegram.ts           # /telegram webhook route (bot updates)
@@ -90,6 +101,34 @@ src/
     └── telegram-format.ts    # FeedItem → Telegram message formatting
 ```
 
+## MCP Server
+
+The MCP server is served at `/mcp` via `RSSReaderMCP extends McpAgent<Env>` (Cloudflare Agents SDK). It exposes **26 tools** backed by D1:
+
+**Feed tools:** `add_feed`, `list_feeds`, `remove_feed`, `set_feed_enabled`, `refresh_feed`, `refresh_all`, `fetch_rss_feed`
+
+**Browse tools:** `list_new_items` (unread; filter by feedId/query/since), `search_items` (all items incl. read; filter by query/feedId/since/unreadOnly), `get_item` (full item; `markRead?: boolean` default false), `mark_read`, `mark_unread`
+
+**Chat management:** `add_chat`, `list_chats`, `remove_chat`, `set_default_chat`, `set_telegram_chat` (legacy alias)
+
+**Post tools:** `post_to_telegram` (stored item → named chat or default), `post_message` (custom or item-override; type=text/photo/video/audio/album)
+
+**Memory tools:** `save_note`, `list_notes`, `search_notes`, `delete_note`, `recall` (unified notes+posts timeline), `list_post_log`
+
+**Config:** `get_config`
+
+### D1 Tables (binding: `DB`, database: `rss-reader`)
+- `feeds` — RSS/Atom feed URLs with enabled flag
+- `items` — parsed feed entries; `media` column is `JSON FeedItemMedia[]` (URLs only, not bytes)
+- `config` — flat key→value config store (legacy)
+- `chats` — named Telegram chat targets; partial unique index enforces at most one default
+- `notes` — freeform agent-written notes/recaps with optional item/chat refs
+- `post_log` — auto-written on every Telegram send (ok + error); `posted_at` timestamp
+
+### Internal MCP helpers (not exported)
+- `resolveTarget(db, target?)` — resolves chat name / raw numeric id / default chat → `{chatId, chatName?}`
+- `logAndSend(db, bot, chatId, chatName, message, itemId?)` — wraps `sendMediaToChannel`, writes `post_log` row on success and failure
+
 ## Conventions
 
 - TypeScript strict mode
@@ -106,10 +145,6 @@ src/
 3. Fetch Instagram data via multi-tier fallback (REST → GraphQL GET → GraphQL POST → embed scraping)
 4. Filter by media_type, convert MediaNode[] to RSSItem[]
 5. Build RSS 2.0 XML, cache in KV, return
-
-## Instagram auth
-
-Session cookies (`IG_SESSION_ID`, `IG_DS_USER_ID`) are required for reliable access. Set via `wrangler secret put` for production, or in `.dev.vars` for local dev. Use a dedicated Instagram account.
 
 ## API
 
@@ -144,3 +179,34 @@ POST /telegram                                 # Webhook endpoint for bot update
 **Media send strategy (URL-first):** `send-media.ts` always tries Telegram URL pass-through first (no host whitelist). If Telegram can't fetch the URL, interactive mode shows `[📥 Download] [❌ Cancel] [📤 Send to @urluploadxbot]` buttons with the direct URL in monospace. Cron/channel posting auto-falls back to download+upload silently. Files >50MB show the URL + @urluploadxbot button. `TelegramUrlFetchError` is thrown on URL rejection in interactive mode; `downloadAndSendMedia` catches it and stores `directMediaUrl` in KV for the `dl:confirm` callback. Twitter/Threads/Pinterest deduplicate AIO quality variants to single best video.
 
 **Cron job:** `check-feeds.ts` runs every N minutes (configurable per channel), fetches new posts, sends to Telegram channels.
+
+## Queue Architecture (feat/Queue branch)
+
+The cron → send path uses a **two-tier Cloudflare Queue** system:
+
+- **Tier 1 (`FEED_FETCH_QUEUE`):** `processFetchTask()` in `src/queue-handler.ts` — fetches source, deduplicates via KV sent set (`telegram:sent:{channelId}:{sourceId}`), enriches items (Telegraph/TikTok), queues up to 5 items to Tier 2.
+- **Tier 2 (`TELEGRAM_SEND_QUEUE`):** `processSendTask()` — formats `FeedItem` → `TelegramMediaMessage` via `formatFeedItem()`, sends via `sendMediaToChannel()`. Handles 429 rate-limiting by re-throwing for Cloudflare retry.
+- Queue task types defined in `src/types/queue.ts`: `FetchTask { type, channelId, sourceId }` and `SendTask { type, channelId, item, settings }`.
+- `src/cron/check-feeds.ts` — cron entry point; also `src/cron/refresh-feeds.ts` (new).
+
+**Key coupling point:** `queue-handler.ts` is hard-wired to Telegram (`Bot`, `sendMediaToChannel`, grammY). The planned Publisher abstraction (see below) will generalize this.
+
+## Multi-Platform Publishing (planned, not yet implemented)
+
+Design doc: `C:\Users\LEGION\.claude\plans\hi-claude-can-u-atomic-sutton.md`
+
+**Goal:** publish feeds to other platforms (Facebook Page, X, LinkedIn, etc.) alongside Telegram via **Composio** as a managed OAuth relay.
+
+**Architecture planned:**
+- `Publisher` interface + registry (`src/services/publishers/`)
+- `TelegramPublisher` — adapter over existing grammY send path (no behavior change)
+- `ComposioPublisher` — REST call to `POST https://backend.composio.dev/api/v3/tools/execute/{SLUG}` with `x-api-key: COMPOSIO_API_KEY`
+- New D1 migration `0003_destinations.sql` — `destinations` table (platform + external_id) + `source_destinations` M2M + `platform` col on `post_log`
+- Queue `SendTask` generalized to carry `PublishTarget` instead of `channelId`
+- New secret: `COMPOSIO_API_KEY` (via `wrangler secret put COMPOSIO_API_KEY`)
+
+**Composio status (2026-06-03):**
+- MCP live via claude.ai connector (`mcp__claude_ai_composio__*`, 7 meta-tools)
+- Facebook toolkit recognized; **no Page account connected yet** — next: OAuth flow via `COMPOSIO_MANAGE_CONNECTIONS`
+- FB personal profile posting: **impossible** (Meta API restriction since 2018, applies to all relays)
+- Plugin `.mcp.json` bug: missing `"type": "http"` — workaround: `claude mcp add --transport http composio https://connect.composio.dev/mcp --scope user`
