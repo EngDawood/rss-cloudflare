@@ -10,6 +10,7 @@ import { getChannelConfig, saveChannelConfig } from '../storage/kv-operations';
 import { resolveFormatSettings } from '../../../utils/telegram-format';
 import { buildFormatKeyboard } from '../views/keyboard-builders';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
+import { handleSetTelegraphToken } from '../commands/telegraph-commands';
 import type { AdminState } from '../../../types/telegram';
 
 /**
@@ -32,11 +33,16 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 	bot.on('message:text', async (ctx) => {
 		const text = ctx.message.text;
 		if (text.startsWith('/')) {
-			// Special case for /skip in custom format input
 			const state = await getAdminState(kv, adminId);
-			if (state?.action === 'setting_format_custom' && text === '/skip') {
-				await handleSetFormatCustom(ctx, bot, kv, adminId, state, '');
-				return;
+			if (text === '/skip') {
+				if (state?.action === 'setting_format_custom') {
+					await handleSetFormatCustom(ctx, bot, kv, adminId, state, '');
+					return;
+				}
+				if (state?.action === 'setting_telegraph_token') {
+					await handleSetTelegraphToken(ctx, kv, adminId, '', env.TELEGRAPH_ACCESS_TOKEN);
+					return;
+				}
 			}
 			return;
 		}
@@ -173,6 +179,9 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 				break;
 			case 'setting_format_custom':
 				await handleSetFormatCustom(ctx, bot, kv, adminId, state, text);
+				break;
+			case 'setting_telegraph_token':
+				await handleSetTelegraphToken(ctx, kv, adminId, text, env.TELEGRAPH_ACCESS_TOKEN);
 				break;
 		}
 	});

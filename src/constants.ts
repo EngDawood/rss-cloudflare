@@ -41,8 +41,11 @@ export const FEED_CACHE_TTL = 900;
 export const RSS_ITEMS_LIMIT = 12;
 export const TITLE_MAX_LENGTH = 120;
 
+// Admin config KV key
+export const CACHE_KEY_ADMIN_CONFIG = 'admin:config';
+
 // Format settings defaults
-import type { FormatSettings } from './types/telegram';
+import type { FormatSettings, AdminConfig } from './types/telegram';
 
 export const DEFAULT_FORMAT_SETTINGS: FormatSettings = {
 	notification: 'normal',
@@ -134,5 +137,11 @@ export const FORMAT_LABELS: Record<
 	customFooter: { label: 'Footer text' },
 	customHashtags: { label: 'Extra hashtags' },
 	cleanupText: { label: 'Cleanup text' },
-	telegraphToken: { label: 'Telegraph Token' },
+};
+
+export const DEFAULT_ADMIN_CONFIG: AdminConfig = {
+	telegraph: {
+		enabled: true,
+		threshold: 500,
+	},
 };

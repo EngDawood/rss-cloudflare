@@ -141,6 +141,10 @@ function buildFooter(item: FeedItem, settings: FormatSettings): string {
 	if (item.telegraphUrl) {
 		base += `⚡️ <a href="${item.telegraphUrl}">Instant View</a>\n`;
 	}
+	if (settings.hashtags !== 'disable' && item.topics?.length) {
+		const tags = item.topics.map(t => '#' + t.replace(/\s+/g, '_').replace(/[^\w]/g, '')).filter(Boolean).join(' ');
+		if (tags) base += tags + '\n';
+	}
 
 	switch (settings.sourceFormat) {
 		case 'title_link':

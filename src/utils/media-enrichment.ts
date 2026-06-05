@@ -2,17 +2,27 @@ import type { FeedItem, FeedItemMedia, FeedItemMediaType } from '../types/feed';
 import { downloadMedia } from '../services/media-downloader';
 import { createTelegraphPage } from './telegraph';
 
+export interface TelegraphOptions {
+	token?: string;
+	enabled?: boolean;
+	threshold?: number;
+}
+
 /**
  * Enrich feed items that have no media but link to a supported platform (e.g. TikTok).
  * Uses the media downloader to resolve actual video/image URLs.
  * Mutates items in-place. Non-fatal: failures leave items unchanged (sent as text).
- * If telegraphToken is provided, also converts lengthy text articles into Telegraph pages.
+ * If telegraph.token is set and telegraph.enabled is true, converts long articles into Telegraph pages.
  */
-export async function enrichFeedItems(items: FeedItem[], telegraphToken?: string): Promise<void> {
+export async function enrichFeedItems(items: FeedItem[], telegraph?: TelegraphOptions): Promise<void> {
+	const token = telegraph?.token;
+	const enabled = telegraph?.enabled ?? true;
+	const threshold = telegraph?.threshold ?? 500;
+
 	for (const item of items) {
 		// 1. Telegraph Article Enrichment
-		if (telegraphToken && item.contentHtml && item.mediaType === 'none' && item.text.length > 500) {
-			const url = await createTelegraphPage(item.title, item.author || item.feedTitle || 'RSS-Bridge', item.contentHtml, telegraphToken);
+		if (enabled && token && item.contentHtml && item.text.length > threshold) {
+			const url = await createTelegraphPage(item.title, item.author || item.feedTitle || 'RSS-Bridge', item.contentHtml, token);
 			if (url) {
 				item.telegraphUrl = url;
 			}

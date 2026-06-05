@@ -18,7 +18,7 @@ const SUPPORTED_TAGS = new Set([
  * Converts an HTML string into an array of Telegraph Node objects.
  */
 export function htmlToTelegraphNodes(html: string): TelegraphNode[] {
-	const $ = cheerio.load(html, null, false);
+	const $ = cheerio.load(html);
 	const nodes: TelegraphNode[] = [];
 
 	function parseNode(el: cheerio.Element | cheerio.Node): TelegraphNode | null {

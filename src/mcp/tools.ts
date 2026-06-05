@@ -341,7 +341,7 @@ export function registerTools(server: McpServer, env: Env): void {
 				const { chatId, chatName } = await resolveTarget(db, target);
 
 				const item = dbItemToFeedItem(row, feedTitle, feedLink);
-				await enrichFeedItems([item], env.TELEGRAPH_ACCESS_TOKEN);
+				await enrichFeedItems([item], { token: env.TELEGRAPH_ACCESS_TOKEN });
 
 				const settings = resolveFormatSettings();
 				const message = formatFeedItem(item, settings);
@@ -574,7 +574,7 @@ export function registerTools(server: McpServer, env: Env): void {
 					if (!row) return err(`Item ${itemId} not found`);
 					const feed = await getFeedById(db, row.feed_id);
 					const item = dbItemToFeedItem(row, feed?.title ?? '', feed?.url ?? '');
-					await enrichFeedItems([item], env.TELEGRAPH_ACCESS_TOKEN);
+					await enrichFeedItems([item], { token: env.TELEGRAPH_ACCESS_TOKEN });
 					message = formatFeedItem(item, resolveFormatSettings());
 					if (caption) message = { ...message, caption };
 				} else {
