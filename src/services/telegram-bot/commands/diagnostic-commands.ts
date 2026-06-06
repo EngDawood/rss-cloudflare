@@ -1,4 +1,5 @@
 import { type Bot, InlineKeyboard } from 'grammy';
+import { setAdminState } from '../storage/admin-state';
 import type { ChannelSource } from '../../../types/telegram';
 import { parseSourceRef } from '../helpers/source-parser';
 import { fetchForSource } from '../../source-fetcher';
@@ -50,17 +51,19 @@ export function registerDiagnosticCommands(bot: Bot, env: Env, kv: KVNamespace):
 
 	// /test [count] <source> — Fetch and send the latest post(s) from any source
 	bot.command('test', async (ctx) => {
+		const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
 		const arg = ctx.match?.trim() || '';
 		if (!arg) {
+			await setAdminState(kv, adminId, { action: 'testing_source' });
 			await ctx.reply(
-				'Usage:\n' +
-				'<code>/test [count] @username</code> (Instagram)\n' +
-				'<code>/test [count] -i username</code> (Instagram)\n' +
-				'<code>/test [count] -t username</code> (TikTok)\n' +
-				'<code>/test [count] -rss https://...</code> (RSS)\n' +
-				'<code>/test [count] https://...</code> (Profile or RSS link)\n\n' +
-				'Example: <code>/test 5 -t walidfitaihi6</code>',
-				{ parse_mode: 'HTML' }
+				'Send a source to test:\n\n' +
+				'<code>@username</code> — Instagram\n' +
+				'<code>-t username</code> — TikTok\n' +
+				'<code>-rss https://...</code> — RSS feed\n' +
+				'<code>https://...</code> — Profile or feed URL\n\n' +
+				'Optionally prefix with a count: <code>5 @username</code>\n\n' +
+				'Use /cancel to abort.',
+				{ parse_mode: 'HTML', reply_markup: { force_reply: true, selective: true } }
 			);
 			return;
 		}
