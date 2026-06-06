@@ -62,6 +62,8 @@
 		"FEED_CACHE_TTL": "900",
 		"ADMIN_TELEGRAM_ID": "801062947",
 		"WORKER_URL": "https://rss-bridge.engdawood.workers.dev",
+		"DEFAULT_AI_MODEL": "nvidia/llama-3.1-nemotron-70b-instruct",
+		"CHAT_AI_MODEL": "google/gemini-2.0-flash"
 		// Placeholder — override with: npx wrangler secret put MCP_AUTH_TOKEN
 		// "MCP_AUTH_TOKEN": ""
 	},
@@ -108,4 +110,5 @@
 	// - TELEGRAM_WEBHOOK_SECRET
 	// - FOLO_WEBHOOK_SECRET  (optional: if set, Folo webhook requests must include ?token=<secret>)
 	// - MCP_AUTH_TOKEN       (overrides the empty var above for production auth)
+	// - AI_GATEWAY_TOKEN     (required: Cloudflare AI Gateway authenticated token)
 }

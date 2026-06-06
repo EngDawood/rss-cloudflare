@@ -65,7 +65,8 @@ export function formatFeedItem(item: FeedItem, settings?: FormatSettings): Teleg
 }
 
 function buildTelegramCaption(item: FeedItem, settings: FormatSettings): string {
-	let rawText = item.text;
+	// Work on plain item.text first (cleanup + escaping), then inject summary
+	let rawText = item.telegraphUrl && item.summary ? item.summary : item.text;
 
 	// Apply cleanup text (remove specified phrases)
 	if (settings.cleanupText) {
@@ -79,7 +80,13 @@ function buildTelegramCaption(item: FeedItem, settings: FormatSettings): string 
 		rawText = rawText.replace(/\s+/g, ' ').trim();
 	}
 
+	// Escape HTML for safe Telegram rendering
 	let text = escapeHtml(rawText);
+
+	// For non-Telegraph items with a summary: prepend as italic before the original caption
+	if (item.summary && !item.telegraphUrl) {
+		text = `<i>${escapeHtml(item.summary)}</i>\n\n${text}`;
+	}
 
 	// Prepend article title for non-Instagram text items (RSS articles, blog posts)
 	const titlePrefix = item.title &&

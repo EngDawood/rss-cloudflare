@@ -31,6 +31,8 @@ export interface FeedItem {
 	media: FeedItemMedia[];
 	/** Categories / topics parsed from <category> tags */
 	topics?: string[];
+	/** AI-generated summary (populated by summarizer, stored in D1) */
+	summary?: string;
 }
 
 export interface FetchResult {
