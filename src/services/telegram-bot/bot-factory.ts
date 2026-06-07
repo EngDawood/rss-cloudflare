@@ -6,6 +6,7 @@ import { registerFormatCommands } from './commands/format-commands';
 import { registerDiagnosticCommands } from './commands/diagnostic-commands';
 import { registerFoloCommands } from './commands/folo-commands';
 import { registerTelegraphCommands } from './commands/telegraph-commands';
+import { registerAiCommands } from './commands/ai-commands';
 import { registerTextInputHandler } from './handlers/text-input-handler';
 import { registerChannelCallbacks } from './callbacks/channel-callbacks';
 import { registerSourceCallbacks } from './callbacks/source-callbacks';
@@ -74,6 +75,7 @@ export function createBot(env: Env): Bot {
 	registerDiagnosticCommands(bot, env, kv);    // /test, /debug
 	registerFoloCommands(bot, env, kv);          // /folo
 	registerTelegraphCommands(bot, env, kv);     // /telegraph
+	registerAiCommands(bot, env, kv);            // /ai
 
 	// Register text input handler (multi-step flows)
 	registerTextInputHandler(bot, env, kv);

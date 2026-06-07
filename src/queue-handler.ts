@@ -11,6 +11,8 @@ import {
 } from './constants';
 import { enrichFeedItems } from './utils/media-enrichment';
 import { formatFeedItem, resolveFormatSettings } from './utils/telegram-format';
+import { resolveAiSummaryEnabled } from './db/d1';
+import { maybeEnrichSummary } from './services/ai-summarizer';
 import { sendFallbackMessage } from './services/telegram-bot/helpers/fallback-sender';
 import { FileTooLargeError } from './services/telegram-bot/handlers/send-media';
 
@@ -78,6 +80,16 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 		enabled: adminConfig.telegraph.enabled,
 		threshold: adminConfig.telegraph.threshold,
 	});
+
+	// AI summarization: resolve effective setting for this channel+source, then summarize
+	const aiEnabled = await resolveAiSummaryEnabled(env.DB, channelId, sourceId);
+	if (aiEnabled) {
+		// Use source.value as a stable feed proxy key (no D1 feed ID available for bot sources)
+		const feedProxy = source.id;
+		await Promise.all(
+			postsToQueue.map(item => maybeEnrichSummary(item, feedProxy, env.DB, env, channelId, sourceId)),
+		);
+	}
 
 	// Push each item to the Send Queue
 	for (const item of postsToQueue) {

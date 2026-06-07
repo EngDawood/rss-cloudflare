@@ -11,13 +11,19 @@ import { resolveFormatSettings } from '../../../utils/telegram-format';
 import { buildFormatKeyboard } from '../views/keyboard-builders';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
 import { handleSetTelegraphToken } from '../commands/telegraph-commands';
-import type { AdminState } from '../../../types/telegram';
+import { setChannelAiModel, setChannelAiPrompt, setConfig, getConfig, resolveAiModel, resolveAiPrompt } from '../../../db/d1';
+import { fetchFeed } from '../../feed-fetcher';
+import { summarizeItem } from '../../ai-summarizer';
+import { parseSourceRef } from '../helpers/source-parser';
+import { fetchAndSendLatest } from './fetch-and-send';
+import type { AdminState, ChannelSource } from '../../../types/telegram';
 
 /**
  * Register the main text handler to process multi-step admin flows.
  */
 export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): void {
 	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
+	const db = env.DB;
 
 	// Handle forwarded messages from channels — lets admins register private channels
 	// by simply forwarding any message from the channel to the bot.
@@ -41,6 +47,19 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 				}
 				if (state?.action === 'setting_telegraph_token') {
 					await handleSetTelegraphToken(ctx, kv, adminId, '', env.TELEGRAPH_ACCESS_TOKEN);
+					return;
+				}
+				if (state?.action === 'setting_ai_model') {
+					await handleSetAiModel(ctx, kv, adminId, state, '', db);
+					return;
+				}
+				if (state?.action === 'setting_ai_prompt') {
+					await handleSetAiPrompt(ctx, kv, adminId, state, '', db);
+					return;
+				}
+				if (state?.action === 'testing_ai_summary') {
+					await clearAdminState(kv, adminId);
+					await ctx.reply('Test cancelled.');
 					return;
 				}
 			}
@@ -183,6 +202,18 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 			case 'setting_telegraph_token':
 				await handleSetTelegraphToken(ctx, kv, adminId, text, env.TELEGRAPH_ACCESS_TOKEN);
 				break;
+			case 'setting_ai_model':
+				await handleSetAiModel(ctx, kv, adminId, state, text, db);
+				break;
+			case 'setting_ai_prompt':
+				await handleSetAiPrompt(ctx, kv, adminId, state, text, db);
+				break;
+			case 'testing_ai_summary':
+				await handleTestAiSummary(ctx, kv, adminId, state, text, db, env);
+				break;
+			case 'testing_source':
+				await handleTestingSource(ctx, bot, env, kv, adminId, text.trim());
+				break;
 		}
 	});
 }
@@ -246,4 +277,169 @@ async function handleSetFormatCustom(
 	}
 
 	await clearAdminState(kv, adminId);
+}
+
+async function handleSetAiModel(
+	ctx: Context,
+	kv: KVNamespace,
+	adminId: number,
+	state: AdminState,
+	text: string,
+	db: D1Database,
+): Promise<void> {
+	const { channelId, sourceId } = state.context || {};
+	const model = text.trim() || null;
+
+	if (!channelId) {
+		await setConfig(db, 'ai_model', model ?? '');
+	} else {
+		const key = sourceId ? `${channelId}:${sourceId}` : channelId;
+		await setChannelAiModel(db, key, model);
+	}
+	await clearAdminState(kv, adminId);
+
+	const label = model ? `<code>${escapeHtmlBot(model)}</code>` : 'default';
+	let backCallback: string;
+	if (!channelId) backCallback = 'ai:g_m';
+	else if (sourceId) backCallback = `ai:src_m:${channelId}:${sourceId}`;
+	else backCallback = `ai:ch_m:${channelId}`;
+
+	const keyboard = new InlineKeyboard().text('← Back', backCallback);
+	await ctx.reply(`Model set to ${label}`, { parse_mode: 'HTML', reply_markup: keyboard });
+}
+
+async function handleTestAiSummary(
+	ctx: Context,
+	kv: KVNamespace,
+	adminId: number,
+	state: AdminState,
+	text: string,
+	db: D1Database,
+	env: Env,
+): Promise<void> {
+	const { channelId, sourceId } = state.context || {};
+	const url = text.trim();
+	await clearAdminState(kv, adminId);
+
+	const statusMsg = await ctx.reply('⏳ Fetching feed...');
+	const chatId = ctx.chat!.id;
+
+	const result = await fetchFeed(url);
+	if (result.items.length === 0) {
+		const errText = result.errors.map((e) => e.message).join(', ') || 'No items found.';
+		await ctx.api.editMessageText(chatId, statusMsg.message_id, `❌ ${escapeHtmlBot(errText)}`, { parse_mode: 'HTML' });
+		return;
+	}
+
+	const item = result.items[0];
+	if (!item.text || item.text.trim().length < 50) {
+		await ctx.api.editMessageText(chatId, statusMsg.message_id, '❌ First item has no text content (need ≥50 chars).');
+		return;
+	}
+
+	await ctx.api.editMessageText(chatId, statusMsg.message_id, '⏳ Generating summary...');
+
+	let model: string | undefined;
+	let prompt: string | undefined;
+
+	if (channelId) {
+		const [m, p] = await Promise.all([
+			resolveAiModel(db, channelId, sourceId),
+			resolveAiPrompt(db, channelId, sourceId),
+		]);
+		if (m) model = m;
+		if (p) prompt = p;
+	} else {
+		const [m, p] = await Promise.all([getConfig(db, 'ai_model'), getConfig(db, 'ai_prompt')]);
+		if (m) model = m;
+		if (p) prompt = p;
+	}
+
+	const summary = await summarizeItem(item, env, model || undefined, prompt || undefined);
+	if (!summary) {
+		await ctx.api.editMessageText(chatId, statusMsg.message_id, '❌ AI returned no summary. Check gateway token and model settings.');
+		return;
+	}
+
+	const usedModel = model || env.DEFAULT_AI_MODEL || 'nvidia/llama-3.1-nemotron-70b-instruct';
+	const levelLabel = sourceId ? `Source: ${sourceId}` : channelId ? `Channel: ${channelId}` : 'Global';
+	const replyText =
+		`🧪 <b>AI Test Result</b> — <i>${escapeHtmlBot(levelLabel)}</i>\n\n` +
+		`📰 <b>${escapeHtmlBot(item.title || 'Untitled')}</b>\n` +
+		`Model: <code>${escapeHtmlBot(usedModel)}</code>\n\n` +
+		`📝 <i>${escapeHtmlBot(summary)}</i>`;
+
+	await ctx.api.editMessageText(chatId, statusMsg.message_id, replyText, { parse_mode: 'HTML' });
+}
+
+async function handleSetAiPrompt(
+	ctx: Context,
+	kv: KVNamespace,
+	adminId: number,
+	state: AdminState,
+	text: string,
+	db: D1Database,
+): Promise<void> {
+	const { channelId, sourceId } = state.context || {};
+	const prompt = text.trim() || null;
+
+	if (!channelId) {
+		await setConfig(db, 'ai_prompt', prompt ?? '');
+	} else {
+		const key = sourceId ? `${channelId}:${sourceId}` : channelId;
+		await setChannelAiPrompt(db, key, prompt);
+	}
+	await clearAdminState(kv, adminId);
+
+	const label = prompt ? '✅ Custom prompt saved.' : '✅ Prompt reset to default.';
+	let backCallback: string;
+	if (!channelId) backCallback = 'ai:g_p';
+	else if (sourceId) backCallback = `ai:src_p:${channelId}:${sourceId}`;
+	else backCallback = `ai:ch_p:${channelId}`;
+
+	const keyboard = new InlineKeyboard().text('← Back', backCallback);
+	await ctx.reply(label, { reply_markup: keyboard });
+}
+
+async function handleTestingSource(
+	ctx: Context,
+	bot: Bot,
+	env: Env,
+	kv: KVNamespace,
+	adminId: number,
+	text: string
+): Promise<void> {
+	// Parse optional leading count: "5 @username" or just "@username"
+	let count = 1;
+	let sourceRef = text;
+	const match = text.match(/^(\d+)\s+(.+)$/);
+	if (match) {
+		count = Math.min(Math.max(parseInt(match[1], 10), 1), 10);
+		sourceRef = match[2];
+	}
+
+	const parsed = parseSourceRef(sourceRef);
+	if (!parsed) {
+		await ctx.reply(
+			'Invalid source. Expected:\n' +
+			'<code>@username</code>, <code>-t username</code>, <code>-rss https://...</code>, or a URL\n\n' +
+			'Try again or use /cancel to abort.',
+			{ parse_mode: 'HTML', reply_markup: { force_reply: true, selective: true } }
+		);
+		return;
+	}
+
+	await clearAdminState(kv, adminId);
+
+	await ctx.reply(`Fetching latest ${count} from <b>${parsed.value}</b>...`, { parse_mode: 'HTML' });
+
+	const source: ChannelSource = {
+		id: parsed.id,
+		type: parsed.type,
+		value: parsed.value,
+		mediaFilter: 'all',
+		enabled: true,
+	};
+
+	await fetchAndSendLatest(bot, env, ctx.chat!.id, source, count, false);
 }

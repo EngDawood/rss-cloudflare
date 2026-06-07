@@ -50,7 +50,7 @@ export interface ChannelConfig {
 
 // Admin conversation state for multi-step flows
 export interface AdminState {
-	action: 'adding_channel' | 'adding_source' | 'removing_channel' | 'downloading_media' | 'setting_format_custom' | 'setting_telegraph_token';
+	action: 'adding_channel' | 'adding_source' | 'removing_channel' | 'downloading_media' | 'setting_format_custom' | 'setting_telegraph_token' | 'setting_ai_model' | 'setting_ai_prompt' | 'testing_ai_summary' | 'testing_source';
 	context?: {
 		channelId?: string;
 		sourceId?: string;

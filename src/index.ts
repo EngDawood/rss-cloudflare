@@ -10,6 +10,7 @@ import { handleQueue } from './queue-handler';
 import { RSSReaderMCP } from './mcp/index';
 import { QueueTask } from './types/queue';
 import { MessageBatch } from '@cloudflare/workers-types';
+import { handleActionApi, handleChatApi } from './routes/action-api';
 
 type HonoEnv = { Bindings: Env };
 
@@ -28,6 +29,10 @@ app.get('/test-rsshub/:u', handleTestBridges);
 app.post('/telegram/webhook', handleTelegramWebhook);
 app.post('/folo', handleFoloWebhook);
 app.get('/telegram/setup', handleSetup);
+
+// Administrative Action and Chat Agent APIs
+app.post('/api/action', handleActionApi);
+app.post('/api/chat', handleChatApi);
 
 // MCP server
 app.on(['GET', 'POST', 'DELETE'], ['/mcp', '/mcp/*'], async (c) => {

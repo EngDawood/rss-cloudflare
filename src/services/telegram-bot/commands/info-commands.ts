@@ -27,7 +27,8 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'/set @channel source — Custom format for a source\n' +
 				'/set_default @channel — Default format for a channel\n' +
 				'/delay @channel 30 — Set check interval (min)\n' +
-				'/telegraph — Configure Telegraph Instant View\n\n' +
+				'/telegraph — Configure Telegraph Instant View\n' +
+				'/ai — Configure AI summary settings\n\n' +
 				'<b>More:</b>\n' +
 				'• Send any supported URL (TikTok, IG, X, YT) to download media\n' +
 				'• Use /folo for Folo integration\n' +
@@ -60,7 +61,9 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'<b>Folo Integration:</b>\n' +
 				'Use <code>/folo</code> to manage your Folo webhook subscriptions.\n\n' +
 				'<b>Telegraph Instant View:</b>\n' +
-				'Use <code>/telegraph</code> to enable/disable automatic Telegraph pages for long RSS articles, set the character threshold, and manage the access token.',
+				'Use <code>/telegraph</code> to enable/disable automatic Telegraph pages for long RSS articles, set the character threshold, and manage the access token.\n\n' +
+				'<b>AI Summaries:</b>\n' +
+				'Use <code>/ai</code> to enable AI-generated summaries at the global, channel, or source level.',
 			{ parse_mode: 'HTML' }
 		);
 	});
