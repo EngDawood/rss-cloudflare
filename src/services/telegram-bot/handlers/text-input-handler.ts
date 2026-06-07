@@ -14,7 +14,9 @@ import { handleSetTelegraphToken } from '../commands/telegraph-commands';
 import { setChannelAiModel, setChannelAiPrompt, setConfig, getConfig, resolveAiModel, resolveAiPrompt } from '../../../db/d1';
 import { fetchFeed } from '../../feed-fetcher';
 import { summarizeItem } from '../../ai-summarizer';
-import type { AdminState } from '../../../types/telegram';
+import { parseSourceRef } from '../helpers/source-parser';
+import { fetchAndSendLatest } from './fetch-and-send';
+import type { AdminState, ChannelSource } from '../../../types/telegram';
 
 /**
  * Register the main text handler to process multi-step admin flows.
@@ -209,6 +211,9 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 			case 'testing_ai_summary':
 				await handleTestAiSummary(ctx, kv, adminId, state, text, db, env);
 				break;
+			case 'testing_source':
+				await handleTestingSource(ctx, bot, env, kv, adminId, text.trim());
+				break;
 		}
 	});
 }
@@ -394,4 +399,47 @@ async function handleSetAiPrompt(
 
 	const keyboard = new InlineKeyboard().text('← Back', backCallback);
 	await ctx.reply(label, { reply_markup: keyboard });
+}
+
+async function handleTestingSource(
+	ctx: Context,
+	bot: Bot,
+	env: Env,
+	kv: KVNamespace,
+	adminId: number,
+	text: string
+): Promise<void> {
+	// Parse optional leading count: "5 @username" or just "@username"
+	let count = 1;
+	let sourceRef = text;
+	const match = text.match(/^(\d+)\s+(.+)$/);
+	if (match) {
+		count = Math.min(Math.max(parseInt(match[1], 10), 1), 10);
+		sourceRef = match[2];
+	}
+
+	const parsed = parseSourceRef(sourceRef);
+	if (!parsed) {
+		await ctx.reply(
+			'Invalid source. Expected:\n' +
+			'<code>@username</code>, <code>-t username</code>, <code>-rss https://...</code>, or a URL\n\n' +
+			'Try again or use /cancel to abort.',
+			{ parse_mode: 'HTML', reply_markup: { force_reply: true, selective: true } }
+		);
+		return;
+	}
+
+	await clearAdminState(kv, adminId);
+
+	await ctx.reply(`Fetching latest ${count} from <b>${parsed.value}</b>...`, { parse_mode: 'HTML' });
+
+	const source: ChannelSource = {
+		id: parsed.id,
+		type: parsed.type,
+		value: parsed.value,
+		mediaFilter: 'all',
+		enabled: true,
+	};
+
+	await fetchAndSendLatest(bot, env, ctx.chat!.id, source, count, false);
 }
