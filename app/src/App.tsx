@@ -16,7 +16,9 @@ const MODEL_OPTIONS = [
   { label: 'Groq Llama 70B', value: 'groq/llama-3.3-70b-versatile' },
   { label: 'Groq Llama 8B', value: 'groq/llama-3.1-8b-instant' },
   { label: 'Mistral Large', value: 'mistral/mistral-large-latest' },
-  { label: 'Kimi K2.6', value: 'moonshotai/kimi-k2.6' }
+  { label: 'Kimi K2.6', value: 'moonshotai/kimi-k2.6' },
+  { label: 'Cerebras Llama 70B', value: 'cerebras/llama3.1-70b' },
+  { label: 'OpenRouter Llama 70B', value: 'openrouter/meta-llama/llama-3.3-70b-instruct' }
 ];
 
 const MCP_TOOLS = [

@@ -22,7 +22,9 @@ function normalizeGatewayModel(model: string): string {
 		model.startsWith('groq/') ||
 		model.startsWith('cohere/') ||
 		model.startsWith('perplexity/') ||
-		model.startsWith('deepseek/')
+		model.startsWith('deepseek/') ||
+		model.startsWith('cerebras/') ||
+		model.startsWith('openrouter/')
 	) {
 		return model;
 	}
