@@ -1,56 +1,31 @@
-1 to 400
-# Block 2: 401 to 800
-# Block 3: 801 to 1200
-# Block 4: 1201 to 1561
-# Let's read the full transcript_full.jsonl as text and extract all lines matching `<number>: <content>` 
-# inside the view_file output.
-
-with open(log_path, 'r', encoding='utf-8') as f:
-    log_content = f.read()
-
-# We look for all occurrences of lines inside the formatted outputs
-# In the format: `
-<line_number>: <original_line>
-`
-# We will collect all line numbers and their corresponding content.
-matches = re.findall(r'(\d+): (.*?)(?=\
-\d+:|\\
-Color Calibration**\r
-* **Constraint:** Max 1 Accent Color. Saturation < 80%.\r
-* **THE LILA BAN:** The \
-Layout Diversification**\r
-* **ANTI-CENTER BIAS:** Centered Hero/H1 sections are strictly BANNED when `LAYOUT_VARIANCE > 4`. Force \
-  Clock, Terminal, ChatCircleText, Copy, Plus, 
-Interactive UI States**\r
-* **Mandatory Generation:** LLMs naturally generate \
-Data & Form Patterns**\r
-* **Forms:** Label MUST sit above input. Helper text is optional but should exist in markup. Error text below input. Use a standard `gap-2` for input blocks.\r
-\r
-## 4. CREATIVE PROACTIVITY (Anti-Slop Implementation)\r
-To actively combat generic AI designs, systematically implement these high-end coding concepts as your baseline:\r
-* **\
-import { checkAllFeeds } from './cron/check-feeds';
-import { refreshSavedFeeds } from './cron/refresh-feeds';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Rss, BookOpen, TelegramLogo, PaperPlaneTilt, 
+  Clock, Terminal, ChatCircleText, Plus, 
+  Trash, Gear, 
+  ArrowsClockwise, Sparkle, Note, MagnifyingGlass,
+  ArrowRight, ShieldCheck, ShieldWarning, CaretLeft, CaretRight, X, Sun, Moon
+} from '@phosphor-icons/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RSSReaderMCP } from './mcp/index';
+
 // Predefined model options matching the bot commands
-import { MessageBatch } from '@cloudflare/workers-types';
+const MODEL_OPTIONS = [
   { label: 'NVIDIA Llama 70B (Default)', value: 'nvidia/llama-3.1-nemotron-70b-instruct' },
   { label: 'Gemini 2.0 Flash', value: 'google/gemini-2.0-flash' },
   { label: 'Gemini 1.5 Flash', value: 'google/gemini-1.5-flash' },
   { label: 'Groq Llama 70B', value: 'groq/llama-3.3-70b-versatile' },
   { label: 'Groq Llama 8B', value: 'groq/llama-3.1-8b-instant' },
   { label: 'Mistral Large', value: 'mistral/mistral-large-latest' },
-app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
-    \
-app.get('/instagram', handleInstagramFeed);
-app.get('/test-bridges', handleTestBridges);
+  { label: 'Kimi K2.6', value: 'moonshotai/kimi-k2.6' }
+];
+
+const MCP_TOOLS = [
   { name: 'list_feeds', desc: 'List all saved feeds with their unread item counts.', template: {} },
   { name: 'add_feed', desc: 'Add an RSS/Atom feed URL to the saved list.', template: { url: 'https://', title: '' } },
   { name: 'remove_feed', desc: 'Remove a saved feed and all its stored items.', template: { feedId: '' } },
   { name: 'set_feed_enabled', desc: 'Enable or disable a saved feed from auto-refreshing.', template: { feedId: '', enabled: true } },
   { name: 'refresh_feed', desc: 'Fetch latest items for a saved feed.', template: { feedId: '' } },
-	// KV namespace for caching (create with: npx wrangler kv namespace create CACHE)
+  { name: 'refresh_all', desc: 'Refresh all enabled saved feeds.', template: {} },
   { name: 'fetch_rss_feed', desc: 'Ad-hoc: fetch any RSS/Atom URL and return items without storing.', template: { url: 'https://', count: 5 } },
   { name: 'list_new_items', desc: 'List unread items. Can filter by feedId, keyword, or timestamp.', template: { limit: 10 } },
   { name: 'search_items', desc: 'Search all stored items (read + unread) by keyword.', template: { query: '', limit: 10 } },
@@ -70,33 +45,38 @@ app.get('/test-bridges', handleTestBridges);
   { name: 'recall', desc: 'Unified chronological timeline of notes and post activity.', template: { limit: 10 } },
   { name: 'list_post_log', desc: 'List post dispatch logs history.', template: { limit: 10 } },
   { name: 'get_config', desc: 'Get global configurations.', template: {} }
-				hashtag: '/instagram?h=hashtag',
-				location: '/instagram?l=location_id',
-				params: 'media_type=all|video|picture|multiple, direct_links=true|false',
-				mcp: '/mcp',
+];
+
+interface Toast {
+  id: number;
   message: string;
   type: 'info' | 'success' | 'error' | 'warning';
-		404
-			\
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('feeds');
   const [token, setToken] = useState(() => localStorage.getItem('rss_mcp_auth_token') || '');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-	return c.json({ error: 'Internal Server Error' }, 500);
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
   const [tempToken, setTempToken] = useState('');
-export { RSSReaderMCP };
+  
+  // Custom states for redesign theme & collapse
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [selectedReaderItem, setSelectedReaderItem] = useState<any>(null);
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+
   // Skeletons / Loading states
   const [isLoading, setIsLoading] = useState(true);
-	fetch: app.fetch,
-	scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
+
+  // Data states
   const [feeds, setFeeds] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
   const [unreadItems, setUnreadItems] = useState<any[]>([]);
-	queue: async (batch: MessageBatch<QueueTask>, env: Env): Promise<void> => {
+  const [timeline, setTimeline] = useState<any[]>([]);
   const [postLogs, setPostLogs] = useState<any[]>([]);
   const [config, setConfigState] = useState<any>({});
-			\
+  
   // Modals & Inputs
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
   const [addFeedUrl, setAddFeedUrl] = useState('');
@@ -105,39 +85,52 @@ export { RSSReaderMCP };
   const [testFeedUrl, setTestFeedUrl] = useState('');
   const [testFeedItems, setTestFeedItems] = useState<any[]>([]);
   const [isTestingFeed, setIsTestingFeed] = useState(false);
-	},
+
   const readerFeedFilter = '';
   const [readerSearch, setReaderSearch] = useState('');
-			{
+
   const [isAddChatOpen, setIsAddChatOpen] = useState(false);
   const [chatName, setChatName] = useState('');
   const [chatIdVal, setChatIdVal] = useState('');
   const [chatType, setChatType] = useState('channel');
   const [chatDefault, setChatDefault] = useState(false);
-				\
+
   const [sandboxTarget, setSandboxTarget] = useState('');
   const [sandboxType, setSandboxType] = useState('text');
   const [sandboxCaption, setSandboxCaption] = useState('');
   const [sandboxMediaUrl, setSandboxMediaUrl] = useState('');
   const [sandboxAlbumJson, setSandboxAlbumJson] = useState('');
-				\
+
   const [isAddNoteOpen, setIsAddNoteOpen] = useState(false);
   const [noteContent, setNoteContent] = useState('');
   const [noteTags, setNoteTags] = useState('');
-				\
+
   // Playground state
   const [selectedTool, setSelectedTool] = useState(MCP_TOOLS[0]);
   const [toolArgs, setToolArgs] = useState(JSON.stringify(MCP_TOOLS[0].template, null, 2));
   const [toolResult, setToolResult] = useState('');
   const [isExecutingTool, setIsExecutingTool] = useState(false);
-	// - IG_DS_USER_ID
-	// - TELEGRAM_BOT_TOKEN
+
+  // Chat Agent state
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolsCalled?: string[] }>>([
     { role: 'assistant', content: 'Hi there! I am your RSS & MCP Agent. You can ask me to list your feeds, check for unread articles, search for posts, or save notes. How can I help you today?' }
-	// - MCP_AUTH_TOKEN       (overrides the empty var above for production auth)
-	// - AI_GATEWAY_TOKEN     (required: Cloudflare AI Gateway authenticated token)
+  ]);
+  const [chatInput, setChatInput] = useState('');
   const [isChatting, setIsChatting] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  // Theme Sync Effect
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'light') {
+      root.classList.remove('dark');
+      root.classList.add('light');
+    } else {
+      root.classList.remove('light');
+      root.classList.add('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   // Toast emitter
   const showToast = (message: string, type: Toast['type'] = 'info') => {
@@ -146,6 +139,12 @@ export { RSSReaderMCP };
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 5000);
+  };
+
+  const handleCopyText = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Copied to clipboard!', 'success');
+    });
   };
 
   // Base API caller
@@ -293,7 +292,7 @@ export { RSSReaderMCP };
       showToast(res.error, 'error');
     } else {
       setTestFeedItems(res.data.items || []);
-      showToast(`Successfully parsed feed: \
+      showToast(`Successfully parsed feed: "${res.data.feedTitle || 'Unnamed'}"`, 'success');
     }
   };
 
@@ -306,7 +305,16 @@ export { RSSReaderMCP };
     } else {
       res = await callApi('list_new_items', { feedId: readerFeedFilter || undefined, limit: 30 });
     }
-    if (!res.error) setUnreadItems(res.data || []);
+    if (!res.error) {
+      const items = res.data || [];
+      setUnreadItems(items);
+      if (selectedReaderItem) {
+        const found = items.find((i: any) => i.id === selectedReaderItem.id);
+        if (found) {
+          setSelectedReaderItem((prev: any) => prev ? { ...prev, ...found } : found);
+        }
+      }
+    }
     setIsLoading(false);
   };
 
@@ -325,6 +333,29 @@ export { RSSReaderMCP };
       showToast(res.error, 'error');
     } else {
       setUnreadItems(prev => prev.filter(item => item.id !== id));
+      if (selectedReaderItem?.id === id) {
+        setSelectedReaderItem(null);
+      }
+    }
+  };
+
+  const handleSelectItem = async (item: any) => {
+    setSelectedReaderItem(item);
+    const res = await callApi('get_item', { id: item.id });
+    if (!res.error && res.data) {
+      setSelectedReaderItem((prev: any) => {
+        if (prev?.id === item.id) {
+          return {
+            ...prev,
+            text: res.data.text,
+            summary: res.data.summary,
+            media: res.data.media,
+            mediaType: res.data.media_type,
+            contentHtml: res.data.content_html,
+          };
+        }
+        return prev;
+      });
     }
   };
 
@@ -339,6 +370,7 @@ export { RSSReaderMCP };
       showToast(res.error, 'error');
     } else {
       showToast(`Marked ${ids.length} items as read.`, 'success');
+      setSelectedReaderItem(null);
       loadReaderItems();
     }
   };
@@ -350,6 +382,9 @@ export { RSSReaderMCP };
       showToast(res.error, 'error');
     } else {
       showToast('Arabic summary compiled and saved!', 'success');
+      if (selectedReaderItem?.id === itemId) {
+        setSelectedReaderItem((prev: any) => prev ? { ...prev, summary: res.data.summary } : null);
+      }
       loadReaderItems();
     }
   };
@@ -401,7 +436,7 @@ export { RSSReaderMCP };
   };
 
   const handleRemoveChat = async (name: string) => {
-    if (!confirm(`Remove chat target \
+    if (!confirm(`Remove chat target "${name}"?`)) return;
     const res = await callApi('remove_chat', { name });
     if (res.error) {
       showToast(res.error, 'error');
@@ -549,7 +584,7 @@ export { RSSReaderMCP };
     }
 
     setIsExecutingTool(true);
-    setToolResult(`Executing tool \
+    setToolResult(`Executing tool "${selectedTool.name}"...`);
     const res = await callApi(selectedTool.name, argsObj);
     setIsExecutingTool(false);
 
@@ -572,866 +607,1153 @@ export { RSSReaderMCP };
     const updatedMessages = [...chatMessages, { role: 'user' as const, content: userMsg }];
     setChatMessages(updatedMessages);
     setIsChatting(true);
-  const handleSendChatMessage = async (e: React.FormEvent) => {
+
     // Call API chat endpoint
-    if (!chatInput.trim() || isChatting) return;
-      const response = await fetch('/api/chat', {
-    const userMsg = chatInput.trim();
-    setChatInput('');
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    const updatedMessages = [...chatMessages, { role: 'user' as const, content: userMsg }];
-    setChatMessages(updatedMessages);
-          messages: updatedMessages.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({
-            role: m.role,
-            content: m.content
-          }))
+    try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        showToast('Unauthorized: Set your access token to chat.', 'error');
-        setIsTokenModalOpen(true);
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           messages: updatedMessages.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({
             role: m.role,
             content: m.content
+          }))
+        })
+      });
+
+      if (response.status === 401) {
+        showToast('Unauthorized: Set your access token to chat.', 'error');
+        setIsTokenModalOpen(true);
+        setIsChatting(false);
+        return;
+      }
+
       const resData = await response.json();
       if (!response.ok) {
         setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${resData.error || 'Connection failed'}` }]);
       } else {
         const { response: replyText, toolsCalled } = resData.data;
-        showToast('Unauthorized: Se  const selectedItem = unreadItems.find(item => item.id === selectedItemId) || null;
+        setChatMessages(prev => [...prev, {
           role: 'assistant',
           content: replyText,
           toolsCalled: toolsCalled && toolsCalled.length > 0 ? toolsCalled : undefined
-      {/* Toast Notifications */}
-      <div className=\
-        <AnimatePresence>
+        }]);
+      }
+    } catch (err: any) {
       setChatMessages(prev => [...prev, { role: 'assistant', content: `Network error: ${err.message || String(err)}` }]);
+    } finally {
+      setIsChatting(false);
+    }
+  };
+
+  const springTransition = { type: 'spring', stiffness: 100, damping: 20 } as const;
+
+  return (
+    <div className="bg-glow-radial min-h-[100dvh] flex flex-col antialiased relative">
+      {/* Visual textures - DOM Optimized */}
+      <div className="mesh-grid absolute inset-0 z-0 pointer-events-none opacity-40" />
+      <div className="grain-overlay" />
+
+      {/* Toast Notifications */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-2.5 z-[9999]">
+        <AnimatePresence>
+          {toasts.map(toast => (
             <motion.div
               key={toast.id}
               initial={{ opacity: 0, x: 50, y: 10 }}
               animate={{ opacity: 1, x: 0, y: 0 }}
               exit={{ opacity: 0, x: 50, scale: 0.9 }}
-              className={`flex items-center justify-between gap-4 px-5 py-3.5 rounded-xl text-sm min-w-[300px] max-w-[400px] shadow-2xl backdrop-blur-md border border-white/10 ${
-                toast.type === 'success' ? 'bg-amber-950/90 text-amber-300 border-amber-500/30' :
-                toast.type === 'error' ? 'bg-red-950/90 text-red-300 border-red-500/30' :
-                toast.type === 'warning' ? 'bg-amber-950/90 text-amber-300 border-amber-500/30' :
-                'bg-neutral-900/95 text-neutral-100'
-      <div className=\
-        <AnimatePresence>
-              <span>{toast.message}</span>
-              <button onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} className=\
-              key={toast.id}
-              initial={{ opacity: 0, x: 50, y: 10 }}
-              animate={{ opacity: 1, x: 0, y: 0 }}
-              exit={{ opacity: 0, x: 50, scale: 0.9 }}
-              className={`flex items-center justify-between gap-4 px-5 py-3.5 rounded-xl text-sm min-w-[300px] max-w-[400px] shadow-2xl backdrop-blur-md border border-white/10 ${
+              transition={springTransition}
+              className={`flex items-center justify-between gap-4 px-5 py-3.5 rounded-xl text-sm min-w-[300px] max-w-[400px] shadow-2xl backdrop-blur-md border border-border-base ${
                 toast.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/30' :
-                toast.type === 'error' ? 'bg-red-950/90 text-red-300 border-red-500/30' :
+                toast.type === 'error' ? 'bg-rose-950/90 text-rose-300 border-rose-500/30' :
                 toast.type === 'warning' ? 'bg-amber-950/90 text-amber-300 border-amber-500/30' :
-                'bg-slate-900/95 text-slate-100'
+                'bg-bg-card text-text-base'
               }`}
-            <h1 className=\
+            >
               <span>{toast.message}</span>
-              <button onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} className=\
+              <button 
+                onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} 
+                className="text-text-muted hover:text-text-base text-lg cursor-pointer transition"
+              >
+                <X size={14} />
+              </button>
             </motion.div>
           ))}
         </AnimatePresence>
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${
-            isAuthenticated === true ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-            isAuthenticated === false ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-            'bg-neutral-900 text-neutral-500 border-white/5'
-        <div className=\
-          <div className=\
+      </div>
+
+      {/* Header */}
+      <header className="sticky top-0 bg-bg-card/75 backdrop-blur-md border-b border-border-base px-8 py-5 flex items-center justify-between z-40">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-accent-primary flex items-center justify-center font-bold text-white shadow-lg shadow-accent-primary/10">R</div>
           <div>
-            <h1 className=\
-            <span className=\
+            <div className="flex items-center gap-2">
+              <h1 className="font-bold text-xl leading-tight bg-gradient-to-r from-text-base to-text-muted bg-clip-text text-transparent">RSS Bridge & MCP</h1>
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-primary shadow-[0_0_10px_var(--color-accent-primary)]" />
+            </div>
+            <span className="text-[10px] text-text-muted font-mono tracking-widest uppercase">Cloudflare Worker Panel</span>
           </div>
         </div>
 
-        <div className=\
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
-            isAuthenticated === true ? 'bg-emerald-950/30 text-emerald-400 border-emerald-500/20' :
-            isAuthenticated === false ? 'bg-red-950/30 text-red-400 border-red-500/20' :
-            'bg-slate-900/40 text-slate-500 border-white/5'
+        {/* Global theme controls */}
+        <div className="flex items-center gap-4">
+          {/* Light/Dark Toggle Button */}
+          <motion.button 
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+            className="p-2.5 rounded-xl bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer transition flex items-center justify-center"
+            title="Toggle theme mode"
+          >
+            {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+          </motion.button>
+
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border ${
+            isAuthenticated === true ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+            isAuthenticated === false ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+            'bg-bg-input text-text-muted border-border-base'
           }`}>
-            {isAuthenticated === true ? <ShieldCheck size={14} /> : <ShieldWarning size={14} />}
-            <span>{isAuthenticated === true ? 'Authenticated' : isAuthenticated === false ? 'No Access' : 'Connecting'}</span>
+            {isAuthenticated === true ? <ShieldCheck size={14} className="text-emerald-400" /> : <ShieldWarning size={14} className="text-rose-400" />}
+            <span className="font-mono">{isAuthenticated === true ? 'Authenticated' : isAuthenticated === false ? 'No Access' : 'Connecting'}</span>
           </div>
-          <button 
+
+          <motion.button 
+            whileTap={{ scale: 0.98 }}
             onClick={() => { setTempToken(token); setIsTokenModalOpen(true); }}
-            className=\
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base transition duration-200 cursor-pointer"
           >
             <Gear size={14} />
             <span>Setup Token</span>
-          </button>
+          </motion.button>
         </div>
       </header>
 
       {/* Main Container */}
-      <div className=\
+      <div className="max-w-[1400px] w-full mx-auto px-8 py-10 flex-grow grid grid-cols-1 md:grid-cols-[auto_1fr] gap-12 z-10 relative">
         {/* Navigation Sidebar */}
-        <aside className=\
-          <ul className=\
-            {[
-              { id: 'feeds', label: 'RSS Feeds', icon: Rss },
-              { id: 'reader', label: 'Feed Reader', icon: BookOpen },
-              { id: 'telegram', label: 'Telegram Targets', icon: TelegramLogo },
-              { id: 'sandbox', label: 'Post Sandbox', icon: PaperPlaneTilt },
-              { id: 'logs', label: 'Recall & Logs', icon: Clock },
-              { id: 'playground', label: 'MCP Playground', icon: Terminal },
-              { id: 'chat', label: 'Agent Chat', icon: ChatCircleText }
-            ].map(tab => {
-              const Icon = tab.icon;
-              const active = activeTab === tab.id;
-              return (
-                <li key={tab.id}>
-                  <button
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                      active ? 'bg-indigo-600/15 text-indigo-400 font-semibold border-l-3 border-indigo-500 rounded-l-none' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                    }`}
-                  >
-                    <Icon size={18} />
-                    <span>{tab.label}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+        <aside className="relative">
+          <motion.div 
+            animate={{ width: sidebarCollapsed ? 72 : 240 }}
+            transition={springTransition}
+            className="liquid-glass rounded-2xl p-4 flex flex-col justify-between h-[calc(100vh-200px)] sticky top-28 overflow-hidden"
+          >
+            <div className="flex flex-col gap-6">
+              <ul className="flex flex-col gap-1.5">
+                {[
+                  { id: 'feeds', label: 'RSS Feeds', icon: Rss },
+                  { id: 'reader', label: 'Feed Reader', icon: BookOpen },
+                  { id: 'telegram', label: 'Telegram Targets', icon: TelegramLogo },
+                  { id: 'sandbox', label: 'Post Sandbox', icon: PaperPlaneTilt },
+                  { id: 'logs', label: 'Recall & Logs', icon: Clock },
+                  { id: 'playground', label: 'MCP Playground', icon: Terminal },
+                  { id: 'chat', label: 'Agent Chat', icon: ChatCircleText }
+                ].map(tab => {
+                  const Icon = tab.icon;
+                  const active = activeTab === tab.id;
+                  return (
+                    <li key={tab.id}>
+                      <motion.button
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-sm font-semibold transition duration-200 relative cursor-pointer ${
+                          active ? 'bg-accent-primary/10 text-accent-primary font-bold border-l-2 border-accent-primary' : 'text-text-muted hover:text-text-base hover:bg-white/5'
+                        }`}
+                      >
+                        <Icon size={18} className="flex-shrink-0" />
+                        {!sidebarCollapsed && (
+                          <motion.span 
+                            initial={{ opacity: 0 }} 
+                            animate={{ opacity: 1 }} 
+                            exit={{ opacity: 0 }}
+                            className="truncate"
+                          >
+                            {tab.label}
+                          </motion.span>
+                        )}
+                      </motion.button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            {/* Sidebar toggle */}
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="mt-auto flex items-center justify-center p-3 rounded-xl border border-border-base bg-bg-input text-text-muted hover:text-text-base cursor-pointer transition"
+            >
+              {sidebarCollapsed ? <CaretRight size={16} /> : <CaretLeft size={16} />}
+            </motion.button>
+          </motion.div>
         </aside>
 
         {/* Content Panel */}
-        <main className=\
-          
-          {/* SKELETON LOADER */}
-          {isLoading && (
-            <div className=\
-              <div className=\
-              <div className=\
-                <div className=\
-                <div className=\
-                <div className=\
-              </div>
-            </div>
-          )}
-
-          {/* TAB: RSS FEEDS */}
-          {!isLoading && activeTab === 'feeds' && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className=\
-              <div className=\
-                <div>
-                  <h2 className=\
-                  <p className=\
+        <main className="min-w-0">
+          <AnimatePresence mode="wait">
+            
+            {/* SKELETON LOADER */}
+            {isLoading && (
+              <motion.div 
+                key="skeleton"
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                exit={{ opacity: 0 }}
+                className="flex flex-col gap-6"
+              >
+                <div className="h-10 w-1/3 bg-white/5 rounded-xl animate-pulse" />
+                <div className="p-8 rounded-2xl border border-border-base bg-bg-card/30 flex flex-col gap-4 animate-pulse">
+                  <div className="h-5 w-full bg-white/5 rounded-lg" />
+                  <div className="h-5 w-3/4 bg-white/5 rounded-lg" />
+                  <div className="h-5 w-5/6 bg-white/5 rounded-lg" />
                 </div>
-                <div className=\
-                  <button 
-                    onClick={handleRefreshAllFeeds}
-                    className=\
-                  >
-                    <ArrowsClockwise size={14} />
-                    <span>Sync All</span>
-                  </button>
-                  <button 
-                    onClick={() => setIsAddFeedOpen(true)}
-                    className=\
+              </motion.div>
+            )}
+
+            {/* TAB: RSS FEEDS */}
+            {!isLoading && activeTab === 'feeds' && (
+              <motion.div 
+                key="feeds"
+                initial={{ opacity: 0, y: 8 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: -8 }}
+                className="flex flex-col gap-8"
+              >
+                <div className="flex justify-between items-center flex-wrap gap-4">
+                  <div>
+                    <h2 className="font-bold text-2xl tracking-tight text-text-base">RSS Feeds</h2>
+                    <p className="text-xs text-text-muted mt-1">Manage synchronized content feeds and scheduled refreshes</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <motion.button 
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleRefreshAllFeeds}
+                      className="flex items-center gap-2 px-4.5 py-2.5 text-xs font-bold text-text-base bg-bg-input border border-border-base rounded-xl hover:bg-neutral-800 transition duration-200 cursor-pointer"
+                    >
+                      <ArrowsClockwise size={14} />
+                      <span>Sync All</span>
+                    </motion.button>
+                    <motion.button 
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setIsAddFeedOpen(true)}
+                      className="flex items-center gap-2 px-4.5 py-2.5 text-xs font-bold text-white bg-accent-primary rounded-xl hover:bg-accent-primary-hover transition duration-200 shadow-lg shadow-accent-primary/10 cursor-pointer"
+                    >
+                      <Plus size={14} />
+                      <span>Add Feed</span>
+                    </motion.button>
+                  </div>
+                </div>
+
+                {/* Feeds Card Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {feeds.length === 0 ? (
+                    <div className="lg:col-span-2 p-12 text-center border border-dashed border-border-base rounded-2xl bg-bg-card/25 text-sm text-text-muted">
+                      No feeds registered. Click "Add Feed" to start importing content.
+                    </div>
+                  ) : (
+                    feeds.map(feed => (
+                      <motion.div 
+                        key={feed.id}
+                        whileHover={{ y: -4 }}
+                        transition={springTransition}
+                        className="liquid-glass p-6 rounded-2xl flex flex-col justify-between relative overflow-hidden group min-h-[160px]"
+                      >
+                        <div className="flex flex-col gap-2.5">
+                          <div className="flex justify-between items-start gap-4">
+                            <span className="font-bold text-base text-text-base truncate max-w-[70%]">{feed.title}</span>
+                            <span className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ${
+                              feed.enabled === 1 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${feed.enabled === 1 ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500'}`} />
+                              {feed.enabled === 1 ? 'Active' : 'Paused'}
+                            </span>
+                          </div>
+                          <span className="text-xs text-text-muted font-mono block truncate cursor-pointer hover:text-text-base" onClick={() => handleCopyText(feed.url)}>
+                            {feed.url}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center border-t border-border-base pt-4 mt-6">
+                          <div className="flex flex-col text-[11px] text-text-muted font-mono">
+                            <span className="uppercase tracking-wider text-[9px] text-text-muted font-bold opacity-60">Last Synchronized</span>
+                            <span className="mt-0.5 text-text-base font-bold">{formatDate(feed.last_fetched_at)}</span>
+                          </div>
+                          
+                          <div className="flex gap-2 opacity-80 group-hover:opacity-100 transition duration-200">
+                            <motion.button 
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleRefreshFeed(feed.id)}
+                              className="p-2.5 rounded-xl bg-bg-input border border-border-base text-text-muted hover:text-text-base transition duration-200 cursor-pointer"
+                              title="Sync Feed"
+                            >
+                              <ArrowsClockwise size={14} />
+                            </motion.button>
+                            <motion.button 
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleToggleFeed(feed.id, feed.enabled)}
+                              className="px-3 py-1.5 text-xs font-bold rounded-xl bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer"
+                            >
+                              {feed.enabled === 1 ? 'Pause' : 'Activate'}
+                            </motion.button>
+                            <motion.button 
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleRemoveFeed(feed.id)}
+                              className="p-2.5 rounded-xl bg-rose-950/20 border border-rose-900/20 text-rose-400 hover:bg-rose-900/30 transition duration-200 cursor-pointer"
+                              title="Remove"
+                            >
+                              <Trash size={14} />
+                            </motion.button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
+                </div>
+
+                {/* Test Parser Sandbox */}
+                <div className="mt-8 border-t border-border-base pt-8">
+                  <h3 className="font-bold text-lg text-text-base">Test Feed Parser</h3>
+                  <p className="text-xs text-text-muted mt-1">Download and preview items from any external feed before registering it</p>
+                  
+                  <div className="liquid-glass mt-4 p-6 rounded-2xl flex flex-col gap-4">
+                    <div className="flex gap-3 flex-wrap">
+                      <input 
+                        type="url" 
+                        value={testFeedUrl} 
+                        onChange={e => setTestFeedUrl(e.target.value)} 
+                        placeholder="Enter external RSS/Atom URL..." 
+                        className="flex-grow bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono"
+                      />
+                      <motion.button 
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleTestFeed}
+                        disabled={isTestingFeed}
+                        className="px-6 py-3 text-sm font-bold rounded-xl bg-accent-primary text-white hover:bg-accent-primary-hover transition duration-200 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isTestingFeed ? 'Parsing...' : 'Test Fetch'}
+                      </motion.button>
+                    </div>
+
+                    {testFeedItems.length > 0 && (
+                      <div className="mt-4 border-t border-border-base pt-4">
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-text-muted mb-3">Feed preview outcomes</h4>
+                        <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-2">
+                          {testFeedItems.map((item, idx) => (
+                            <div key={idx} className="p-4 rounded-xl bg-bg-input border border-border-base">
+                              <span className="font-bold text-sm text-text-base block">{item.title}</span>
+                              <span className="text-xs text-text-muted block mt-1 font-mono">By {item.author || 'unknown'} | {formatDate(item.timestamp)}</span>
+                              <p className="text-xs text-text-muted mt-2 line-clamp-2 max-w-[80ch]">{item.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* TAB: FEED READER (Split-Screen) */}
+            {!isLoading && activeTab === 'reader' && (
+              <motion.div 
+                key="reader"
+                initial={{ opacity: 0, y: 8 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: -8 }}
+                className="flex flex-col gap-6 h-[calc(100vh-190px)] min-h-[550px]"
+              >
+                <div className="flex justify-between items-center gap-4 flex-wrap">
+                  <div>
+                    <h2 className="font-bold text-2xl tracking-tight text-text-base">Feed Reader</h2>
+                    <p className="text-xs text-text-muted mt-1">Review unread synced items and trigger dispatch actions</p>
+                  </div>
+                  <div className="flex gap-3 items-center">
+                    <motion.button 
+                      whileTap={{ scale: 0.98 }}
+                      onClick={async () => {
+                        await handleRefreshAllFeeds();
+                        loadReaderItems();
+                      }}
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer"
+                    >
+                      <ArrowsClockwise size={14} className={isLoading ? "animate-spin" : ""} />
+                      <span>Sync Feeds</span>
+                    </motion.button>
+                    <motion.button 
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleBulkMarkRead} 
+                      className="px-4 py-2.5 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer"
+                    >
+                      Mark All Read
+                    </motion.button>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={readerSearch} 
+                        onChange={e => setReaderSearch(e.target.value)} 
+                        placeholder="Search keywords..." 
+                        className="bg-bg-input border border-border-base rounded-xl pl-9 pr-4 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary w-[200px]"
+                      />
+                      <MagnifyingGlass size={14} className="absolute left-3.5 top-3 text-text-muted" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2-Pane Split Screen Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-grow overflow-hidden">
+                  
+                  {/* Left Pane: Items List (Col span 5) */}
+                  <div className="lg:col-span-5 h-full flex flex-col gap-4 overflow-hidden">
+                    <div className="overflow-y-auto flex-grow flex flex-col gap-3 pr-2 scrollbar-thin">
+                      {unreadItems.length === 0 ? (
+                        <div className="p-12 text-center border border-dashed border-border-base rounded-2xl bg-bg-card/25 text-sm text-text-muted">
+                          Your unread queue is empty.
+                        </div>
+                      ) : (
+                        unreadItems.map(item => {
+                          const isActive = selectedReaderItem?.id === item.id;
+                          return (
+                            <motion.button 
+                              key={item.id}
+                              whileHover={{ x: 2 }}
+                              onClick={() => handleSelectItem(item)}
+                              className={`p-4 text-left rounded-xl transition duration-200 border cursor-pointer flex flex-col gap-2 ${
+                                isActive 
+                                  ? 'bg-accent-primary/10 border-accent-primary/40 shadow-lg text-text-base' 
+                                  : 'bg-bg-card/20 border-border-base hover:bg-bg-card/50 text-text-muted'
+                              }`}
+                            >
+                              <div className="flex justify-between items-start gap-3 w-full">
+                                <span className="text-[10px] uppercase font-bold tracking-wide text-accent-primary px-2 py-0.5 rounded bg-accent-primary/5 border border-accent-primary/15 truncate">
+                                  {item.feed_title}
+                                </span>
+                                <span className="text-[10px] text-text-muted font-mono whitespace-nowrap self-center">
+                                  {formatDate(item.timestamp).split(' ')[1]}
+                                </span>
+                              </div>
+                              <span className={`font-bold text-sm leading-snug line-clamp-2 ${isActive ? 'text-text-base' : 'text-text-base/80'}`}>
+                                {item.title}
+                              </span>
+                              <span className="text-[11px] text-text-muted font-mono block">By {item.author || 'Author'}</span>
+                            </motion.button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Pane: Item Content Viewer (Col span 7) */}
+                  <div className="lg:col-span-7 h-full flex flex-col liquid-glass rounded-2xl overflow-hidden relative">
+                    <AnimatePresence mode="wait">
+                      {!selectedReaderItem ? (
+                        <motion.div 
+                          key="empty"
+                          initial={{ opacity: 0 }} 
+                          animate={{ opacity: 1 }} 
+                          exit={{ opacity: 0 }}
+                          className="flex flex-col items-center justify-center h-full p-12 text-center text-text-muted gap-3"
+                        >
+                          <BookOpen size={42} className="text-text-muted/60" />
+                          <span className="text-sm font-semibold">Select an article from the list to preview</span>
+                          <span className="text-xs text-text-muted/50">Select content to view the direct text, Arabic summaries, and Telegram dispatch operations</span>
+                        </motion.div>
+                      ) : (
+                        <motion.div 
+                          key={selectedReaderItem.id}
+                          initial={{ opacity: 0, x: 10 }} 
+                          animate={{ opacity: 1, x: 0 }} 
+                          exit={{ opacity: 0, x: -10 }}
+                          className="flex flex-col h-full overflow-hidden"
+                        >
+                          {/* Viewer Header */}
+                          <div className="p-6 border-b border-border-base bg-bg-card/25">
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-accent-primary bg-accent-primary/5 px-2.5 py-0.5 rounded border border-accent-primary/15 mb-2 inline-block">
+                              {selectedReaderItem.feed_title}
+                            </span>
+                            <h3 className="font-bold text-lg text-text-base leading-snug tracking-tight">
+                              {selectedReaderItem.title}
+                            </h3>
+                            <div className="flex gap-4 text-xs text-text-muted mt-2.5 font-mono">
+                              <span>By {selectedReaderItem.author || 'unknown'}</span>
+                              <span>•</span>
+                              <span>Synced {formatDate(selectedReaderItem.timestamp)}</span>
+                            </div>
+                          </div>
+
+                          {/* Viewer Body (Scrollable) */}
+                          <div className="p-6 flex-grow overflow-y-auto flex flex-col gap-6">
+                            {selectedReaderItem.text === undefined ? (
+                              <div className="flex flex-col items-center justify-center py-20 text-text-muted gap-3 flex-grow">
+                                <div className="w-8 h-8 border-3 border-accent-primary border-t-transparent rounded-full animate-spin"></div>
+                                <span className="text-xs font-medium tracking-wide">Fetching article content...</span>
+                              </div>
+                            ) : (
+                              <>
+                                {/* AI Summary Block (RTL Arabic) */}
+                                {selectedReaderItem.summary ? (
+                                  <div className="p-5 rounded-xl bg-accent-primary/5 border border-accent-primary/20 flex flex-col gap-2">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-accent-primary uppercase tracking-widest">
+                                      <Sparkle size={12} />
+                                      <span>Arabic AI Summary</span>
+                                    </div>
+                                    <p className="text-sm text-text-base leading-relaxed font-sans text-right" dir="rtl">
+                                      {selectedReaderItem.summary}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="p-5 rounded-xl bg-bg-input border border-border-base flex justify-between items-center">
+                                    <span className="text-xs text-text-muted">No Arabic AI summary compiled.</span>
+                                    <motion.button 
+                                      whileTap={{ scale: 0.95 }}
+                                      onClick={() => handleTriggerAiSummary(selectedReaderItem.id)}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-bg-input border border-border-base text-text-base hover:text-text-base cursor-pointer"
+                                    >
+                                      <Sparkle size={12} className="text-accent-primary animate-pulse" />
+                                      <span>Summarize Now</span>
+                                    </motion.button>
+                                  </div>
+                                )}
+
+                                {/* Feed Item Body Text */}
+                                {selectedReaderItem.contentHtml ? (
+                                  <div 
+                                    className="text-sm text-text-base/90 leading-relaxed break-words max-w-[65ch] rss-content-html"
+                                    dangerouslySetInnerHTML={{ __html: selectedReaderItem.contentHtml }}
+                                  />
+                                ) : (
+                                  <div className="text-sm text-text-base/90 leading-relaxed break-words max-w-[65ch] whitespace-pre-wrap">
+                                    {selectedReaderItem.text}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          {/* Viewer Footer actions */}
+                          <div className="p-4 border-t border-border-base bg-bg-card/40 flex justify-between items-center flex-wrap gap-3 mt-auto">
+                            <div className="flex gap-2">
+                              <motion.button 
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handlePostToTelegram(selectedReaderItem.id)}
+                                className="px-4 py-2 rounded-xl text-xs font-bold bg-accent-primary hover:bg-accent-primary-hover text-white transition duration-200 cursor-pointer"
+                              >
+                                Post to Telegram
+                              </motion.button>
+                              <motion.button 
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleMarkRead(selectedReaderItem.id)}
+                                className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer"
+                              >
+                                Mark Read
+                              </motion.button>
+                            </div>
+                            
+                            <a 
+                              href={selectedReaderItem.link} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              className="text-xs text-text-muted hover:text-accent-primary transition flex items-center gap-1.5 font-semibold"
+                            >
+                              <span>Original Source</span>
+                              <ArrowRight size={12} />
+                            </a>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                </div>
+              </motion.div>
+            )}
+
+            {/* TAB: TELEGRAM TARGETS */}
+            {!isLoading && activeTab === 'telegram' && (
+              <motion.div 
+                key="telegram"
+                initial={{ opacity: 0, y: 8 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: -8 }}
+                className="flex flex-col gap-6"
+              >
+                <div className="flex justify-between items-center flex-wrap gap-4">
+                  <div>
+                    <h2 className="font-bold text-2xl tracking-tight text-text-base">Telegram Targets</h2>
+                    <p className="text-xs text-text-muted mt-1">Configure Telegram channels and groups to receive dispatches</p>
+                  </div>
+                  <motion.button 
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setIsAddChatOpen(true)}
+                    className="flex items-center gap-2 px-4.5 py-2.5 text-xs font-bold text-white bg-accent-primary rounded-xl hover:bg-accent-primary-hover transition duration-200 shadow-lg cursor-pointer"
                   >
                     <Plus size={14} />
-                    <span>Add Feed</span>
-                  </button>
+                    <span>Register Chat</span>
+                  </motion.button>
                 </div>
-              </div>
 
-              {/* Feeds Table */}
-              <div className=\
-                <div className=\
-                  <table className=\
-                    <thead>
-                      <tr className=\
-                        <th className=\
-                        <th className=\
-                        <th className=\
-                        <th className=\
-                        <th className=\
-                      </tr>
-                    </thead>
-                    <tbody className=\
-                      {feeds.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className=\
-                        </tr>
-                      ) : (
-                        feeds.map(feed => (
-                          <tr key={feed.id} className=\
-                            <td className=\
-                              <div className=\
-                                <span className=\
-                                <button 
-                                  onClick={() => copyText(feed.url)}
-                                  className=\
-                                >
-                                  <Copy size={10} />
-                                  <span>Copy</span>
-                                </button>
-                              </div>
-                              <span className=\
-                            </td>
-                            <td className=\
-                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                feed.enabled === 1 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                              }`}>{feed.enabled === 1 ? 'Enabled' : 'Disabled'}</span>
-                            </td>
-                            <td className=\
-                            <td className=\
-                              <span className=\
-                            </td>
-                            <td className=\
-                              <div className=\
-                                <button 
-                                  onClick={() => handleRefreshFeed(feed.id)}
-                                  className=\
-                                  title=\
-                                >
-                                  <ArrowsClockwise size={13} />
-                                </button>
-                                <button 
-                                  onClick={() => handleToggleFeed(feed.id, feed.enabled)}
-                                  className=\
-                                >
-                                  {feed.enabled === 1 ? 'Disable' : 'Enable'}
-                                </button>
-                                <button 
-                                  onClick={() => handleRemoveFeed(feed.id)}
-                                  className=\
-                                >
-                                  <Trash size={13} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Test Parser Sandbox */}
-              <div className=\
-                <h3 className=\
-                <p className=\
-                
-                <div className=\
-                  <div className=\
-                    <input 
-                      type=\
-                      value={testFeedUrl} 
-                      onChange={e => setTestFeedUrl(e.target.value)} 
-                      placeholder=\
-                      className=\
-                    />
-                    <button 
-                      onClick={handleTestFeed}
-                      disabled={isTestingFeed}
-                      className=\
-                    >
-                      {isTestingFeed ? 'Fetching...' : 'Test Fetch'}
-                    </button>
-                  </div>
-
-                  {testFeedItems.length > 0 && (
-                    <div className=\
-                      <h4 className=\
-                      <div className=\
-                        {testFeedItems.map((item, idx) => (
-                          <div key={idx} className=\
-                            <span className=\
-                            <span className=\
-                            <p className=\
+                {/* Grid layout of Chats */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {chats.length === 0 ? (
+                    <div className="md:col-span-2 p-12 text-center border border-dashed border-border-base rounded-2xl bg-bg-card/25 text-sm text-text-muted">
+                      No chat targets registered. Click "Register Chat" to configure.
+                    </div>
+                  ) : (
+                    chats.map(chat => {
+                      const isDefault = chat.is_default === 1;
+                      return (
+                        <motion.div 
+                          key={chat.name}
+                          whileHover={{ y: -2 }}
+                          transition={springTransition}
+                          className={`liquid-glass p-6 rounded-2xl flex flex-col justify-between relative ${
+                            isDefault ? 'border-accent-primary/20 bg-accent-primary/5' : ''
+                          }`}
+                        >
+                          <div className="flex flex-col gap-2">
+                            <div className="flex justify-between items-start">
+                              <span className="font-bold text-base text-text-base">{chat.name}</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded tracking-wide uppercase ${
+                                chat.type === 'channel' ? 'bg-accent-primary/10 text-accent-primary' : 'bg-bg-input border border-border-base text-text-muted'
+                              }`}>
+                                {chat.type}
+                              </span>
+                            </div>
+                            <span className="text-xs text-text-muted font-mono block select-all">
+                              {chat.chat_id}
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          )}
 
-          {/* TAB: FEED READER */}
-          {!isLoading && activeTab === 'reader' && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className=\
-              <div className=\
-                <div>
-                  <h2 className=\
-                  <p className=\
-                </div>
-                <div className=\
-                  <button 
-                    onClick={handleBulkMarkRead} 
-                    className=\
-                  >
-                    Mark All Read
-                  </button>
-                  <div className=\
-                    <input 
-                      type=\
-                      value={readerSearch} 
-                      onChange={e => setReaderSearch(e.target.value)} 
-                      placeholder=\
-                      className=\
-                    />
-                    <MagnifyingGlass size={14} className=\
-                  </div>
-                </div>
-              </div>
+                          <div className="flex justify-between items-center mt-6 pt-4 border-t border-border-base">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                              isDefault ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-input text-text-muted/60'
+                            }`}>
+                              {isDefault ? 'Default Destination' : 'Secondary Destination'}
+                            </span>
 
-              {/* Feed items */}
-              <div className=\
-                {unreadItems.length === 0 ? (
-                  <div className=\
-                    Your unread queue is empty! All content up to date.
-                  </div>
-                ) : (
-                  unreadItems.map(item => (
-                    <div key={item.id} className=\
-                      <div className=\
-                        <div>
-                          <span className=\
-                          <h3 className=\
-                          <span className=\
-                        </div>
-                      </div>
-
-                      {item.summary && (
-                        <div className=\
-                          {item.summary}
-                        </div>
-                      )}
-
-                      <p className=\
-
-                      <div className=\
-                        <div className=\
-                          <button 
-                            onClick={() => handlePostToTelegram(item.id)}
-                            className=\
-                          >
-                            Post to Telegram
-                          </button>
-                          {!item.summary && (
-                            <button 
-                              onClick={() => handleTriggerAiSummary(item.id)}
-                              className=\
-                            >
-                              <Sparkle size={13} />
-                              <span>AI Summary</span>
-                            </button>
-                          )}
-                          <button 
-                            onClick={() => handleMarkRead(item.id)}
-                            className=\
-                          >
-                            Mark Read
-                          </button>
-                        </div>
-                        <a href={item.link} target=\
-                          <span>Original post</span>
-                          <ArrowRight size={12} />
-                        </a>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-          )}
-
-          {/* TAB: TELEGRAM TARGETS */}
-          {!isLoading && activeTab === 'telegram' && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className=\
-              <div className=\
-                <div>
-                  <h2 className=\
-                  <p className=\
-                </div>
-                <button 
-                  onClick={() => setIsAddChatOpen(true)}
-                  className=\
-                >
-                  <Plus size={14} />
-                  <span>Register Chat</span>
-                </button>
-              </div>
-
-              {/* Chats Table */}
-              <div className=\
-                <div className=\
-                  <table className=\
-                    <thead>
-                      <tr className=\
-                        <th className=\
-                        <th className=\
-                        <th className=\
-                        <th className=\
-                        <th className=\
-                      </tr>
-                    </thead>
-                    <tbody className=\
-                      {chats.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className=\
-                        </tr>
-                      ) : (
-                        chats.map(chat => (
-                          <tr key={chat.name} className=\
-                            <td className=\
-                            <td className=\
-                            <td className=\
-                            <td className=\
-                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                chat.is_default === 1 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-900 text-slate-500 border border-white/5'
-                              }`}>{chat.is_default === 1 ? 'Default' : 'Secondary'}</span>
-                            </td>
-                            <td className=\
-                              <div className=\
-                                {chat.is_default !== 1 && (
-                                  <button 
-                                    onClick={() => handleSetDefaultChat(chat.name)}
-                                    className=\
-                                  >
-                                    Set Default
-                                  </button>
-                                )}
-                                <button 
-                                  onClick={() => handleRemoveChat(chat.name)}
-                                  className=\
+                            <div className="flex gap-2">
+                              {!isDefault && (
+                                <motion.button 
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => handleSetDefaultChat(chat.name)}
+                                  className="px-3 py-1.5 text-xs font-bold rounded-xl bg-bg-input border border-border-base text-text-base hover:text-text-base cursor-pointer transition"
                                 >
-                                  <Trash size={13} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                                  Make Default
+                                </motion.button>
+                              )}
+                              <motion.button 
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleRemoveChat(chat.name)}
+                                className="p-2.5 rounded-xl bg-rose-950/20 border border-rose-900/20 text-rose-400 hover:bg-rose-900/30 cursor-pointer transition duration-200"
+                              >
+                                <Trash size={14} />
+                              </motion.button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })
+                  )}
                 </div>
-              </div>
-            </motion.div>
-          )}
+              </motion.div>
+            )}
 
-          {/* TAB: POST SANDBOX */}
-Unterminated string literal.
-src/App.tsx(581,3): error TS1005: ',' expected.
-src/App.tsx(1577,21): error TS1005: ')' expected.
-src/App.tsx(1577,33): error TS1005: ',' expected.
-src/App.tsx(1580,20): error TS1109: Expression expected.
-src/App.tsx(1581,17): error TS1109: Expression expected.
-src/App.tsx(1582,15): error TS1109: Expression expected.
-src/App.tsx(1587,13): error TS1128: Declaration or statement expected.
-src/App.tsx(1588,11): error TS1109: Expression expected.
-src/App.tsx(1589,9): error TS1109: Expression expected.
-src/App.tsx(1590,7): error TS1109: Expression expected.
-src/App.tsx(1590,8): error TS1128: Declaration or statement expected.
-src/App.tsx(1591,5): error TS1128: Declaration or statement expected.
-src/App.tsx(1592,3): error TS1109: Expression expected.
-src/App.tsx(1593,1): error TS1128: Declaration or statement expected.
-
-
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className=\
-              <div>
-                <h2 className=\
-                <p className=\
-              </div>
-
-              <div className=\
-                <form onSubmit={handlePostSandbox} className=\
-                  <div className=\
-                    <label>Telegram Destination</label>
-                    <select 
-                      value={sandboxTarget} 
-                      onChange={e => setSandboxTarget(e.target.value)}
-                      className=\
-                      required
-                    >
-                      <option value=\
-                      {chats.map(c => (
-                        <option key={c.name} value={c.name}>{c.name} ({c.chat_id}){c.is_default === 1 ? ' [DEFAULT]' : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className=\
-                    <label>Content Type</label>
-                    <select 
-                      value={sandboxType} 
-                      onChange={e => setSandboxType(e.target.value)}
-                      className=\
-                      required
-                    >
-                      <option value=\
-                      <option value=\
-                      <option value=\
-                      <option value=\
-                      <option value=\
-                    </select>
-                  </div>
-
-                  {(sandboxType === 'photo' || sandboxType === 'video' || sandboxType === 'audio') && (
-                    <div className=\
-                      <label>Media Direct URL</label>
-                      <input 
-                        type=\
-                        value={sandboxMediaUrl} 
-                        onChange={e => setSandboxMediaUrl(e.target.value)}
-                        placeholder=\
-                        className=\
-                        required
-                      />
-                    </div>
-                  )}
-
-                  {sandboxType === 'album' && (
-                    <div className=\
-                      <label>Album configuration JSON (Array of objects)</label>
-                      <textarea 
-                        value={sandboxAlbumJson} 
-                        onChange={e => setSandboxAlbumJson(e.target.value)}
-                        placeholder='[&#10;  {\
-                        className=\
-                        required
-                      />
-                    </div>
-                  )}
-
-                  <div className=\
-                    <label>Message Content / Caption (Supports HTML markup)</label>
-                    <textarea 
-                      value={sandboxCaption} 
-                      onChange={e => setSandboxCaption(e.target.value)}
-                      placeholder=\
-                      className=\
-                      required
-                    />
-                  </div>
-
-                  <button 
-                    type=\
-                    className=\
-                  >
-                    <PaperPlaneTilt size={16} />
-                    <span>Dispatch Payload</span>
-                  </button>
-                </form>
-              </div>
-            </motion.div>
-          )}
-
-          {/* TAB: RECALL & LOGS */}
-          {!isLoading && activeTab === 'logs' && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className=\
-              <div className=\
+            {/* TAB: POST SANDBOX */}
+            {!isLoading && activeTab === 'sandbox' && (
+              <motion.div 
+                key="sandbox"
+                initial={{ opacity: 0, y: 8 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: -8 }}
+                className="flex flex-col gap-6"
+              >
                 <div>
-                  <h2 className=\
-                  <p className=\
+                  <h2 className="font-bold text-2xl tracking-tight text-text-base">Post Sandbox</h2>
+                  <p className="text-xs text-text-muted mt-1">Manually dispatch customized media payloads to Telegram targets</p>
                 </div>
-                <button 
-                  onClick={() => setIsAddNoteOpen(true)}
-                  className=\
-                >
-                  <Note size={14} />
-                  <span>New Note</span>
-                </button>
-              </div>
 
-              <div className=\
-                {/* Configurations & Post Logs */}
-                <div className=\
-                  {/* System Settings Block */}
-                  <div className=\
-                    <h3 className=\
-                    <div className=\
-                      <div>
-                        <span className=\
-                        <span className=\
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                  
+                  {/* Left Column: Form */}
+                  <div className="lg:col-span-7 liquid-glass p-8 rounded-2xl">
+                    <form onSubmit={handlePostSandbox} className="flex flex-col gap-5">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Telegram Destination</label>
+                        <select 
+                          value={sandboxTarget} 
+                          onChange={e => setSandboxTarget(e.target.value)}
+                          className="bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary font-semibold cursor-pointer w-full mt-1.5"
+                          required
+                        >
+                          <option value="">-- Choose Target --</option>
+                          {chats.map(c => (
+                            <option key={c.name} value={c.name}>{c.name} ({c.chat_id}){c.is_default === 1 ? ' [DEFAULT]' : ''}</option>
+                          ))}
+                        </select>
                       </div>
-                      <hr className=\
-                      <div>
-                        <span className=\
-                        <div className=\
-                          <span className={`px-2 py-0.5 rounded font-semibold ${
-                            config.aiSummaryEnabled === '1' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                          }`}>{config.aiSummaryEnabled === '1' ? 'Enabled' : 'Disabled'}</span>
-                          <button 
-                            onClick={() => handleToggleGlobalAi(config.aiSummaryEnabled)}
-                            className=\
-                          >
-                            Toggle
-                          </button>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Content Type</label>
+                        <select 
+                          value={sandboxType} 
+                          onChange={e => setSandboxType(e.target.value)}
+                          className="bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary font-semibold cursor-pointer w-full mt-1.5"
+                          required
+                        >
+                          <option value="text">Plain Text Message</option>
+                          <option value="photo">Photo Post</option>
+                          <option value="video">Video Post</option>
+                          <option value="audio">Audio Track</option>
+                          <option value="album">Media Album (Multiple Items)</option>
+                        </select>
+                      </div>
+
+                      {(sandboxType === 'photo' || sandboxType === 'video' || sandboxType === 'audio') && (
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Media Direct URL</label>
+                          <input 
+                            type="url" 
+                            value={sandboxMediaUrl} 
+                            onChange={e => setSandboxMediaUrl(e.target.value)}
+                            placeholder="https://example.com/asset.mp4"
+                            className="bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono mt-1.5"
+                            required
+                          />
+                        </div>
+                      )}
+
+                      {sandboxType === 'album' && (
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Album configuration JSON (Array of objects)</label>
+                          <textarea 
+                            value={sandboxAlbumJson} 
+                            onChange={e => setSandboxAlbumJson(e.target.value)}
+                            placeholder='[&#10;  {"type": "photo", "url": "https://example.com/pic1.jpg"},&#10;  {"type": "video", "url": "https://example.com/vid1.mp4"}&#10;]'
+                            className="bg-bg-input border border-border-base rounded-xl p-4 text-xs text-text-base focus:outline-none focus:border-accent-primary font-mono min-h-[120px] mt-1.5"
+                            required
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Message Content / Caption (Supports HTML markup)</label>
+                        <textarea 
+                          value={sandboxCaption} 
+                          onChange={e => setSandboxCaption(e.target.value)}
+                          placeholder="Write message copy here..."
+                          className="bg-bg-input border border-border-base rounded-xl p-4 text-sm text-text-base focus:outline-none focus:border-accent-primary min-h-[140px] mt-1.5"
+                          required
+                        />
+                      </div>
+
+                      <motion.button 
+                        whileTap={{ scale: 0.98 }}
+                        type="submit"
+                        className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold bg-accent-primary hover:bg-accent-primary-hover text-white transition duration-200 mt-2 cursor-pointer"
+                      >
+                        <PaperPlaneTilt size={16} />
+                        <span>Dispatch Payload</span>
+                      </motion.button>
+                    </form>
+                  </div>
+
+                  {/* Right Column: Visual Preview */}
+                  <div className="lg:col-span-5 flex flex-col gap-4">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-text-muted">Live Send Preview</h3>
+                    
+                    <div className="liquid-glass rounded-2xl overflow-hidden shadow-2xl flex flex-col min-h-[300px]">
+                      {/* Telegram UI Header mock */}
+                      <div className="bg-bg-card/40 p-4 border-b border-border-base flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-accent-primary flex items-center justify-center text-xs font-bold text-white uppercase">
+                          {sandboxTarget ? sandboxTarget.slice(0, 2) : 'T'}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-text-base">{sandboxTarget || 'Target Chat'}</span>
+                          <span className="text-[9px] text-text-muted font-mono">Channel Feed</span>
                         </div>
                       </div>
-                      <hr className=\
-                      <div>
-                        <span className=\
-                        <div className=\
+
+                      {/* Mock Image/Video Area */}
+                      {sandboxType !== 'text' && (
+                        <div className="bg-bg-input h-44 flex items-center justify-center border-b border-border-base relative overflow-hidden">
+                          {sandboxMediaUrl ? (
+                            <img src={sandboxMediaUrl} alt="Preview payload" className="w-full h-full object-cover opacity-60" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                          ) : (
+                            <span className="text-xs text-text-muted/40 font-mono">[ Media Preview Placeholder ]</span>
+                          )}
+                          <span className="absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 bg-bg-input border border-border-base rounded uppercase tracking-wide text-accent-primary">
+                            {sandboxType}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Caption Section */}
+                      <div className="p-5 flex-grow flex flex-col justify-between">
+                        <div className="text-xs text-text-base whitespace-pre-wrap font-sans max-w-[65ch]">
+                          {sandboxCaption ? (
+                            <div dangerouslySetInnerHTML={{ __html: sandboxCaption }} />
+                          ) : (
+                            <span className="text-text-muted italic">Configure input values to view dynamic live preview outcomes...</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-text-muted text-right mt-6 font-mono">
+                          12:00 PM
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </motion.div>
+            )}
+
+            {/* TAB: RECALL & LOGS */}
+            {!isLoading && activeTab === 'logs' && (
+              <motion.div 
+                key="logs"
+                initial={{ opacity: 0, y: 8 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: -8 }}
+                className="flex flex-col gap-6"
+              >
+                <div className="flex justify-between items-center flex-wrap gap-4">
+                  <div>
+                    <h2 className="font-bold text-2xl tracking-tight text-text-base">Recall & Logs</h2>
+                    <p className="text-xs text-text-muted mt-1">Inspect database activity history, configurations, and memory recall notes</p>
+                  </div>
+                  <motion.button 
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setIsAddNoteOpen(true)}
+                    className="flex items-center gap-2 px-4.5 py-2.5 text-xs font-bold text-text-base bg-bg-input border border-border-base rounded-xl hover:bg-neutral-850 transition duration-200 cursor-pointer"
+                  >
+                    <Note size={14} />
+                    <span>New Note</span>
+                  </motion.button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                  
+                  {/* Left Column: Configurations & Post Logs */}
+                  <div className="lg:col-span-5 flex flex-col gap-8">
+                    
+                    {/* System Settings Block */}
+                    <div className="liquid-glass p-6 rounded-2xl flex flex-col gap-5">
+                      <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted">Worker Configurations</h3>
+                      
+                      <div className="flex flex-col gap-4 text-xs">
+                        <div className="flex flex-col gap-1.5">
+                          <span className="text-text-muted font-semibold uppercase tracking-wide text-[10px]">Default Telegram Chat Target</span>
+                          <span className="font-mono text-text-base block bg-bg-input px-3.5 py-2.5 rounded-xl border border-border-base">{config.telegramChatId || 'None'}</span>
+                        </div>
+                        
+                        <div className="flex flex-col gap-1.5 border-t border-border-base pt-4">
+                          <span className="text-text-muted font-semibold uppercase tracking-wide text-[10px]">AI Summaries Global Status</span>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ${
+                              config.aiSummaryEnabled === '1' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                            }`}>{config.aiSummaryEnabled === '1' ? 'Enabled' : 'Disabled'}</span>
+                            <motion.button 
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleToggleGlobalAi(config.aiSummaryEnabled)}
+                              className="px-2.5 py-1.5 rounded-xl border border-border-base text-text-base hover:text-text-base bg-bg-input font-bold text-[10px] cursor-pointer"
+                            >
+                              Toggle Status
+                            </motion.button>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5 border-t border-border-base pt-4">
+                          <span className="text-text-muted font-semibold uppercase tracking-wide text-[10px]">Global AI Summarizer Model</span>
                           <select 
                             value={config.aiModel || 'nvidia/llama-3.1-nemotron-70b-instruct'} 
                             onChange={e => handleSaveModelConfig(e.target.value)}
-                            className=\
+                            className="bg-bg-input border border-border-base rounded-xl px-3.5 py-2.5 text-text-base text-xs focus:outline-none font-semibold cursor-pointer w-full mt-1"
                           >
                             {MODEL_OPTIONS.map(m => (
                               <option key={m.value} value={m.value}>{m.label}</option>
                             ))}
                           </select>
                         </div>
-                      </div>
-                      <hr className=\
-                      <div>
-                        <div className=\
-                          <span className=\
-                          <button onClick={handleEditPromptConfig} className=\
+
+                        <div className="flex flex-col gap-1.5 border-t border-border-base pt-4">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-text-muted font-semibold uppercase tracking-wide text-[10px]">Global Summarizer Prompt Override</span>
+                            <button onClick={handleEditPromptConfig} className="text-accent-primary hover:text-accent-primary/80 font-bold text-[10px] cursor-pointer">Edit</button>
+                          </div>
+                          <p className="text-text-base leading-relaxed p-3.5 rounded-xl border border-border-base bg-bg-input max-h-[100px] overflow-y-auto font-mono text-[11px]">
+                            {config.aiPrompt || 'Using default Arabic news summarizer system instructions.'}
+                          </p>
                         </div>
-                        <p className=\
-                          {config.aiPrompt || 'Using default Arabic news summarizer system instructions.'}
-                        </p>
+                      </div>
+                    </div>
+
+                    {/* Post Logs Outcomes */}
+                    <div className="liquid-glass p-6 rounded-2xl flex flex-col gap-4">
+                      <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted">Telegram Dispatch Logs</h3>
+                      
+                      <div className="flex flex-col gap-4 max-h-[350px] overflow-y-auto pr-1">
+                        {postLogs.length === 0 ? (
+                          <span className="text-xs text-text-muted text-center py-4">No recent post outcomes recorded.</span>
+                        ) : (
+                          postLogs.map((log, idx) => (
+                            <div key={idx} className="text-xs border-b border-border-base pb-4 last:border-b-0 last:pb-0 flex flex-col gap-1.5">
+                              <div className="flex justify-between items-center">
+                                <span className={`font-mono text-[10px] font-bold uppercase tracking-wider ${
+                                  log.status === 'ok' ? 'text-emerald-400' : 'text-rose-400'
+                                }`}>{log.status === 'ok' ? 'Success' : 'Failed'}</span>
+                                <span className="text-text-muted font-mono">{formatDate(log.posted_at)}</span>
+                              </div>
+                              <span className="text-text-base font-semibold">Sent to <b className="font-bold">{log.chat_name || log.chat_id}</b> ({log.message_type})</span>
+                              <span className="text-text-muted block truncate font-mono text-[11px]">{log.caption_preview}</span>
+                              {log.error && <span className="text-rose-400 block mt-1 font-mono text-[11px] bg-rose-500/5 p-2 rounded border border-rose-500/10">{log.error}</span>}
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Post Logs Outcomes */}
-                  <div className=\
-                    <h3 className=\
-                    <div className=\
-                      {postLogs.length === 0 ? (
-                        <span className=\
+                  {/* Right Column: Timeline / Recall Notes */}
+                  <div className="lg:col-span-7 flex flex-col gap-4">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-text-muted">Unified Recall History</h3>
+                    
+                    <div className="pl-6 border-l border-border-base flex flex-col gap-8 relative mt-3 ml-2">
+                      {timeline.length === 0 ? (
+                        <span className="text-xs text-text-muted py-4 block">Timeline is empty.</span>
                       ) : (
-                        postLogs.map((log, idx) => (
-                          <div key={idx} className=\
-                            <div className=\
-                              <span className={`font-bold uppercase ${
-                                log.status === 'ok' ? 'text-emerald-400' : 'text-red-400'
-                              }`}>{log.status === 'ok' ? 'success' : 'failed'}</span>
-                              <span className=\
+                        timeline.map((entry, idx) => (
+                          <div key={idx} className="relative group">
+                            {/* Marker dot */}
+                            <span className="absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full bg-accent-primary border border-bg-base group-hover:bg-accent-primary transition duration-150" />
+                            
+                            <div className="text-[11px] text-text-muted font-mono">{formatDate(entry.timestamp)}</div>
+                            <h4 className="font-bold text-sm text-text-base mt-1 uppercase tracking-wide">
+                              {entry.type === 'note' ? 'System Memory Note' : `Dispatched Post to ${entry.chat_name || entry.chat_id}`}
+                            </h4>
+                            
+                            <div className="text-xs mt-2.5 leading-relaxed text-text-base max-w-[65ch]">
+                              {entry.type === 'note' ? (
+                                <div className="p-4 rounded-xl bg-bg-input/60 border border-border-base">
+                                  <p className="mb-2.5">{entry.content}</p>
+                                  <div className="flex justify-between items-center border-t border-border-base pt-2.5">
+                                    <div className="flex gap-1.5 flex-wrap">
+                                      {(entry.tags ? JSON.parse(entry.tags) : []).map((t: string) => (
+                                        <span key={t} className="px-1.5 py-0.5 rounded bg-bg-input border border-border-base text-[9px] text-text-muted font-mono">#{t}</span>
+                                      ))}
+                                    </div>
+                                    <button 
+                                      onClick={() => handleDeleteNote(entry.id)} 
+                                      className="text-rose-400 hover:text-rose-350 font-bold text-[10px] cursor-pointer transition"
+                                    >
+                                      Delete Note
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="p-4 rounded-xl bg-bg-input/20 border border-border-base flex flex-col gap-1">
+                                  <span>Type: <b className="font-mono">{entry.message_type}</b> | Outcome: <b className={entry.status === 'ok' ? 'text-emerald-400 font-mono' : 'text-rose-400 font-mono'}>{entry.status.toUpperCase()}</b></span>
+                                  <p className="truncate text-text-muted mt-0.5 font-mono">{entry.caption_preview}</p>
+                                </div>
+                              )}
                             </div>
-                            <span className=\
-                            <span className=\
-                            {log.error && <span className=\
                           </div>
                         ))
                       )}
                     </div>
                   </div>
+
+                </div>
+              </motion.div>
+            )}
+
+            {/* TAB: MCP PLAYGROUND */}
+            {!isLoading && activeTab === 'playground' && (
+              <motion.div 
+                key="playground"
+                initial={{ opacity: 0, y: 8 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: -8 }}
+                className="flex flex-col gap-6"
+              >
+                <div>
+                  <h2 className="font-bold text-2xl tracking-tight text-text-base">MCP Playground</h2>
+                  <p className="text-xs text-text-muted mt-1">Interactively query and inspect the Model Context Protocol tools schema</p>
                 </div>
 
-                {/* Timeline / Recall Notes */}
-                <div className=\
-                  <h3 className=\
-                  <div className=\
-                    {timeline.length === 0 ? (
-                      <span className=\
-                    ) : (
-                      timeline.map((entry, idx) => (
-                        <div key={idx} className=\
-                          <span className=\
-                          <span className=\
-                          <div className=\
-                            {entry.type === 'note' ? (
-                              <div>
-                                <p className=\
-                                <div className=\
-                                  <div className=\
-                                    {(entry.tags ? JSON.parse(entry.tags) : []).map((t: string) => (
-                                      <span key={t} className=\
-                                    ))}
-                                  </div>
-                                  <button onClick={() => handleDeleteNote(entry.id)} className=\
-                                </div>
-                              </div>
-                            ) : (
-                              <div>
-                                <span>Type: <b>{entry.message_type}</b> | Outcome: <b className={entry.status === 'ok' ? 'text-emerald-400' : 'text-red-400'}>{entry.status.toUpperCase()}</b></span>
-                                <p className=\
-                              </div>
-                            )}
+                <div className="liquid-glass p-6 rounded-2xl">
+                  <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
+                    {/* Tools List */}
+                    <div className="border-r border-border-base pr-6 flex flex-col gap-1 max-h-[600px] overflow-y-auto scrollbar-thin">
+                      {MCP_TOOLS.map(tool => (
+                        <motion.button
+                          key={tool.name}
+                          whileHover={{ x: 2 }}
+                          onClick={() => handleSelectTool(tool)}
+                          className={`w-full text-left font-mono text-xs px-3.5 py-3 rounded-lg transition duration-200 cursor-pointer ${
+                            selectedTool.name === tool.name ? 'bg-accent-primary/10 text-accent-primary font-bold border-l-2 border-accent-primary' : 'text-text-muted hover:text-text-base hover:bg-white/5'
+                          }`}
+                        >
+                          {tool.name}
+                        </motion.button>
+                      ))}
+                    </div>
+
+                    {/* Schema Exec Panel */}
+                    <div className="flex flex-col gap-5">
+                      <div>
+                        <h3 className="font-mono font-bold text-base text-accent-primary">{selectedTool.name}</h3>
+                        <p className="text-xs text-text-muted mt-1 max-w-[65ch]">{selectedTool.desc}</p>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 relative">
+                        <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Arguments (JSON Object)</label>
+                        <textarea
+                          value={toolArgs}
+                          onChange={e => setToolArgs(e.target.value)}
+                          className="bg-bg-input border border-border-base rounded-xl p-4 text-xs text-text-base focus:outline-none focus:border-accent-primary font-mono min-h-[140px] mt-1.5"
+                        />
+                        <button 
+                          onClick={formatToolJson}
+                          className="absolute right-3.5 top-8.5 px-2.5 py-1 text-[10px] font-bold uppercase rounded bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer"
+                        >
+                          Format
+                        </button>
+                      </div>
+
+                      <div>
+                        <motion.button 
+                          whileTap={{ scale: 0.98 }}
+                          onClick={handleExecuteTool}
+                          disabled={isExecutingTool}
+                          className="px-6 py-3 text-xs font-bold text-white bg-accent-primary hover:bg-accent-primary-hover transition duration-200 rounded-xl cursor-pointer disabled:opacity-50"
+                        >
+                          {isExecutingTool ? 'Calling...' : 'Call Tool'}
+                        </motion.button>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 mt-2">
+                        <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Output Result JSON</label>
+                        <pre className="p-4 rounded-xl border border-border-base bg-bg-input font-mono text-xs text-cyan-500 dark:text-cyan-400 max-h-[350px] overflow-auto whitespace-pre-wrap scrollbar-thin">
+                          {toolResult || '// Result payload will print here'}
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* TAB: AGENT CHAT */}
+            {!isLoading && activeTab === 'chat' && (
+              <motion.div 
+                key="chat"
+                initial={{ opacity: 0, y: 8 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: -8 }}
+                className="flex flex-col h-[calc(100vh-190px)] min-h-[500px]"
+              >
+                <div className="mb-4">
+                  <h2 className="font-bold text-2xl tracking-tight text-text-base">Agent Chat</h2>
+                  <p className="text-xs text-text-muted mt-1">Converse with the assistant equipped with all 26 local RSS and database tools</p>
+                </div>
+
+                {/* Chat Canvas */}
+                <div className="flex-grow border border-border-base bg-bg-card/25 backdrop-blur-md rounded-2xl p-6 flex flex-col justify-between overflow-hidden relative">
+                  {/* Messages Box */}
+                  <div className="flex-grow overflow-y-auto flex flex-col gap-5 pr-2 mb-4 scrollbar-thin">
+                    {chatMessages.map((msg, idx) => {
+                      const isUser = msg.role === 'user';
+                      return (
+                        <div key={idx} className={`flex flex-col max-w-[80%] ${isUser ? 'self-end ml-auto' : 'self-start mr-auto'}`}>
+                          {/* Tool execution badge */}
+                          {!isUser && msg.toolsCalled && (
+                            <div className="flex items-center gap-1.5 text-[9px] text-accent-primary font-mono mb-1.5 px-2 py-0.5 rounded bg-accent-primary/5 border border-accent-primary/10 self-start">
+                              <Terminal size={10} />
+                              <span>Executed: {msg.toolsCalled.join(', ')}</span>
+                            </div>
+                          )}
+                          <div className={`p-4 rounded-2xl text-sm leading-relaxed ${
+                            isUser ? 'bg-accent-primary text-white rounded-br-none' : 'bg-bg-input border border-border-base text-text-base rounded-bl-none'
+                          }`}>
+                            <p className="whitespace-pre-wrap">{msg.content}</p>
                           </div>
                         </div>
-                      ))
+                      );
+                    })}
+                    {isChatting && (
+                      <div className="flex flex-col max-w-[80%] self-start mr-auto">
+                        <div className="flex items-center gap-1.5 text-[9px] text-accent-primary font-mono mb-1.5 px-2 py-0.5 rounded bg-accent-primary/5 border border-accent-primary/10 self-start animate-pulse">
+                          <Terminal size={10} />
+                          <span>Agent is reasoning and executing tools...</span>
+                        </div>
+                        <div className="p-4 rounded-2xl text-sm bg-bg-input/65 border border-dashed border-border-base text-text-muted rounded-bl-none animate-pulse">
+                          Thinking...
+                        </div>
+                      </div>
                     )}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* TAB: MCP PLAYGROUND */}
-          {!isLoading && activeTab === 'playground' && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className=\
-              <div>
-                <h2 className=\
-                <p className=\
-              </div>
-
-              <div className=\
-                <div className=\
-                  {/* Tools List */}
-                  <div className=\
-                    {MCP_TOOLS.map(tool => (
-                      <button
-                        key={tool.name}
-                        onClick={() => handleSelectTool(tool)}
-                        className={`w-full text-left font-mono text-xs px-3 py-2.5 rounded-lg transition-all ${
-                          selectedTool.name === tool.name ? 'bg-indigo-600/15 text-indigo-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                        }`}
-                      >
-                        {tool.name}
-                      </button>
-                    ))}
+                    <div ref={chatBottomRef} />
                   </div>
 
-                  {/* Schema Exec Panel */}
-                  <div className=\
-                    <div>
-                      <h3 className=\
-                      <p className=\
-                    </div>
-
-                    <div className=\
-                      <label className=\
-                      <textarea
-                        value={toolArgs}
-                        onChange={e => setToolArgs(e.target.value)}
-                        className=\
-                      />
-                      <button 
-                        onClick={formatToolJson}
-                        className=\
-                      >
-                        Format
-                      </button>
-                    </div>
-
-                    <div>
-                      <button 
-                        onClick={handleExecuteTool}
-                        disabled={isExecutingTool}
-                        className=\
-                      >
-                        {isExecutingTool ? 'Calling...' : 'Call Tool'}
-                      </button>
-                    </div>
-
-                    <div className=\
-                      <label className=\
-                      <pre className=\
-                        {toolResult || '// Result payload will print here'}
-                      </pre>
-                    </div>
-                  </div>
+                  {/* Input Form */}
+                  <form onSubmit={handleSendChatMessage} className="flex gap-3 mt-auto border-t border-border-base pt-4 z-10">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={e => setChatInput(e.target.value)}
+                      placeholder="Ask agent: 'Find unread items about technology' or 'Add note saying deployment succeeded'..."
+                      disabled={isChatting}
+                      className="flex-grow bg-bg-input border border-border-base rounded-xl px-4 py-3.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-semibold"
+                    />
+                    <motion.button
+                      whileTap={{ scale: 0.98 }}
+                      type="submit"
+                      disabled={isChatting || !chatInput.trim()}
+                      className="px-6 py-3.5 rounded-xl bg-accent-primary hover:bg-accent-primary-hover text-white font-bold transition duration-200 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      <span>Send</span>
+                      <ArrowRight size={14} />
+                    </motion.button>
+                  </form>
                 </div>
-              </div>
-            </motion.div>
-          )}
+              </motion.div>
+            )}
 
-          {/* TAB: AGENT CHAT */}
-          {!isLoading && activeTab === 'chat' && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className=\
-              <div className=\
-                <h2 className=\
-                <p className=\
-              </div>
-
-              {/* Chat Canvas */}
-              <div className=\
-                {/* Messages Box */}
-                <div className=\
-                  {chatMessages.map((msg, idx) => {
-                    const isUser = msg.role === 'user';
-                    return (
-                      <div key={idx} className={`flex flex-col max-w-[80%] ${isUser ? 'align-self-end ml-auto' : 'align-self-start mr-auto'}`}>
-                        {/* Tool execution badge */}
-                        {!isUser && msg.toolsCalled && (
-                          <div className=\
-                            <Terminal size={10} />
-                            <span>Executed: {msg.toolsCalled.join(', ')}</span>
-                          </div>
-                        )}
-                        <div className={`p-4 rounded-2xl text-sm leading-relaxed ${
-                          isUser ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-900 border border-white/5 text-slate-200 rounded-bl-none'
-                        }`}>
-                          <p className=\
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {isChatting && (
-                    <div className=\
-                      <div className=\
-                        <Terminal size={10} />
-                        <span>Agent is reasoning and executing tools...</span>
-                      </div>
-                      <div className=\
-                        Thinking...
-                      </div>
-                    </div>
-                  )}
-                  <div ref={chatBottomRef} />
-                </div>
-
-                {/* Input Form */}
-                <form onSubmit={handleSendChatMessage} className=\
-                  <input
-                    type=\
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    placeholder=\
-                    disabled={isChatting}
-                    className=\
-                  />
-                  <button
-                    type=\
-                    disabled={isChatting || !chatInput.trim()}
-                    className=\
-                  >
-                    <span>Send</span>
-                    <ArrowRight size={14} />
-                  </button>
-                </form>
-              </div>
-            </motion.div>
-          )}
-
+          </AnimatePresence>
         </main>
       </div>
 
       {/* MODAL: Access Token Setup */}
       {isTokenModalOpen && (
-        <div className=\
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className=\
-            <div className=\
-              <h3 className=\
-              <button onClick={() => setIsTokenModalOpen(false)} className=\
+        <div className="fixed inset-0 bg-neutral-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="bg-bg-card border border-border-base w-full max-w-md rounded-2xl overflow-hidden shadow-2xl"
+          >
+            <div className="px-6 py-4.5 border-b border-border-base flex justify-between items-center">
+              <h3 className="font-bold text-base text-text-base">Access Credentials</h3>
+              <button onClick={() => setIsTokenModalOpen(false)} className="text-text-muted hover:text-text-base text-xl cursor-pointer">&times;</button>
             </div>
-            <div className=\
-              <div className=\
-                <label className=\
+            <div className="p-6 flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-muted uppercase tracking-wider">MCP_AUTH_TOKEN</label>
                 <input 
-                  type=\
+                  type="password" 
                   value={tempToken} 
                   onChange={e => setTempToken(e.target.value)} 
-                  placeholder=\
-                  className=\
+                  placeholder="Enter bearer secret token..." 
+                  className="bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono mt-1"
                 />
-                <p className=\
+                <p className="text-[10px] text-text-muted leading-relaxed mt-2.5 font-semibold">
                   This bearer token validates administrative updates to your Cloudflare Worker. It is saved strictly in your local browser storage.
                 </p>
               </div>
             </div>
-            <div className=\
-              <button onClick={() => setIsTokenModalOpen(false)} className=\
-              <button onClick={handleSaveToken} className=\
+            <div className="px-6 py-4 border-t border-border-base bg-neutral-950/20 flex justify-end gap-3">
+              <button onClick={() => setIsTokenModalOpen(false)} className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer transition">Cancel</button>
+              <button onClick={handleSaveToken} className="px-4 py-2 rounded-xl text-xs font-bold bg-accent-primary text-white hover:bg-accent-primary-hover cursor-pointer transition">Save Secret</button>
             </div>
           </motion.div>
         </div>
@@ -1439,39 +1761,43 @@ src/App.tsx(1593,1): error TS1128: Declaration or statement expected.
 
       {/* MODAL: Add Feed */}
       {isAddFeedOpen && (
-        <div className=\
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className=\
+        <div className="fixed inset-0 bg-neutral-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="bg-bg-card border border-border-base w-full max-w-md rounded-2xl overflow-hidden shadow-2xl"
+          >
             <form onSubmit={handleAddFeed}>
-              <div className=\
-                <h3 className=\
-                <button type=\
+              <div className="px-6 py-4.5 border-b border-border-base flex justify-between items-center">
+                <h3 className="font-bold text-base text-text-base">Register RSS Feed</h3>
+                <button type="button" onClick={() => setIsAddFeedOpen(false)} className="text-text-muted hover:text-text-base text-xl cursor-pointer">&times;</button>
               </div>
-              <div className=\
-                <div className=\
-                  <label className=\
+              <div className="p-6 flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Feed Source URL</label>
                   <input 
-                    type=\
+                    type="url" 
                     value={addFeedUrl} 
                     onChange={e => setAddFeedUrl(e.target.value)} 
-                    placeholder=\
-                    className=\
+                    placeholder="https://example.com/rss.xml" 
+                    className="bg-bg-input border border-border-base rounded-xl px-4 py-3.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono mt-1"
                     required
                   />
                 </div>
-                <div className=\
-                  <label className=\
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Friendly Title (Optional)</label>
                   <input 
-                    type=\
+                    type="text" 
                     value={addFeedTitle} 
                     onChange={e => setAddFeedTitle(e.target.value)} 
-                    placeholder=\
-                    className=\
+                    placeholder="e.g. Technology News" 
+                    className="bg-bg-input border border-border-base rounded-xl px-4 py-3.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-semibold mt-1"
                   />
                 </div>
               </div>
-              <div className=\
-                <button type=\
-                <button type=\
+              <div className="px-6 py-4 border-t border-border-base bg-neutral-950/20 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsAddFeedOpen(false)} className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer transition">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl text-xs font-bold bg-accent-primary text-white hover:bg-accent-primary-hover cursor-pointer transition">Register</button>
               </div>
             </form>
           </motion.div>
@@ -1480,64 +1806,68 @@ src/App.tsx(1593,1): error TS1128: Declaration or statement expected.
 
       {/* MODAL: Register Chat */}
       {isAddChatOpen && (
-        <div className=\
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className=\
+        <div className="fixed inset-0 bg-neutral-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="bg-bg-card border border-border-base w-full max-w-md rounded-2xl overflow-hidden shadow-2xl"
+          >
             <form onSubmit={handleAddChat}>
-              <div className=\
-                <h3 className=\
-                <button type=\
+              <div className="px-6 py-4.5 border-b border-border-base flex justify-between items-center">
+                <h3 className="font-bold text-base text-text-base">Register Telegram Target</h3>
+                <button type="button" onClick={() => setIsAddChatOpen(false)} className="text-text-muted hover:text-text-base text-xl cursor-pointer">&times;</button>
               </div>
-              <div className=\
-                <div className=\
-                  <label className=\
+              <div className="p-6 flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Friendly Name (Internal identifier)</label>
                   <input 
-                    type=\
+                    type="text" 
                     value={chatName} 
                     onChange={e => setChatName(e.target.value)} 
-                    placeholder=\
-                    className=\
+                    placeholder="e.g. main_channel" 
+                    className="bg-bg-input border border-border-base rounded-xl px-4 py-3.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-semibold mt-1"
                     required
                   />
                 </div>
-                <div className=\
-                  <label className=\
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Telegram Chat ID (Numeric)</label>
                   <input 
-                    type=\
+                    type="text" 
                     value={chatIdVal} 
                     onChange={e => setChatIdVal(e.target.value)} 
-                    placeholder=\
-                    className=\
+                    placeholder="e.g. -100123456789" 
+                    className="bg-bg-input border border-border-base rounded-xl px-4 py-3.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono mt-1"
                     required
                   />
                 </div>
-                <div className=\
-                  <label className=\
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Chat Type</label>
                   <select 
                     value={chatType} 
                     onChange={e => setChatType(e.target.value)} 
-                    className=\
+                    className="bg-bg-input border border-border-base rounded-xl px-4 py-3.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-semibold cursor-pointer mt-1"
                     required
                   >
-                    <option value=\
-                    <option value=\
-                    <option value=\
-                    <option value=\
+                    <option value="channel">Channel</option>
+                    <option value="group">Group</option>
+                    <option value="private">Private Chat</option>
+                    <option value="bot">Bot Direct Conversation</option>
                   </select>
                 </div>
-                <div className=\
+                <div className="flex items-center gap-3.5 mt-3 select-none cursor-pointer">
                   <input 
-                    type=\
-                    id=\
+                    type="checkbox" 
+                    id="modalChatDefault" 
                     checked={chatDefault} 
                     onChange={e => setChatDefault(e.target.checked)} 
-                    className=\
+                    className="w-4 h-4 rounded border-border-base bg-bg-input text-accent-primary focus:ring-0 focus:ring-offset-0 cursor-pointer"
                   />
-                  <label htmlFor=\
+                  <label htmlFor="modalChatDefault" className="text-xs text-text-base font-semibold cursor-pointer">Make this the default send target</label>
                 </div>
               </div>
-              <div className=\
-                <button type=\
-                <button type=\
+              <div className="px-6 py-4 border-t border-border-base bg-neutral-950/20 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsAddChatOpen(false)} className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer transition">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl text-xs font-bold bg-accent-primary text-white hover:bg-accent-primary-hover cursor-pointer transition">Register</button>
               </div>
             </form>
           </motion.div>
@@ -1546,57 +1876,53 @@ src/App.tsx(1593,1): error TS1128: Declaration or statement expected.
 
       {/* MODAL: Add Note */}
       {isAddNoteOpen && (
-        <div className=\
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className=\
+        <div className="fixed inset-0 bg-neutral-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="bg-bg-card border border-border-base w-full max-w-md rounded-2xl overflow-hidden shadow-2xl"
+          >
             <form onSubmit={handleAddNote}>
-              <div className=\
-                <h3 className=\
-                <button type=\
+              <div className="px-6 py-4.5 border-b border-border-base flex justify-between items-center">
+                <h3 className="font-bold text-base text-text-base">Add Recall Memory Note</h3>
+                <button type="button" onClick={() => setIsAddNoteOpen(false)} className="text-text-muted hover:text-text-base text-xl cursor-pointer">&times;</button>
               </div>
-              <div className=\
-                <div className=\
-                  <label className=\
+              <div className="p-6 flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Note Content</label>
                   <textarea 
                     value={noteContent} 
                     onChange={e => setNoteContent(e.target.value)} 
-                    placeholder=\
-                    className=\
+                    placeholder="Type note details here..." 
+                    className="bg-bg-input border border-border-base rounded-xl p-4 text-sm text-text-base focus:outline-none focus:border-accent-primary min-h-[100px] mt-1"
                     required
                   />
                 </div>
-                <div className=\
-                  <label className=\
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Tags (comma-separated)</label>
                   <input 
-                    type=\
+                    type="text" 
                     value={noteTags} 
                     onChange={e => setNoteTags(e.target.value)} 
-                    placeholder=\
-                    className=\
+                    placeholder="e.g. system, config, backup" 
+                    className="bg-bg-input border border-border-base rounded-xl px-4 py-3.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono mt-1"
                   />
                 </div>
               </div>
-              <div className=\
-                <button type=\
-                <button type=\
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className=\
-            <form onSubmit={handleAddNote}>
-              <div className=\
-                <h3 className=\
-                <button type=\
+              <div className="px-6 py-4 border-t border-border-base bg-neutral-950/20 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsAddNoteOpen(false)} className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer transition">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl text-xs font-bold bg-accent-primary text-white hover:bg-accent-primary-hover cursor-pointer transition">Save Memory</button>
               </div>
-              <div className=\
-                <div className=\
-                  <label className=\
-                  <textarea 
-                    value={noteContent} 
-                    onChange={e => setNoteContent(e.target.value)} 
-    // Can hook up toast from window context if necessary
-                    className=\
-                    required
-                  />
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const formatDate = (unixSecs: number | null | undefined) => {
   if (!unixSecs) return 'Never';
   const date = new Date(unixSecs * 1000);
   return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    type=\
-                    value={noteTags} 
+};
