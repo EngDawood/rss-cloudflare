@@ -2,7 +2,7 @@ import { env, createExecutionContext, waitOnExecutionContext, SELF } from 'cloud
 import { describe, it, expect } from 'vitest';
 import worker from '../src';
 
-const expectedNotFound = '{"error":"Not found","usage":{"username":"/instagram?u=username","hashtag":"/instagram?h=hashtag","location":"/instagram?l=location_id","params":"media_type=all|video|picture|multiple, direct_links=true|false"}}';
+const expectedNotFound = '{"error":"Not found","usage":{"username":"/instagram?u=username","hashtag":"/instagram?h=hashtag","location":"/instagram?l=location_id","params":"media_type=all|video|picture|multiple, direct_links=true|false","mcp":"/mcp"}}';
 
 describe('RSS Bridge worker', () => {
 	it('responds with Not found for unknown routes (unit style)', async () => {
