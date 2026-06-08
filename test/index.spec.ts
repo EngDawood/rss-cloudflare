@@ -1,6 +1,6 @@
 import { env, createExecutionContext, waitOnExecutionContext, SELF } from 'cloudflare:test';
 import { describe, it, expect } from 'vitest';
-import worker from '../src';
+import worker from '../workers';
 
 const expectedNotFound = '{"error":"Not found","usage":{"username":"/instagram?u=username","hashtag":"/instagram?h=hashtag","location":"/instagram?l=location_id","params":"media_type=all|video|picture|multiple, direct_links=true|false","mcp":"/mcp"}}';
 
