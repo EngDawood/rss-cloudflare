@@ -190,3 +190,4 @@ scripts/restore_app.py
 /app/dist/
 /app/dist-ssr/
 /app/node_modules/
+.antigravity\plans\*
