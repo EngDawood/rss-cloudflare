@@ -1,8 +1,8 @@
 # Gemini CLI Project Notes: RSS-Bridge Bot
 
-This document outlines the core architecture and workflow of the RSS-Bridge Telegram Bot, specifically detailing how it fetches, enriches, and sends media (like TikToks) to Telegram.
+This document outlines the core architecture, data flows, queue system, AI features, and APIs of the RSS-Bridge Telegram Bot.
 
-## Bot Architecture & Data Flow
+## Core Architecture & Data Flow
 
 The bot operates on a two-step "Fetch & Enrich" model to handle social media feeds. This architecture is identical for both background channel updates (`/sub` cron jobs) and manual user tests (`/test` command).
 
@@ -15,7 +15,7 @@ The bot does not communicate directly with the target platform (e.g., TikTok, In
 4. **Data Extraction:** At this stage, the bot extracts the caption text, timestamp, and the link to the original post.
    - **HTML Entity Decoding:** A dedicated `decodeHtmlEntities` function ensures characters like `&quot;`, `&amp;`, and `&#39;` render cleanly in Telegram.
 
-### 2. Step 2: "Enrichment" (Getting the Video)
+### 2. Step 2: "Enrichment" (Getting the Video / Media)
 Because the RSS-Bridge feed lacks high-quality media files, the bot runs an enrichment process (`enrichFeedItems` in `src/utils/media-enrichment.ts`).
 
 1. **Trigger:** If the post links to a supported platform (like TikTok) and lacks native video media, the enrichment process starts.
@@ -25,8 +25,8 @@ Because the RSS-Bridge feed lacks high-quality media files, the bot runs an enri
    - It aggressively filters out "proxy" URLs (like `tiktokio.com/api/...`) which cause `530 Origin DNS Error` on Cloudflare Workers.
    - It uses `decodeTiktokDirectUrl` to extract direct CDN links.
 
-### 3. Step 3: Sending to Telegram
-With the text and high-quality media, the bot dispatches the content.
+### 3. Step 3: Queue & Delivery
+With the text and high-quality media, the bot schedules and dispatches the content.
 
 1. **Formatting:** Captions are built in `src/utils/telegram-format.ts` based on `FormatSettings`.
    - **Extended Customization:** Support for enabling/disabling hashtags, removing TikTok view counts, and adding custom headers, footers, and hashtags.
@@ -38,9 +38,32 @@ With the text and high-quality media, the bot dispatches the content.
 3. **Fallback Mechanisms:**
    - If the file exceeds the 50MB limit, or if all downloads fail, it sends a fallback message with the thumbnail and original link.
 
-## Key Sub-Systems
+---
 
-* **Source Parsing (`parseSourceRef`):** Improved to support explicit prefixes (`-i`, `-t`, `-rss`) and smart URL detection for Instagram and TikTok profiles.
-* **Format Settings:** Managed via `src/services/telegram-bot/helpers/format-settings.ts`, allowing per-channel customization of appearance.
-* **Cron Jobs (`src/cron/check-feeds.ts`):** Periodically checks for new posts, using KV storage to track sent items and avoid duplicates.
-* **Media Enrichment:** Centralized logic for bypassing platform restrictions and retrieving high-quality assets.
+## High-Signal Sub-Systems
+
+### 1. Two-Tier Cloudflare Queue System
+To decouple cron triggers from actual Telegram dispatching, the bot utilizes a two-tier Cloudflare Queue configuration:
+* **Tier 1 (FEED_FETCH_QUEUE):** `processFetchTask` in `src/queue-handler.ts` fetches and deduplicates feeds via the KV sent set (`telegram:sent:{channelId}:{sourceId}`), runs media enrichment (TikTok, Telegraph), generates AI summaries, and queues tasks to Tier 2 (up to 5 items).
+* **Tier 2 (TELEGRAM_SEND_QUEUE):** `processSendTask` formats the `FeedItem`, dispatches it via grammY, handles 429 rate-limiting dynamically (re-throwing for Cloudflare Queue retry), and performs fallback/skipped post handling.
+
+### 2. AI Summarization & Edge Gateway
+The bot leverages Cloudflare AI Gateway to generate concise Arabic summaries for posts:
+* **Configuration Levels:** Global default (in D1 config table), channel overrides, and source-level overrides (in D1 `channel_ai_settings` table).
+* **Dynamic Model Routing:** Selects the appropriate model based on context, supporting presets (Gemini 1.5/2.0 Flash, NVIDIA Llama 3.1 70B Nemotron, Groq Llama, Mistral Large, Kimi K2.6) and custom model strings.
+* **Interactive AI Setup & Testing:** Under `/ai`, admins can view status, toggle options, edit prompts/models, and click `🧪 Test AI` to fetch any RSS feed and preview summaries in DM.
+* **Output Format:** For Telegraph items, the summary replaces the body entirely; for standard items, the summary is italicized and prepended to the post body.
+
+### 3. Action API & Chat Agent
+Programmatic endpoints and chat agent capabilities are available for local or external dashboards:
+* **Administrative Action API (`POST /api/action`):** Handles feed registration/removal, browsing, setting configs, manual postings, note management, and logs. Secured with `MCP_AUTH_TOKEN`.
+* **Chat Agent (`POST /api/chat`):** Invokes `runChatAgent` (`src/services/chat-agent.ts`) which acts as an OpenAI-compatible agent equipped with read-only database tools to answer admin queries and save memory notes to D1.
+
+### 4. Folo Webhook Publisher
+* Receives payloads on `POST /folo` (authenticated via `FOLO_WEBHOOK_SECRET` token check).
+* Maps incoming webhook feed articles to standardized `FeedItem` objects.
+* Dispatches formatted articles to all channels registered in the `folo:channels` KV store.
+
+### 5. Interactive Bot Commands & Testing Flow
+* **Interactive ForceReply `/test` Flow:** When `/test` is run without arguments, the bot sets the admin state to `testing_source` and prompts for inputs (source type/URL and optional count) via `ForceReply`. The input is verified and executed, allowing cancellation via `/cancel`.
+* **Source Parsing (`parseSourceRef`):** Standardizes parsing of Instagram handles, TikTok IDs, and RSS URLs, resolving prefixes and platform detection.

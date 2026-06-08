@@ -34,11 +34,9 @@ If you intend to call multiple tools and there are no dependencies between the t
 
 ## Project Overview
 
-Instagram RSS Bridge is a Cloudflare Worker with two main features:
+RSS Bridge is a Cloudflare Worker with two main features:
 1. **RSS Endpoint** — Converts Instagram profiles, hashtags, and RSS feeds to RSS 2.0 XML
 2. **Telegram Bot** — Admin bot for managing channel subscriptions and auto-posting from feeds via cron
-
-Inspired by [RSS-Bridge's InstagramBridge](https://github.com/RSS-Bridge/rss-bridge/blob/master/bridges/InstagramBridge.php) and [RSS-to-Telegram-Bot](https://github.com/Rongronggg9/RSS-to-Telegram-Bot).
 
 ## Commands
 
