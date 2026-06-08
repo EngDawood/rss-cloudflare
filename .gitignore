@@ -183,3 +183,5 @@ mirror-scrapers-archive.ts
 reports/*
 posts/*
 docs\superpowers/*
+opencode.json
+scripts/restore_app.py
