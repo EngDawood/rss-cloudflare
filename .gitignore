@@ -183,3 +183,11 @@ mirror-scrapers-archive.ts
 reports/*
 posts/*
 docs\superpowers/*
+opencode.json
+scripts/restore_app.py
+
+# Frontend build & local files
+/app/dist/
+/app/dist-ssr/
+/app/node_modules/
+.antigravity/plans/*

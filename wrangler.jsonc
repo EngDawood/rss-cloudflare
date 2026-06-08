@@ -1,7 +1,7 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "rss-bridge",
-	"main": "src/index.ts",
+	"main": "workers/index.ts",
 	"compatibility_date": "2026-02-10",
 	"workers_dev": true,
 
@@ -75,6 +75,10 @@
 			"custom_domain": true
 		}
 	],
+	"assets": {
+		"directory": "./app/dist",
+		"binding": "ASSETS"
+	},
 	// Cron trigger: check feeds every 5 minutes
 	"triggers": {
 		"crons": [

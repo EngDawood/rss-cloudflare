@@ -355,7 +355,14 @@ async function handleTestAiSummary(
 		if (p) prompt = p;
 	}
 
-	const summary = await summarizeItem(item, env, model || undefined, prompt || undefined);
+	let summary: string | null = null;
+	try {
+		summary = await summarizeItem(item, env, model || undefined, prompt || undefined);
+	} catch (err: any) {
+		await ctx.api.editMessageText(chatId, statusMsg.message_id, `❌ AI Error: ${err.message}`);
+		return;
+	}
+
 	if (!summary) {
 		await ctx.api.editMessageText(chatId, statusMsg.message_id, '❌ AI returned no summary. Check gateway token and model settings.');
 		return;
