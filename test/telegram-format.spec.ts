@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { formatFeedItem, resolveFormatSettings } from '../src/utils/telegram-format';
-import type { FeedItem } from '../src/types/feed';
+import { formatFeedItem, resolveFormatSettings } from '../workers/utils/telegram-format';
+import type { FeedItem } from '../workers/types/feed';
 
 describe('telegram-format', () => {
 	const mockItem: FeedItem = {

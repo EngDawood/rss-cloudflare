@@ -1,5 +1,5 @@
-import { fetchFeed } from '../src/services/feed-fetcher';
-import { enrichFeedItems } from '../src/utils/media-enrichment';
+import { fetchFeed } from '../workers/services/feed-fetcher';
+import { enrichFeedItems } from '../workers/utils/media-enrichment';
 
 async function runTest() {
 	const telegraphToken = '73892895643335b70d94379a48b3973d690deeb20d510d69bd5ad5646dd3';
