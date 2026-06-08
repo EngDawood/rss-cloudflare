@@ -4,7 +4,7 @@ import { updateItemSummary, resolveAiModel, resolveAiPrompt } from '../db/d1';
 const GATEWAY_URL =
 	'https://gateway.ai.cloudflare.com/v1/c53938b50ea00b247dcd72dd2e9eada3/rss-summarizer/compat/chat/completions';
 
-const DEFAULT_MODEL = 'nvidia/llama-3.1-nemotron-70b-instruct';
+const DEFAULT_DYNAMIC_ROUTE = 'dynamic/summarize';
 
 const SYSTEM_PROMPT =
 	'أنت مساعد متخصص في تلخيص الأخبار والمقالات. ' +
@@ -12,20 +12,54 @@ const SYSTEM_PROMPT =
 	'بغض النظر عن لغة النص الأصلي. ' +
 	'أخرج الملخص فقط دون أي عناوين أو مقدمات.';
 
-/**
- * Generate an Arabic summary of a feed item via the Cloudflare AI Gateway
- * universal endpoint (/compat/chat/completions).
- * Returns null silently on any error — never throws.
- */
+function normalizeGatewayModel(model: string): string {
+	if (
+		model.startsWith('workers-ai/') ||
+		model.startsWith('openai/') ||
+		model.startsWith('google-ai-studio/') ||
+		model.startsWith('google-vertex-ai/') ||
+		model.startsWith('anthropic/') ||
+		model.startsWith('groq/') ||
+		model.startsWith('cohere/') ||
+		model.startsWith('perplexity/') ||
+		model.startsWith('deepseek/')
+	) {
+		return model;
+	}
+
+	if (model.startsWith('google/gemini-') || model.startsWith('gemini-')) {
+		const name = model.replace(/^google\//, '');
+		return `google-ai-studio/${name}`;
+	}
+
+	if (
+		model.startsWith('@cf/') ||
+		model.startsWith('nvidia/') ||
+		model.startsWith('meta/') ||
+		model.startsWith('qwen/') ||
+		model.startsWith('microsoft/') ||
+		model.startsWith('google/gemma')
+	) {
+		const cfModel = model.startsWith('@cf/') ? model : `@cf/${model}`;
+		return `workers-ai/${cfModel}`;
+	}
+
+	return model;
+}
+
 export async function summarizeItem(
 	item: FeedItem,
 	env: Env,
 	model?: string,
 	systemPrompt: string = SYSTEM_PROMPT,
+	feedId?: string,
 ): Promise<string | null> {
-	if (!item.text || item.text.trim().length < 50) return null;
+	if (!item.text || item.text.trim().length < 50) {
+		throw new Error('Article text is too short to summarize (must be at least 50 characters).');
+	}
 
-	const resolvedModel = model || env.DEFAULT_AI_MODEL || DEFAULT_MODEL;
+	// Use user-configured model if explicitly provided; otherwise use the gateway dynamic route
+	const resolvedModel = model ? normalizeGatewayModel(model) : DEFAULT_DYNAMIC_ROUTE;
 
 	try {
 		const response = await fetch(GATEWAY_URL, {
@@ -33,6 +67,12 @@ export async function summarizeItem(
 			headers: {
 				'Content-Type': 'application/json',
 				'cf-aig-authorization': `Bearer ${env.AI_GATEWAY_TOKEN}`,
+				'cf-aig-cache-ttl': '3600', // Enable edge caching for 1 hour
+				'cf-aig-metadata': JSON.stringify({
+					purpose: 'summarize',
+					feedId: feedId || 'none',
+					itemId: item.id || 'none',
+				}),
 			},
 			body: JSON.stringify({
 				model: resolvedModel,
@@ -46,8 +86,8 @@ export async function summarizeItem(
 		});
 
 		if (!response.ok) {
-			console.error('[AI] Gateway returned', response.status, await response.text());
-			return null;
+			const errText = await response.text();
+			throw new Error(`AI Gateway returned ${response.status}: ${errText}`);
 		}
 
 		const data = (await response.json()) as {
@@ -55,10 +95,13 @@ export async function summarizeItem(
 		};
 
 		const summary = data.choices?.[0]?.message?.content?.trim();
-		return summary || null;
-	} catch (err) {
+		if (!summary) {
+			throw new Error('AI Gateway returned an empty summary response.');
+		}
+		return summary;
+	} catch (err: any) {
 		console.error('[AI] Summarization failed for item', item.id, ':', err);
-		return null;
+		throw err;
 	}
 }
 
@@ -76,7 +119,7 @@ export async function maybeEnrichSummary(
 	sourceId?: string,
 ): Promise<void> {
 	if (item.summary) return; // already cached in D1
-	let model = env.DEFAULT_AI_MODEL || DEFAULT_MODEL;
+	let model: string | undefined = undefined;
 	let prompt = SYSTEM_PROMPT;
 	if (channelId) {
 		const [resolvedModel, resolvedPrompt] = await Promise.all([
@@ -86,8 +129,12 @@ export async function maybeEnrichSummary(
 		if (resolvedModel) model = resolvedModel;
 		if (resolvedPrompt) prompt = resolvedPrompt;
 	}
-	const summary = await summarizeItem(item, env, model, prompt);
-	if (!summary) return;
-	item.summary = summary;
-	await updateItemSummary(db, feedId, item.id, summary);
+	try {
+		const summary = await summarizeItem(item, env, model, prompt, feedId);
+		if (!summary) return;
+		item.summary = summary;
+		await updateItemSummary(db, feedId, item.id, summary);
+	} catch (err) {
+		console.error('[AI] maybeEnrichSummary failed:', err);
+	}
 }

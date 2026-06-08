@@ -360,11 +360,12 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				const globalModel = await getConfig(db, 'ai_model') || undefined;
 				const globalPrompt = await getConfig(db, 'ai_prompt') || undefined;
 
-				const summary = await summarizeItem(item, c.env, globalModel, globalPrompt);
+				const summary = await summarizeItem(item, c.env, globalModel, globalPrompt, row.feed_id);
 				if (summary) {
 					await updateItemSummary(db, row.feed_id, row.id, summary);
+					return c.json({ data: { summary } });
 				}
-				return c.json({ data: { summary } });
+				return c.json({ error: 'AI summarization failed. Check that your AI_GATEWAY_TOKEN secret is configured and you have active internet connection.' }, 500);
 			}
 
 			default:

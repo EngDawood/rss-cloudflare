@@ -6,8 +6,7 @@ import {
 const GATEWAY_URL =
 	'https://gateway.ai.cloudflare.com/v1/c53938b50ea00b247dcd72dd2e9eada3/rss-summarizer/compat/chat/completions';
 
-// Choose a fast, tool-capable model for chat
-const CHAT_MODEL = 'google/gemini-2.0-flash';
+const DEFAULT_DYNAMIC_CHAT_ROUTE = 'dynamic/chat';
 
 const AGENT_SYSTEM_PROMPT =
 	`You are the official RSS & MCP Chat Agent. You have access to the local RSS reader database ` +
@@ -122,6 +121,41 @@ const AGENT_TOOLS = [
 	}
 ];
 
+function normalizeGatewayModel(model: string): string {
+	if (
+		model.startsWith('workers-ai/') ||
+		model.startsWith('openai/') ||
+		model.startsWith('google-ai-studio/') ||
+		model.startsWith('google-vertex-ai/') ||
+		model.startsWith('anthropic/') ||
+		model.startsWith('groq/') ||
+		model.startsWith('cohere/') ||
+		model.startsWith('perplexity/') ||
+		model.startsWith('deepseek/')
+	) {
+		return model;
+	}
+
+	if (model.startsWith('google/gemini-') || model.startsWith('gemini-')) {
+		const name = model.replace(/^google\//, '');
+		return `google-ai-studio/${name}`;
+	}
+
+	if (
+		model.startsWith('@cf/') ||
+		model.startsWith('nvidia/') ||
+		model.startsWith('meta/') ||
+		model.startsWith('qwen/') ||
+		model.startsWith('microsoft/') ||
+		model.startsWith('google/gemma')
+	) {
+		const cfModel = model.startsWith('@cf/') ? model : `@cf/${model}`;
+		return `workers-ai/${cfModel}`;
+	}
+
+	return model;
+}
+
 export async function runChatAgent(
 	history: Array<{ role: 'user' | 'assistant'; content: string }>,
 	env: Env,
@@ -129,8 +163,8 @@ export async function runChatAgent(
 	const db = env.DB;
 	const toolsCalled: string[] = [];
 
-	// Resolve model: D1 config override -> env chat model -> env default model -> hardcoded fallback
-	const resolvedModel = await getConfig(db, 'ai_model') || env.CHAT_AI_MODEL || env.DEFAULT_AI_MODEL || CHAT_MODEL;
+	const configuredModel = await getConfig(db, 'ai_model');
+	const resolvedModel = configuredModel ? normalizeGatewayModel(configuredModel) : DEFAULT_DYNAMIC_CHAT_ROUTE;
 
 	// Build messages array
 	const messages: any[] = [
@@ -151,7 +185,11 @@ export async function runChatAgent(
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
-				'cf-aig-authorization': `Bearer ${env.AI_GATEWAY_TOKEN}`
+				'cf-aig-authorization': `Bearer ${env.AI_GATEWAY_TOKEN}`,
+				'cf-aig-metadata': JSON.stringify({
+					purpose: 'chat',
+					adminId: env.ADMIN_TELEGRAM_ID || 'none',
+				}),
 			},
 			body: JSON.stringify({
 				model: resolvedModel,
