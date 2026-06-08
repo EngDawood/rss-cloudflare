@@ -39,8 +39,21 @@ app.on(['GET', 'POST', 'DELETE'], ['/mcp', '/mcp/*'], async (c) => {
 	return RSSReaderMCP.serve('/mcp', { binding: 'RSSReaderMCP' }).fetch(c.req.raw, c.env, c.executionCtx as any);
 });
 
-app.notFound((c) =>
-	c.json(
+app.notFound(async (c) => {
+	// 1. Try to serve from static assets
+	if (c.env.ASSETS) {
+		try {
+			const res = await c.env.ASSETS.fetch(c.req.raw);
+			if (res.status !== 404) {
+				return res;
+			}
+		} catch (e) {
+			console.error('Error serving from ASSETS:', e);
+		}
+	}
+
+	// 2. Fallback to API 404 JSON response
+	return c.json(
 		{
 			error: 'Not found',
 			usage: {
@@ -52,8 +65,8 @@ app.notFound((c) =>
 			},
 		},
 		404
-	)
-);
+	);
+});
 
 app.onError((err, c) => {
 	console.error('Unhandled error:', err);
