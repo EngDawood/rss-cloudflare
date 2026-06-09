@@ -11,7 +11,7 @@ import {
 } from './constants';
 import { enrichFeedItems } from './utils/media-enrichment';
 import { formatFeedItem, resolveFormatSettings } from './utils/telegram-format';
-import { resolveAiSummaryEnabled } from './db/d1';
+import { resolveAiSummaryEnabled, insertPostLog } from './db/d1';
 import { maybeEnrichSummary } from './services/ai-summarizer';
 import { sendFallbackMessage } from './services/telegram-bot/helpers/fallback-sender';
 import { FileTooLargeError } from './services/telegram-bot/handlers/send-media';
@@ -68,7 +68,35 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 
 	// Send oldest first
 	newItems.reverse();
-	const postsToQueue = newItems.slice(0, 5);
+	const candidatePosts = newItems.slice(0, 5);
+	const postsToQueue: typeof result.items = [];
+
+	// Check D1 post_log to skip items already posted manually (e.g. via MCP/Dashboard) to the same channel
+	for (const item of candidatePosts) {
+		try {
+			const alreadySent = await env.DB.prepare(
+				"SELECT 1 FROM post_log WHERE chat_id = ? AND item_id = ? AND status = 'ok' LIMIT 1"
+			).bind(channelId, item.id).first();
+
+			if (alreadySent) {
+				console.log(`[Queue] Item ${item.id} was already posted to ${channelId} (found in post_log). Skipping.`);
+				// Proactively add to KV cache so we don't query D1 for this item again
+				sentSet.add(item.link);
+				continue;
+			}
+			postsToQueue.push(item);
+		} catch (dbErr) {
+			console.error(`[Queue] Failed to query post_log for item ${item.id}:`, dbErr);
+			postsToQueue.push(item); // Fallback to sending to prevent stuck items
+		}
+	}
+
+	if (postsToQueue.length === 0) {
+		// Save the updated KV sent set (including the skipped links) so subsequent runs filter them in KV
+		const updated = [...sentLinks, ...candidatePosts.map(i => i.link)].slice(-200);
+		await setCached(env.CACHE, sentKey, JSON.stringify(updated), TELEGRAM_CONFIG_TTL);
+		return;
+	}
 
 	// Resolve format settings
 	const settings = resolveFormatSettings(config.defaultFormat, source.format);
@@ -101,8 +129,8 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 		});
 	}
 
-	// Update KV immediately to prevent duplicate queuing if fetcher retries
-	const updated = [...sentLinks, ...postsToQueue.map(i => i.link)].slice(-50);
+	// Update KV immediately to prevent duplicate queuing if fetcher retries (include all candidates)
+	const updated = [...sentLinks, ...candidatePosts.map(i => i.link)].slice(-200);
 	await setCached(env.CACHE, sentKey, JSON.stringify(updated), TELEGRAM_CONFIG_TTL);
 }
 
@@ -112,10 +140,28 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 async function processSendTask(task: SendTask, bot: Bot, env: Env): Promise<void> {
 	const { channelId, item, settings } = task;
 	const chatId = parseInt(channelId, 10);
+	let messageType = 'text';
+	let captionPreview = '';
 
 	try {
 		const message = formatFeedItem(item, settings);
+		messageType = message.type;
+		captionPreview = message.caption.slice(0, 200);
+
 		await sendMediaToChannel(bot, chatId, message, settings);
+
+		// Log success to D1 post_log
+		try {
+			await insertPostLog(env.DB, {
+				itemId: item.id,
+				chatId: channelId,
+				messageType,
+				captionPreview,
+				status: 'ok',
+			});
+		} catch (logErr) {
+			console.error('[Queue Log] Failed to insert success log:', logErr);
+		}
 	} catch (err) {
 		// Handle 429 Rate Limiting specifically
 		if (err instanceof GrammyError && err.error_code === 429) {
@@ -128,11 +174,38 @@ async function processSendTask(task: SendTask, bot: Bot, env: Env): Promise<void
 		// Handle fallback logic
 		if (settings.fallbackMode === 'skip') {
 			await addFailedPost(env.CACHE, channelId, item);
+			
+			// Log skip/error to D1 post_log
+			try {
+				await insertPostLog(env.DB, {
+					itemId: item.id,
+					chatId: channelId,
+					messageType,
+					captionPreview: item.title.slice(0, 200),
+					status: 'error',
+					error: err instanceof Error ? err.message : String(err),
+				});
+			} catch (logErr) {
+				console.error('[Queue Log] Failed to insert error log (skipped):', logErr);
+			}
 			return; // Ack since we chose to skip
 		}
 
 		try {
 			await sendFallbackMessage(bot, chatId, item, settings.fallbackMode as 'thumbnail_link' | 'thumbnail', err);
+			
+			// Log successful fallback
+			try {
+				await insertPostLog(env.DB, {
+					itemId: item.id,
+					chatId: channelId,
+					messageType: 'photo', // fallback message is a photo (thumbnail)
+					captionPreview: `[Fallback] ${item.title.slice(0, 180)}`,
+					status: 'ok',
+				});
+			} catch (logErr) {
+				console.error('[Queue Log] Failed to insert fallback success log:', logErr);
+			}
 		} catch (fallbackErr) {
 			console.error(`[Queue] Fallback also failed for ${item.id}:`, fallbackErr);
 			await addFailedPost(env.CACHE, channelId, item);
@@ -140,6 +213,20 @@ async function processSendTask(task: SendTask, bot: Bot, env: Env): Promise<void
 			// If it's a 429, retry later
 			if (fallbackErr instanceof GrammyError && fallbackErr.error_code === 429) {
 				throw fallbackErr;
+			}
+			
+			// Log permanent failure to D1 post_log
+			try {
+				await insertPostLog(env.DB, {
+					itemId: item.id,
+					chatId: channelId,
+					messageType,
+					captionPreview,
+					status: 'error',
+					error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+				});
+			} catch (logErr) {
+				console.error('[Queue Log] Failed to insert permanent failure log:', logErr);
 			}
 			
 			// For other errors (bot blocked, etc.), we ack to stop retrying but log the permanent failure

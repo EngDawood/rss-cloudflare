@@ -120,8 +120,8 @@ export async function fetchAndSendLatest(
 				const parsed = sentRaw ? JSON.parse(sentRaw) : [];
 				if (Array.isArray(parsed)) sentLinks = parsed;
 			} catch { /* start fresh */ }
-			const newLinks = result.items.slice(0, count).map(item => item.link);
-			const merged = [...sentLinks, ...newLinks].slice(-50);
+			const newLinks = result.items.map(item => item.link);
+			const merged = [...sentLinks, ...newLinks].slice(-200);
 			await setCached(env.CACHE, sentKey, JSON.stringify(merged), TELEGRAM_CONFIG_TTL);
 		} catch (err) {
 			console.error(`Failed to save sent links for ${source.value}:`, err);
