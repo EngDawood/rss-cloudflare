@@ -23,6 +23,8 @@ const MODEL_OPTIONS: Record<string, { label: string; value: string }> = {
 	gq8b:  { label: 'Groq Llama 8B',     value: 'groq/llama-3.1-8b-instant' },
 	msLg:  { label: 'Mistral Large',      value: 'mistral/mistral-large-latest' },
 	kimi:  { label: 'Kimi K2.6',          value: 'moonshotai/kimi-k2.6' },
+	cr70b: { label: 'Cerebras Llama 70B', value: 'cerebras/llama3.1-70b' },
+	orLma: { label: 'OpenRouter Llama 70B', value: 'openrouter/meta-llama/llama-3.3-70b-instruct' },
 };
 
 const DEFAULT_MODEL_VALUE = 'nvidia/llama-3.1-nemotron-70b-instruct';
@@ -70,13 +72,24 @@ function buildModelKeyboard(
 	backCb: string,
 ): InlineKeyboard {
 	const keyboard = new InlineKeyboard();
-	const rows: Array<[string, string][]> = [[], []];
+	const rows: Array<[string, string][]> = [];
 	const entries = Object.entries(MODEL_OPTIONS);
+	
+	let currentRow: [string, string][] = [];
 	for (let i = 0; i < entries.length; i++) {
 		const [key, { label, value }] = entries[i];
 		const mark = currentModel === value ? '●' : '○';
-		rows[i < 3 ? 0 : 1].push([`${mark} ${label}`, `${setCbPrefix}:${key}`]);
+		currentRow.push([`${mark} ${label}`, `${setCbPrefix}:${key}`]);
+		
+		if (currentRow.length === 2) { // 2 items per row looks balanced on mobile screen
+			rows.push(currentRow);
+			currentRow = [];
+		}
 	}
+	if (currentRow.length > 0) {
+		rows.push(currentRow);
+	}
+
 	for (const row of rows) {
 		if (row.length) {
 			for (const [label, cb] of row) keyboard.text(label, cb);
