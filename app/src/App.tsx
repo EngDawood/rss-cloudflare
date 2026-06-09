@@ -87,7 +87,9 @@ export default function App() {
   const [testFeedItems, setTestFeedItems] = useState<any[]>([]);
   const [isTestingFeed, setIsTestingFeed] = useState(false);
 
-  const [readerFeedFilter, setReaderFeedFilter] = useState<string>('');
+  const [readerFeedFilter, setReaderFeedFilter] = useState<string[]>([]);
+  const [isFeedDropdownOpen, setIsFeedDropdownOpen] = useState(false);
+  const feedDropdownRef = useRef<HTMLDivElement>(null);
   const [readerStatusFilter, setReaderStatusFilter] = useState<'unread' | 'read' | 'all'>('unread');
   const [readerSearch, setReaderSearch] = useState('');
 
@@ -206,6 +208,19 @@ export default function App() {
     }
   }, [chatMessages, isChatting]);
 
+  // Click-away listener for feed selection dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (feedDropdownRef.current && !feedDropdownRef.current.contains(event.target as Node)) {
+        setIsFeedDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Tab activation triggers
   useEffect(() => {
     if (isAuthenticated) {
@@ -307,18 +322,19 @@ export default function App() {
     let res;
     const unreadOnly = readerStatusFilter === 'unread';
     const readOnly = readerStatusFilter === 'read';
+    const activeFeeds = readerFeedFilter.length > 0 ? readerFeedFilter : undefined;
 
     if (readerSearch.trim()) {
       res = await callApi('search_items', { 
         query: readerSearch, 
-        feedId: readerFeedFilter || undefined, 
+        feedId: activeFeeds, 
         unreadOnly, 
         readOnly, 
         limit: 30 
       });
     } else {
       res = await callApi('list_new_items', { 
-        feedId: readerFeedFilter || undefined, 
+        feedId: activeFeeds, 
         unreadOnly, 
         readOnly, 
         limit: 30 
@@ -344,7 +360,7 @@ export default function App() {
       }, 300);
       return () => clearTimeout(delayDebounce);
     }
-  }, [readerSearch, readerFeedFilter, readerStatusFilter]);
+  }, [readerSearch, readerFeedFilter.join(','), readerStatusFilter]);
 
   const handleMarkRead = async (id: string) => {
     const res = await callApi('mark_read', { ids: [id] });
@@ -941,7 +957,7 @@ export default function App() {
                             <motion.button 
                               whileTap={{ scale: 0.95 }}
                               onClick={() => {
-                                setReaderFeedFilter(feed.id);
+                                setReaderFeedFilter([feed.id]);
                                 setActiveTab('reader');
                               }}
                               className="px-3 py-1.5 text-xs font-bold rounded-xl bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer flex items-center gap-1"
@@ -1032,28 +1048,92 @@ export default function App() {
                     </p>
                   </div>
                   <div className="flex gap-3 items-center flex-wrap">
-                    {/* Feed Dropdown Selector */}
-                    <div className="relative flex items-center">
-                      <select
-                        value={readerFeedFilter}
-                        onChange={e => setReaderFeedFilter(e.target.value)}
-                        className="appearance-none bg-bg-input border border-border-base rounded-xl pl-3.5 pr-8 py-2.5 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer max-w-[160px] truncate"
+                    {/* Feed Dropdown Multi-Selector */}
+                    <div className="relative flex items-center" ref={feedDropdownRef}>
+                      <button
+                        onClick={() => setIsFeedDropdownOpen(!isFeedDropdownOpen)}
+                        className="flex items-center justify-between gap-2 bg-bg-input border border-border-base rounded-xl pl-3.5 pr-8 py-2.5 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer min-w-[140px] max-w-[180px] text-left truncate relative transition hover:border-text-muted"
                       >
-                        <option value="">All Feeds</option>
-                        {feeds.map(f => (
-                          <option key={f.id} value={f.id}>{f.title}</option>
-                        ))}
-                      </select>
-                      {readerFeedFilter && (
+                        <span className="truncate">
+                          {readerFeedFilter.length === 0
+                            ? 'All Feeds'
+                            : readerFeedFilter.length === 1
+                              ? feeds.find(f => f.id === readerFeedFilter[0])?.title || '1 Feed Selected'
+                              : `${readerFeedFilter.length} Feeds`}
+                        </span>
+                        <Funnel size={12} className="absolute right-3 text-text-muted pointer-events-none" />
+                      </button>
+                      
+                      {readerFeedFilter.length > 0 && (
                         <button 
-                          onClick={() => setReaderFeedFilter('')} 
-                          className="absolute right-7 top-3 text-text-muted hover:text-text-base cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReaderFeedFilter([]);
+                          }} 
+                          className="absolute right-7 z-10 text-text-muted hover:text-text-base cursor-pointer p-1"
                           title="Clear filter"
                         >
                           <X size={10} />
                         </button>
                       )}
-                      <Funnel size={12} className="absolute right-3 text-text-muted pointer-events-none" />
+
+                      {/* Dropdown Checklist Popover */}
+                      <AnimatePresence>
+                        {isFeedDropdownOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 5 }}
+                            transition={{ duration: 0.15 }}
+                            className="absolute top-full mt-1.5 left-0 z-50 liquid-glass rounded-xl p-2 w-[240px] max-h-[280px] overflow-y-auto flex flex-col gap-1 shadow-2xl"
+                          >
+                            <div className="flex justify-between items-center px-1.5 py-1 border-b border-border-base mb-1">
+                              <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Filter Feeds</span>
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={() => setReaderFeedFilter(feeds.map(f => f.id))}
+                                  className="text-[9px] font-bold text-accent-primary hover:underline cursor-pointer"
+                                >
+                                  Select All
+                                </button>
+                                <button 
+                                  onClick={() => setReaderFeedFilter([])}
+                                  className="text-[9px] font-bold text-text-muted hover:underline cursor-pointer"
+                                >
+                                  Clear
+                                </button>
+                              </div>
+                            </div>
+                            {feeds.length === 0 ? (
+                              <div className="p-4 text-center text-xs text-text-muted">No feeds available</div>
+                            ) : (
+                              feeds.map(f => {
+                                const isChecked = readerFeedFilter.includes(f.id);
+                                return (
+                                  <label 
+                                    key={f.id} 
+                                    className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-xs text-text-base select-none transition min-w-0"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        if (isChecked) {
+                                          setReaderFeedFilter(prev => prev.filter(id => id !== f.id));
+                                        } else {
+                                          setReaderFeedFilter(prev => [...prev, f.id]);
+                                        }
+                                      }}
+                                      className="rounded border-border-base text-accent-primary focus:ring-accent-primary bg-bg-input cursor-pointer"
+                                    />
+                                    <span className="truncate flex-grow" title={f.title}>{f.title}</span>
+                                  </label>
+                                );
+                              })
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
 
                     {/* Status Filter Button Group */}

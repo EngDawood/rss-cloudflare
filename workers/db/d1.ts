@@ -162,7 +162,7 @@ export async function upsertItems(db: D1Database, feedId: string, items: FeedIte
 export async function listNewItems(
 	db: D1Database,
 	opts?: {
-		feedId?: string;
+		feedId?: string | string[];
 		limit?: number;
 		query?: string;
 		since?: number;
@@ -181,7 +181,18 @@ export async function listNewItems(
 	}
 	const params: unknown[] = [];
 
-	if (feedId) { where.push('i.feed_id = ?'); params.push(feedId); }
+	if (feedId) {
+		if (Array.isArray(feedId)) {
+			if (feedId.length > 0) {
+				const placeholders = feedId.map(() => '?').join(',');
+				where.push(`i.feed_id IN (${placeholders})`);
+				params.push(...feedId);
+			}
+		} else {
+			where.push('i.feed_id = ?');
+			params.push(feedId);
+		}
+	}
 	if (query) {
 		const like = `%${query}%`;
 		where.push('(i.title LIKE ? OR i.text LIKE ? OR i.author LIKE ?)');
@@ -208,7 +219,7 @@ export async function searchItems(
 	db: D1Database,
 	opts: {
 		query: string;
-		feedId?: string;
+		feedId?: string | string[];
 		since?: number;
 		unreadOnly?: boolean;
 		readOnly?: boolean;
@@ -227,7 +238,18 @@ export async function searchItems(
 	} else if (unreadOnly) {
 		where.push('i.read = 0');
 	}
-	if (feedId) { where.push('i.feed_id = ?'); params.push(feedId); }
+	if (feedId) {
+		if (Array.isArray(feedId)) {
+			if (feedId.length > 0) {
+				const placeholders = feedId.map(() => '?').join(',');
+				where.push(`i.feed_id IN (${placeholders})`);
+				params.push(...feedId);
+			}
+		} else {
+			where.push('i.feed_id = ?');
+			params.push(feedId);
+		}
+	}
 	if (since) { where.push('i.timestamp >= ?'); params.push(since); }
 
 	params.push(limit);
