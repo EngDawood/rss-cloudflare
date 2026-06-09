@@ -353,6 +353,7 @@ export default function App() {
     setIsLoading(false);
   };
 
+  const readerFeedFilterStr = readerFeedFilter.join(',');
   useEffect(() => {
     if (isAuthenticated && activeTab === 'reader') {
       const delayDebounce = setTimeout(() => {
@@ -360,7 +361,8 @@ export default function App() {
       }, 300);
       return () => clearTimeout(delayDebounce);
     }
-  }, [readerSearch, readerFeedFilter.join(','), readerStatusFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readerSearch, readerFeedFilterStr, readerStatusFilter]);
 
   const handleMarkRead = async (id: string) => {
     const res = await callApi('mark_read', { ids: [id] });
@@ -1139,13 +1141,13 @@ export default function App() {
                     {/* Status Filter Button Group */}
                     <div className="flex bg-bg-input border border-border-base rounded-xl p-1 gap-0.5">
                       {[
-                        { id: 'unread', label: 'Unread' },
-                        { id: 'read', label: 'Read' },
-                        { id: 'all', label: 'All' }
+                        { id: 'unread' as const, label: 'Unread' },
+                        { id: 'read' as const, label: 'Read' },
+                        { id: 'all' as const, label: 'All' }
                       ].map(status => (
                         <button
                           key={status.id}
-                          onClick={() => setReaderStatusFilter(status.id as any)}
+                          onClick={() => setReaderStatusFilter(status.id)}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-200 cursor-pointer ${
                             readerStatusFilter === status.id
                               ? 'bg-accent-primary text-white shadow-sm'
