@@ -122,6 +122,20 @@ export function parseXML(xml: string, overrideFeedTitle?: string): FetchResult {
 	return { items, feedTitle, feedLink, errors: [] };
 }
 
+function generateFallbackId(title: string, text: string): string {
+	const content = (title + text).trim();
+	if (!content) {
+		return 'fallback-' + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+	}
+	let hash = 0;
+	for (let i = 0; i < content.length; i++) {
+		const char = content.charCodeAt(i);
+		hash = (hash << 5) - hash + char;
+		hash |= 0;
+	}
+	return 'hash-' + Math.abs(hash).toString(36);
+}
+
 function parseAtomEntry(
 	entry: cheerio.Cheerio<any>,
 	$: cheerio.CheerioAPI,
@@ -156,7 +170,7 @@ function parseAtomEntry(
 	});
 
 	return {
-		id: id || link || '',
+		id: id || link || generateFallbackId(title, text),
 		link,
 		title,
 		text,
@@ -204,7 +218,7 @@ function parseRSSItem(
 	});
 
 	return {
-		id: guid || link || '',
+		id: guid || link || generateFallbackId(title, text),
 		link,
 		title,
 		text,

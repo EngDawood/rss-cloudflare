@@ -130,6 +130,21 @@ export async function handleFoloWebhook(c: Context<HonoEnv>): Promise<Response> 
 		return c.json({ ok: true, sent: 0, note: 'No channels subscribed' });
 	}
 
+	const guid = payload.entry.guid || payload.entry.id;
+	if (guid) {
+		const cacheKey = `folo:sent:${guid}`;
+		try {
+			const isSent = await env.CACHE.get(cacheKey);
+			if (isSent) {
+				console.log(`[folo] Duplicate payload detected for guid: ${guid}. Skipping.`);
+				return c.json({ ok: true, sent: 0, note: 'Duplicate payload skipped' });
+			}
+			await env.CACHE.put(cacheKey, '1', { expirationTtl: 86400 }); // Cache for 24 hours
+		} catch (err) {
+			console.warn('[folo] Error checking/updating KV deduplication cache:', err);
+		}
+	}
+
 	const feedItem = payloadToFeedItem(payload);
 	const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
 	let sent = 0;

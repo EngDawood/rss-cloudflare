@@ -121,6 +121,21 @@ export async function maybeEnrichSummary(
 	sourceId?: string,
 ): Promise<void> {
 	if (item.summary) return; // already cached in D1
+
+	// Try to get summary from KV cache first (especially for bot feeds not stored in D1 items table)
+	const cacheKey = `ai_summary:${item.id}`;
+	if (env.CACHE) {
+		try {
+			const cached = await env.CACHE.get(cacheKey);
+			if (cached) {
+				item.summary = cached;
+				return;
+			}
+		} catch (err) {
+			console.warn(`[AI Cache] Error reading from KV for ${item.id}:`, err);
+		}
+	}
+
 	let model: string | undefined = undefined;
 	let prompt = SYSTEM_PROMPT;
 	if (channelId) {
@@ -135,7 +150,18 @@ export async function maybeEnrichSummary(
 		const summary = await summarizeItem(item, env, model, prompt, feedId);
 		if (!summary) return;
 		item.summary = summary;
+		
+		// Attempt to update D1 (if item row exists)
 		await updateItemSummary(db, feedId, item.id, summary);
+
+		// Store in KV cache (covers both D1 and Telegram bot feeds)
+		if (env.CACHE) {
+			try {
+				await env.CACHE.put(cacheKey, summary, { expirationTtl: 30 * 86400 }); // Cache for 30 days
+			} catch (err) {
+				console.warn(`[AI Cache] Error writing to KV for ${item.id}:`, err);
+			}
+		}
 	} catch (err) {
 		console.error('[AI] maybeEnrichSummary failed:', err);
 	}

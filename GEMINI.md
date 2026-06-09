@@ -32,6 +32,7 @@ The bot does not communicate directly with the target platform (e.g., TikTok, In
 3.  **Parsing:** The bot downloads the XML feed and parses it using Cheerio ([workers/services/feed-fetcher.ts](file:///c:/Users/LEGION/codebase/rss-bridge/workers/services/feed-fetcher.ts)).
 4.  **Data Extraction:** At this stage, the bot extracts the caption text, timestamp, and the link to the original post.
     *   **HTML Entity Decoding:** A dedicated `decodeHtmlEntities` function ensures characters like `&quot;`, `&amp;`, and `&#39;` render cleanly in Telegram.
+    *   **Deterministic Fallback IDs:** If an item lacks both a unique identifier (`guid`/`id`) and a `link` tag, a deterministic hash of the title and text content is generated as a fallback ID to prevent D1 database primary key collisions.
 
 ### 2. Step 2: "Enrichment" (Getting the Video / Media)
 Because the RSS-Bridge feed lacks high-quality media files, the bot runs an enrichment process (`enrichFeedItems` in [workers/utils/media-enrichment.ts](file:///c:/Users/LEGION/codebase/rss-bridge/workers/utils/media-enrichment.ts)).
@@ -54,6 +55,7 @@ With the text and high-quality media, the bot schedules and dispatches the conte
     *   The bot first attempts to send via URL.
     *   **Download Fallback:** If Telegram fails to fetch the URL, the bot automatically downloads the file and uploads it as an `InputFile`.
     *   **Error Handling:** Distinguishes between terminal errors (e.g., bot blocked) and transient fetch errors.
+    *   **Initial Subscription Seeding:** When a channel is first subscribed to a source, the setup flow seeds *all* existing links in the feed into the KV sent-item set to prevent cron job flooding, while only sending the sliced latest count (default 1).
 3.  **Fallback Mechanisms:**
     *   If the file exceeds the 50 MB limit, or if all downloads fail, it sends a fallback message with the thumbnail and original link. The fallback mode is configurable per-channel (`thumbnail_link`, `thumbnail`, or `skip`).
 
@@ -63,8 +65,10 @@ With the text and high-quality media, the bot schedules and dispatches the conte
 
 ### 1. Two-Tier Cloudflare Queue System
 To decouple cron triggers from actual Telegram dispatching, the bot utilizes a two-tier Cloudflare Queue configuration:
-*   **Tier 1 (`FEED_FETCH_QUEUE`, batch 10):** `processFetchTask` in [workers/queue-handler.ts](file:///c:/Users/LEGION/codebase/rss-bridge/workers/queue-handler.ts) fetches and deduplicates feeds via the KV sent set (`telegram:sent:{channelId}:{sourceId}`), runs media enrichment (TikTok, Telegraph), generates AI summaries, and queues tasks to Tier 2 (up to 5 items).
-*   **Tier 2 (`TELEGRAM_SEND_QUEUE`, batch 1):** `processSendTask` formats the `FeedItem`, dispatches it via grammY, handles 429 rate-limiting dynamically (re-throwing for Cloudflare Queue retry), and performs fallback/skipped post handling.
+*   **Tier 1 (`FEED_FETCH_QUEUE`, batch 10):** `processFetchTask` in [workers/queue-handler.ts](file:///c:/Users/LEGION/codebase/rss-bridge/workers/queue-handler.ts) fetches and deduplicates feeds:
+    *   **Deduplication checks:** First filters against the KV sent set (`telegram:sent:{channelId}:{sourceId}`) which maintains a sliding window of 200 items. Then queries the D1 `post_log` table to skip items that were manually sent to the same channel (e.g., via the admin Dashboard or MCP). If skipped, it proactively appends the link to the local sent set to update KV immediately.
+    *   **Media and AI enrichment:** Runs media enrichment (TikTok, Telegraph), resolves AI summarization overrides, and queues up to 5 items to Tier 2.
+*   **Tier 2 (`TELEGRAM_SEND_QUEUE`, batch 1):** `processSendTask` formats the `FeedItem`, dispatches it via grammY, handles 429 rate-limiting dynamically (re-throwing for Cloudflare Queue retry), and performs fallback/skipped post handling. Additionally, it logs all successful, skipped, or failed sends to the D1 `post_log` table for auditing.
 
 ### 2. Cron Handlers
 The `scheduled` handler in `workers/index.ts` runs two tasks on every cron tick (`*/5 * * * *`):
@@ -77,6 +81,7 @@ The bot leverages Cloudflare AI Gateway to generate concise Arabic summaries for
 *   **Dynamic Model Routing:** Selects the appropriate model based on context, supporting presets (Gemini 1.5/2.0 Flash, NVIDIA Llama 3.1 70B Nemotron, Groq Llama, Mistral Large, Kimi K2.6) and custom model strings. Default model controlled by `DEFAULT_AI_MODEL` var; chat model by `CHAT_AI_MODEL` var.
 *   **Interactive AI Setup & Testing:** Under `/ai`, admins can view status, toggle options, edit prompts/models, and click `🧪 Test AI` to fetch any RSS feed and preview summaries in DM.
 *   **Output Format:** For Telegraph items, the summary replaces the body entirely; for standard items, the summary is italicized and prepended to the post body.
+*   **KV Caching Barrier:** To resolve the loophole where summaries for bot-only subscription feeds could not be cached in the D1 `items` table (since bot items are not saved to D1), generated summaries are cached in KV (`ai_summary:{itemId}`) for 30 days to avoid redundant AI Gateway billing.
 
 ### 4. Action API & Chat Agent
 Programmatic endpoints and chat agent capabilities are available for local or external dashboards:
@@ -86,6 +91,7 @@ Programmatic endpoints and chat agent capabilities are available for local or ex
 ### 5. Folo Webhook Publisher
 *   Receives payloads on `POST /folo` (authenticated via `FOLO_WEBHOOK_SECRET` token check).
 *   Maps incoming webhook feed articles to standardized `FeedItem` objects.
+*   **Deduplication:** Incorporates a KV-based deduplication guard (`folo:sent:{guid}`) with a 24-hour TTL to prevent duplicate posts when webhook payloads are retried.
 *   Dispatches formatted articles to all channels registered in the `folo:channels` KV store.
 
 ### 6. MCP Server

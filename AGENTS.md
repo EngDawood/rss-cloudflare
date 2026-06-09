@@ -27,7 +27,7 @@ A Cloudflare Worker that provides an RSS bridge for Instagram, a powerful Telegr
 - The `scheduled` handler runs `checkAllFeeds` **and** `refreshSavedFeeds` on each cron tick.
 
 ### Cloudflare Platform Features
-- **KV** (`CACHE`): Caching (feed XML 15 min, user IDs 24 h, channel configs, Telegram state, sent-item deduplication sets).
+- **KV** (`CACHE`): Caching (feed XML 15 min, user IDs 24 h, channel configs, Telegram state, sent-item deduplication sets with a 200-item sliding window, AI summaries for 30 days, and Folo webhook deduplication logs for 24 hours).
 - **D1** (`DB`, database `rss-reader`): Persistent data — feeds, items, chats, notes, post_log, config, AI settings.
 - **Durable Objects** (`RSSReaderMCP`): SQLite-backed MCP agent served at `/mcp`.
 - **Queues**: Two-tier system — `FEED_FETCH_QUEUE` (batch 10) and `TELEGRAM_SEND_QUEUE` (batch 1).
@@ -80,11 +80,16 @@ A Cloudflare Worker that provides an RSS bridge for Instagram, a powerful Telegr
 - Supported platforms: Instagram, TikTok, and any generic RSS/Atom URL.
 - The bot uses Cheerio to parse Atom XML, targeting `<entry>` elements and `<link rel="enclosure" href="...">` attributes.
 - Instagram-specific fallback chain: RSS-Bridge → GraphQL → Embed scraping.
+- Items lacking both unique identifiers (`guid`/`id`) and `link` tags are assigned a deterministic content-hash fallback ID in `feed-fetcher.ts` to prevent SQLite constraint failures.
+- When subscribing a Telegram channel to a new feed, the bot pre-seeds all current feed links into the KV cache so only the single latest post is sent, preventing flooding on subsequent cron runs.
+- The queue fetch task (`processFetchTask`) queries the D1 `post_log` table to ensure manual posts sent via MCP or the dashboard UI are not re-sent by the bot's background cron. Detected duplicates are skipped and proactively added to the KV sent cache.
+- The queue send task (`processSendTask`) logs successful, skipped, or failed message deliveries back to the D1 `post_log` table to ensure complete logging history for bot activity.
 
 ### AI Summarization (as of `0003_ai_summary.sql`)
 - The `items` table has an `ai_summary` column.
 - The `feeds` table has an `ai_summary` setting (default `'inherit'`).
 - There is a `channel_ai_settings` table for per-channel and per-source overrides.
+- Summaries generated for bot subscriptions are cached in KV (`ai_summary:{itemId}`) for 30 days to resolve the D1 zero-row update loophole (since bot items are not saved to the `items` table).
 
 ### MCP Server
 - Serves at `/mcp` via a SQLite-backed Durable Object (`RSSReaderMCP`).
