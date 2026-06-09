@@ -4,7 +4,8 @@ import {
   Clock, Terminal, ChatCircleText, Plus, 
   Trash, Gear, 
   ArrowsClockwise, Sparkle, Note, MagnifyingGlass,
-  ArrowRight, ShieldCheck, ShieldWarning, CaretLeft, CaretRight, X, Sun, Moon
+  ArrowRight, ShieldCheck, ShieldWarning, CaretLeft, CaretRight, X, Sun, Moon,
+  Eye, Funnel
 } from '@phosphor-icons/react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -86,7 +87,10 @@ export default function App() {
   const [testFeedItems, setTestFeedItems] = useState<any[]>([]);
   const [isTestingFeed, setIsTestingFeed] = useState(false);
 
-  const readerFeedFilter = '';
+  const [readerFeedFilter, setReaderFeedFilter] = useState<string[]>([]);
+  const [isFeedDropdownOpen, setIsFeedDropdownOpen] = useState(false);
+  const feedDropdownRef = useRef<HTMLDivElement>(null);
+  const [readerStatusFilter, setReaderStatusFilter] = useState<'unread' | 'read' | 'all'>('unread');
   const [readerSearch, setReaderSearch] = useState('');
 
   const [isAddChatOpen, setIsAddChatOpen] = useState(false);
@@ -204,11 +208,27 @@ export default function App() {
     }
   }, [chatMessages, isChatting]);
 
+  // Click-away listener for feed selection dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (feedDropdownRef.current && !feedDropdownRef.current.contains(event.target as Node)) {
+        setIsFeedDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Tab activation triggers
   useEffect(() => {
     if (isAuthenticated) {
       if (activeTab === 'feeds') loadFeeds();
-      else if (activeTab === 'reader') loadReaderItems();
+      else if (activeTab === 'reader') {
+        loadReaderItems();
+        loadFeeds(true); // Load silently to populate filters dropdown
+      }
       else if (activeTab === 'telegram') loadChats();
       else if (activeTab === 'sandbox') loadSandboxOptions();
       else if (activeTab === 'logs') loadLogsAndConfig();
@@ -216,11 +236,11 @@ export default function App() {
   }, [activeTab, isAuthenticated]);
 
   // ── Feeds Tab ─────────────────────────────────────────────────────────────
-  const loadFeeds = async () => {
-    setIsLoading(true);
+  const loadFeeds = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     const res = await callApi('list_feeds');
     if (!res.error) setFeeds(res.data || []);
-    setIsLoading(false);
+    if (!silent) setIsLoading(false);
   };
 
   const handleAddFeed = async (e: React.FormEvent) => {
@@ -300,10 +320,25 @@ export default function App() {
   const loadReaderItems = async () => {
     setIsLoading(true);
     let res;
+    const unreadOnly = readerStatusFilter === 'unread';
+    const readOnly = readerStatusFilter === 'read';
+    const activeFeeds = readerFeedFilter.length > 0 ? readerFeedFilter : undefined;
+
     if (readerSearch.trim()) {
-      res = await callApi('search_items', { query: readerSearch, feedId: readerFeedFilter || undefined, unreadOnly: true, limit: 30 });
+      res = await callApi('search_items', { 
+        query: readerSearch, 
+        feedId: activeFeeds, 
+        unreadOnly, 
+        readOnly, 
+        limit: 30 
+      });
     } else {
-      res = await callApi('list_new_items', { feedId: readerFeedFilter || undefined, limit: 30 });
+      res = await callApi('list_new_items', { 
+        feedId: activeFeeds, 
+        unreadOnly, 
+        readOnly, 
+        limit: 30 
+      });
     }
     if (!res.error) {
       const items = res.data || [];
@@ -318,6 +353,7 @@ export default function App() {
     setIsLoading(false);
   };
 
+  const readerFeedFilterStr = readerFeedFilter.join(',');
   useEffect(() => {
     if (isAuthenticated && activeTab === 'reader') {
       const delayDebounce = setTimeout(() => {
@@ -325,17 +361,46 @@ export default function App() {
       }, 300);
       return () => clearTimeout(delayDebounce);
     }
-  }, [readerSearch, readerFeedFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readerSearch, readerFeedFilterStr, readerStatusFilter]);
 
   const handleMarkRead = async (id: string) => {
     const res = await callApi('mark_read', { ids: [id] });
     if (res.error) {
       showToast(res.error, 'error');
     } else {
-      setUnreadItems(prev => prev.filter(item => item.id !== id));
-      if (selectedReaderItem?.id === id) {
-        setSelectedReaderItem(null);
+      if (readerStatusFilter === 'unread') {
+        setUnreadItems(prev => prev.filter(item => item.id !== id));
+        if (selectedReaderItem?.id === id) {
+          setSelectedReaderItem(null);
+        }
+      } else {
+        setUnreadItems(prev => prev.map(item => item.id === id ? { ...item, read: 1 } : item));
+        if (selectedReaderItem?.id === id) {
+          setSelectedReaderItem((prev: any) => prev ? { ...prev, read: 1 } : null);
+        }
       }
+      showToast('Item marked as read.', 'success');
+    }
+  };
+
+  const handleMarkUnread = async (id: string) => {
+    const res = await callApi('mark_unread', { ids: [id] });
+    if (res.error) {
+      showToast(res.error, 'error');
+    } else {
+      if (readerStatusFilter === 'read') {
+        setUnreadItems(prev => prev.filter(item => item.id !== id));
+        if (selectedReaderItem?.id === id) {
+          setSelectedReaderItem(null);
+        }
+      } else {
+        setUnreadItems(prev => prev.map(item => item.id === id ? { ...item, read: 0 } : item));
+        if (selectedReaderItem?.id === id) {
+          setSelectedReaderItem((prev: any) => prev ? { ...prev, read: 0 } : null);
+        }
+      }
+      showToast('Item marked as unread.', 'success');
     }
   };
 
@@ -893,6 +958,18 @@ export default function App() {
                             </motion.button>
                             <motion.button 
                               whileTap={{ scale: 0.95 }}
+                              onClick={() => {
+                                setReaderFeedFilter([feed.id]);
+                                setActiveTab('reader');
+                              }}
+                              className="px-3 py-1.5 text-xs font-bold rounded-xl bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer flex items-center gap-1"
+                              title="View Items"
+                            >
+                              <Eye size={13} />
+                              <span>View</span>
+                            </motion.button>
+                            <motion.button 
+                              whileTap={{ scale: 0.95 }}
                               onClick={() => handleToggleFeed(feed.id, feed.enabled)}
                               className="px-3 py-1.5 text-xs font-bold rounded-xl bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer"
                             >
@@ -968,9 +1045,120 @@ export default function App() {
                 <div className="flex justify-between items-center gap-4 flex-wrap">
                   <div>
                     <h2 className="font-bold text-2xl tracking-tight text-text-base">Feed Reader</h2>
-                    <p className="text-xs text-text-muted mt-1">Review unread synced items and trigger dispatch actions</p>
+                    <p className="text-xs text-text-muted mt-1">
+                      Review {readerStatusFilter === 'unread' ? 'unread' : readerStatusFilter === 'read' ? 'read' : 'all'} synced items and trigger dispatch actions
+                    </p>
                   </div>
-                  <div className="flex gap-3 items-center">
+                  <div className="flex gap-3 items-center flex-wrap">
+                    {/* Feed Dropdown Multi-Selector */}
+                    <div className="relative flex items-center" ref={feedDropdownRef}>
+                      <button
+                        onClick={() => setIsFeedDropdownOpen(!isFeedDropdownOpen)}
+                        className="flex items-center justify-between gap-2 bg-bg-input border border-border-base rounded-xl pl-3.5 pr-8 py-2.5 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer min-w-[140px] max-w-[180px] text-left truncate relative transition hover:border-text-muted"
+                      >
+                        <span className="truncate">
+                          {readerFeedFilter.length === 0
+                            ? 'All Feeds'
+                            : readerFeedFilter.length === 1
+                              ? feeds.find(f => f.id === readerFeedFilter[0])?.title || '1 Feed Selected'
+                              : `${readerFeedFilter.length} Feeds`}
+                        </span>
+                        <Funnel size={12} className="absolute right-3 text-text-muted pointer-events-none" />
+                      </button>
+                      
+                      {readerFeedFilter.length > 0 && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReaderFeedFilter([]);
+                          }} 
+                          className="absolute right-7 z-10 text-text-muted hover:text-text-base cursor-pointer p-1"
+                          title="Clear filter"
+                        >
+                          <X size={10} />
+                        </button>
+                      )}
+
+                      {/* Dropdown Checklist Popover */}
+                      <AnimatePresence>
+                        {isFeedDropdownOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 5 }}
+                            transition={{ duration: 0.15 }}
+                            className="absolute top-full mt-1.5 left-0 z-50 liquid-glass rounded-xl p-2 w-[240px] max-h-[280px] overflow-y-auto flex flex-col gap-1 shadow-2xl"
+                          >
+                            <div className="flex justify-between items-center px-1.5 py-1 border-b border-border-base mb-1">
+                              <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Filter Feeds</span>
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={() => setReaderFeedFilter(feeds.map(f => f.id))}
+                                  className="text-[9px] font-bold text-accent-primary hover:underline cursor-pointer"
+                                >
+                                  Select All
+                                </button>
+                                <button 
+                                  onClick={() => setReaderFeedFilter([])}
+                                  className="text-[9px] font-bold text-text-muted hover:underline cursor-pointer"
+                                >
+                                  Clear
+                                </button>
+                              </div>
+                            </div>
+                            {feeds.length === 0 ? (
+                              <div className="p-4 text-center text-xs text-text-muted">No feeds available</div>
+                            ) : (
+                              feeds.map(f => {
+                                const isChecked = readerFeedFilter.includes(f.id);
+                                return (
+                                  <label 
+                                    key={f.id} 
+                                    className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-xs text-text-base select-none transition min-w-0"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        if (isChecked) {
+                                          setReaderFeedFilter(prev => prev.filter(id => id !== f.id));
+                                        } else {
+                                          setReaderFeedFilter(prev => [...prev, f.id]);
+                                        }
+                                      }}
+                                      className="rounded border-border-base text-accent-primary focus:ring-accent-primary bg-bg-input cursor-pointer"
+                                    />
+                                    <span className="truncate flex-grow" title={f.title}>{f.title}</span>
+                                  </label>
+                                );
+                              })
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+
+                    {/* Status Filter Button Group */}
+                    <div className="flex bg-bg-input border border-border-base rounded-xl p-1 gap-0.5">
+                      {[
+                        { id: 'unread' as const, label: 'Unread' },
+                        { id: 'read' as const, label: 'Read' },
+                        { id: 'all' as const, label: 'All' }
+                      ].map(status => (
+                        <button
+                          key={status.id}
+                          onClick={() => setReaderStatusFilter(status.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-200 cursor-pointer ${
+                            readerStatusFilter === status.id
+                              ? 'bg-accent-primary text-white shadow-sm'
+                              : 'text-text-muted hover:text-text-base'
+                          }`}
+                        >
+                          {status.label}
+                        </button>
+                      ))}
+                    </div>
+
                     <motion.button 
                       whileTap={{ scale: 0.98 }}
                       onClick={async () => {
@@ -982,13 +1170,17 @@ export default function App() {
                       <ArrowsClockwise size={14} className={isLoading ? "animate-spin" : ""} />
                       <span>Sync Feeds</span>
                     </motion.button>
-                    <motion.button 
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleBulkMarkRead} 
-                      className="px-4 py-2.5 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer"
-                    >
-                      Mark All Read
-                    </motion.button>
+
+                    {readerStatusFilter === 'unread' && (
+                      <motion.button 
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleBulkMarkRead} 
+                        className="px-4 py-2.5 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer"
+                      >
+                        Mark All Read
+                      </motion.button>
+                    )}
+
                     <div className="relative">
                       <input 
                         type="text" 
@@ -1010,7 +1202,11 @@ export default function App() {
                     <div className="overflow-y-auto flex-grow flex flex-col gap-3 pr-2 scrollbar-thin">
                       {unreadItems.length === 0 ? (
                         <div className="p-12 text-center border border-dashed border-border-base rounded-2xl bg-bg-card/25 text-sm text-text-muted">
-                          Your unread queue is empty.
+                          {readerStatusFilter === 'unread' 
+                            ? 'Your unread queue is empty.' 
+                            : readerStatusFilter === 'read' 
+                              ? 'No read items found.' 
+                              : 'No items found.'}
                         </div>
                       ) : (
                         unreadItems.map(item => {
@@ -1023,13 +1219,20 @@ export default function App() {
                               className={`p-4 text-left rounded-xl transition duration-200 border cursor-pointer flex flex-col gap-2 ${
                                 isActive 
                                   ? 'bg-accent-primary/10 border-accent-primary/40 shadow-lg text-text-base' 
-                                  : 'bg-bg-card/20 border-border-base hover:bg-bg-card/50 text-text-muted'
+                                  : item.read === 1
+                                    ? 'bg-bg-card/10 border-border-base/40 opacity-60 hover:opacity-100 hover:bg-bg-card/30 text-text-muted'
+                                    : 'bg-bg-card/20 border-border-base hover:bg-bg-card/50 text-text-muted'
                               }`}
                             >
                               <div className="flex justify-between items-start gap-3 w-full">
-                                <span className="text-[10px] uppercase font-bold tracking-wide text-accent-primary px-2 py-0.5 rounded bg-accent-primary/5 border border-accent-primary/15 truncate">
-                                  {item.feed_title}
-                                </span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  {item.read === 0 && (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-accent-primary flex-shrink-0" title="Unread" />
+                                  )}
+                                  <span className="text-[10px] uppercase font-bold tracking-wide text-accent-primary px-2 py-0.5 rounded bg-accent-primary/5 border border-accent-primary/15 truncate">
+                                    {item.feed_title}
+                                  </span>
+                                </div>
                                 <span className="text-[10px] text-text-muted font-mono whitespace-nowrap self-center">
                                   {formatDate(item.timestamp).split(' ')[1]}
                                 </span>
@@ -1142,13 +1345,23 @@ export default function App() {
                               >
                                 Post to Telegram
                               </motion.button>
-                              <motion.button 
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => handleMarkRead(selectedReaderItem.id)}
-                                className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer"
-                              >
-                                Mark Read
-                              </motion.button>
+                              {selectedReaderItem.read === 1 ? (
+                                <motion.button 
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => handleMarkUnread(selectedReaderItem.id)}
+                                  className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer"
+                                >
+                                  Mark Unread
+                                </motion.button>
+                              ) : (
+                                <motion.button 
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => handleMarkRead(selectedReaderItem.id)}
+                                  className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer"
+                                >
+                                  Mark Read
+                                </motion.button>
+                              )}
                             </div>
                             
                             <a 

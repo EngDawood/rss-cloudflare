@@ -44,6 +44,7 @@ export interface DbItemCompact {
 	timestamp: number;
 	feed_title: string;
 	feed_url: string;
+	read: number;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -161,19 +162,37 @@ export async function upsertItems(db: D1Database, feedId: string, items: FeedIte
 export async function listNewItems(
 	db: D1Database,
 	opts?: {
-		feedId?: string;
+		feedId?: string | string[];
 		limit?: number;
 		query?: string;
 		since?: number;
+		unreadOnly?: boolean;
+		readOnly?: boolean;
 	},
 ): Promise<DbItemCompact[]> {
 	type Raw = Omit<DbItemCompact, 'topics'> & { topics: string };
-	const { feedId, limit = 50, query, since } = opts ?? {};
+	const { feedId, limit = 50, query, since, unreadOnly = true, readOnly = false } = opts ?? {};
 
-	const where: string[] = ['i.read = 0'];
+	const where: string[] = [];
+	if (readOnly) {
+		where.push('i.read = 1');
+	} else if (unreadOnly) {
+		where.push('i.read = 0');
+	}
 	const params: unknown[] = [];
 
-	if (feedId) { where.push('i.feed_id = ?'); params.push(feedId); }
+	if (feedId) {
+		if (Array.isArray(feedId)) {
+			if (feedId.length > 0) {
+				const placeholders = feedId.map(() => '?').join(',');
+				where.push(`i.feed_id IN (${placeholders})`);
+				params.push(...feedId);
+			}
+		} else {
+			where.push('i.feed_id = ?');
+			params.push(feedId);
+		}
+	}
 	if (query) {
 		const like = `%${query}%`;
 		where.push('(i.title LIKE ? OR i.text LIKE ? OR i.author LIKE ?)');
@@ -183,10 +202,10 @@ export async function listNewItems(
 
 	params.push(limit);
 	const sql = `
-		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp,
+		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp, i.read,
 		       f.title as feed_title, f.url as feed_url
 		FROM items i JOIN feeds f ON f.id = i.feed_id
-		WHERE ${where.join(' AND ')}
+		WHERE ${where.length ? where.join(' AND ') : '1=1'}
 		ORDER BY i.timestamp DESC LIMIT ?
 	`;
 	const result = await db.prepare(sql).bind(...params).all<Raw>();
@@ -200,26 +219,42 @@ export async function searchItems(
 	db: D1Database,
 	opts: {
 		query: string;
-		feedId?: string;
+		feedId?: string | string[];
 		since?: number;
 		unreadOnly?: boolean;
+		readOnly?: boolean;
 		limit?: number;
 	},
 ): Promise<DbItemCompact[]> {
 	type Raw = Omit<DbItemCompact, 'topics'> & { topics: string };
-	const { query, feedId, since, unreadOnly = false, limit = 50 } = opts;
+	const { query, feedId, since, unreadOnly = false, readOnly = false, limit = 50 } = opts;
 
 	const like = `%${query}%`;
 	const where: string[] = ['(i.title LIKE ? OR i.text LIKE ? OR i.author LIKE ?)'];
 	const params: unknown[] = [like, like, like];
 
-	if (unreadOnly) { where.push('i.read = 0'); }
-	if (feedId) { where.push('i.feed_id = ?'); params.push(feedId); }
+	if (readOnly) {
+		where.push('i.read = 1');
+	} else if (unreadOnly) {
+		where.push('i.read = 0');
+	}
+	if (feedId) {
+		if (Array.isArray(feedId)) {
+			if (feedId.length > 0) {
+				const placeholders = feedId.map(() => '?').join(',');
+				where.push(`i.feed_id IN (${placeholders})`);
+				params.push(...feedId);
+			}
+		} else {
+			where.push('i.feed_id = ?');
+			params.push(feedId);
+		}
+	}
 	if (since) { where.push('i.timestamp >= ?'); params.push(since); }
 
 	params.push(limit);
 	const sql = `
-		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp,
+		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp, i.read,
 		       f.title as feed_title, f.url as feed_url
 		FROM items i JOIN feeds f ON f.id = i.feed_id
 		WHERE ${where.join(' AND ')}
