@@ -4,7 +4,8 @@ import {
   Clock, Terminal, ChatCircleText, Plus, 
   Trash, Gear, 
   ArrowsClockwise, Sparkle, Note, MagnifyingGlass,
-  ArrowRight, ShieldCheck, ShieldWarning, CaretLeft, CaretRight, X, Sun, Moon
+  ArrowRight, ShieldCheck, ShieldWarning, CaretLeft, CaretRight, X, Sun, Moon,
+  Eye, Funnel
 } from '@phosphor-icons/react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -86,7 +87,8 @@ export default function App() {
   const [testFeedItems, setTestFeedItems] = useState<any[]>([]);
   const [isTestingFeed, setIsTestingFeed] = useState(false);
 
-  const readerFeedFilter = '';
+  const [readerFeedFilter, setReaderFeedFilter] = useState<string>('');
+  const [readerStatusFilter, setReaderStatusFilter] = useState<'unread' | 'read' | 'all'>('unread');
   const [readerSearch, setReaderSearch] = useState('');
 
   const [isAddChatOpen, setIsAddChatOpen] = useState(false);
@@ -208,7 +210,10 @@ export default function App() {
   useEffect(() => {
     if (isAuthenticated) {
       if (activeTab === 'feeds') loadFeeds();
-      else if (activeTab === 'reader') loadReaderItems();
+      else if (activeTab === 'reader') {
+        loadReaderItems();
+        loadFeeds(true); // Load silently to populate filters dropdown
+      }
       else if (activeTab === 'telegram') loadChats();
       else if (activeTab === 'sandbox') loadSandboxOptions();
       else if (activeTab === 'logs') loadLogsAndConfig();
@@ -216,11 +221,11 @@ export default function App() {
   }, [activeTab, isAuthenticated]);
 
   // ── Feeds Tab ─────────────────────────────────────────────────────────────
-  const loadFeeds = async () => {
-    setIsLoading(true);
+  const loadFeeds = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     const res = await callApi('list_feeds');
     if (!res.error) setFeeds(res.data || []);
-    setIsLoading(false);
+    if (!silent) setIsLoading(false);
   };
 
   const handleAddFeed = async (e: React.FormEvent) => {
@@ -300,10 +305,24 @@ export default function App() {
   const loadReaderItems = async () => {
     setIsLoading(true);
     let res;
+    const unreadOnly = readerStatusFilter === 'unread';
+    const readOnly = readerStatusFilter === 'read';
+
     if (readerSearch.trim()) {
-      res = await callApi('search_items', { query: readerSearch, feedId: readerFeedFilter || undefined, unreadOnly: true, limit: 30 });
+      res = await callApi('search_items', { 
+        query: readerSearch, 
+        feedId: readerFeedFilter || undefined, 
+        unreadOnly, 
+        readOnly, 
+        limit: 30 
+      });
     } else {
-      res = await callApi('list_new_items', { feedId: readerFeedFilter || undefined, limit: 30 });
+      res = await callApi('list_new_items', { 
+        feedId: readerFeedFilter || undefined, 
+        unreadOnly, 
+        readOnly, 
+        limit: 30 
+      });
     }
     if (!res.error) {
       const items = res.data || [];
@@ -325,17 +344,45 @@ export default function App() {
       }, 300);
       return () => clearTimeout(delayDebounce);
     }
-  }, [readerSearch, readerFeedFilter]);
+  }, [readerSearch, readerFeedFilter, readerStatusFilter]);
 
   const handleMarkRead = async (id: string) => {
     const res = await callApi('mark_read', { ids: [id] });
     if (res.error) {
       showToast(res.error, 'error');
     } else {
-      setUnreadItems(prev => prev.filter(item => item.id !== id));
-      if (selectedReaderItem?.id === id) {
-        setSelectedReaderItem(null);
+      if (readerStatusFilter === 'unread') {
+        setUnreadItems(prev => prev.filter(item => item.id !== id));
+        if (selectedReaderItem?.id === id) {
+          setSelectedReaderItem(null);
+        }
+      } else {
+        setUnreadItems(prev => prev.map(item => item.id === id ? { ...item, read: 1 } : item));
+        if (selectedReaderItem?.id === id) {
+          setSelectedReaderItem((prev: any) => prev ? { ...prev, read: 1 } : null);
+        }
       }
+      showToast('Item marked as read.', 'success');
+    }
+  };
+
+  const handleMarkUnread = async (id: string) => {
+    const res = await callApi('mark_unread', { ids: [id] });
+    if (res.error) {
+      showToast(res.error, 'error');
+    } else {
+      if (readerStatusFilter === 'read') {
+        setUnreadItems(prev => prev.filter(item => item.id !== id));
+        if (selectedReaderItem?.id === id) {
+          setSelectedReaderItem(null);
+        }
+      } else {
+        setUnreadItems(prev => prev.map(item => item.id === id ? { ...item, read: 0 } : item));
+        if (selectedReaderItem?.id === id) {
+          setSelectedReaderItem((prev: any) => prev ? { ...prev, read: 0 } : null);
+        }
+      }
+      showToast('Item marked as unread.', 'success');
     }
   };
 
@@ -893,6 +940,18 @@ export default function App() {
                             </motion.button>
                             <motion.button 
                               whileTap={{ scale: 0.95 }}
+                              onClick={() => {
+                                setReaderFeedFilter(feed.id);
+                                setActiveTab('reader');
+                              }}
+                              className="px-3 py-1.5 text-xs font-bold rounded-xl bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer flex items-center gap-1"
+                              title="View Items"
+                            >
+                              <Eye size={13} />
+                              <span>View</span>
+                            </motion.button>
+                            <motion.button 
+                              whileTap={{ scale: 0.95 }}
                               onClick={() => handleToggleFeed(feed.id, feed.enabled)}
                               className="px-3 py-1.5 text-xs font-bold rounded-xl bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer"
                             >
@@ -968,9 +1027,56 @@ export default function App() {
                 <div className="flex justify-between items-center gap-4 flex-wrap">
                   <div>
                     <h2 className="font-bold text-2xl tracking-tight text-text-base">Feed Reader</h2>
-                    <p className="text-xs text-text-muted mt-1">Review unread synced items and trigger dispatch actions</p>
+                    <p className="text-xs text-text-muted mt-1">
+                      Review {readerStatusFilter === 'unread' ? 'unread' : readerStatusFilter === 'read' ? 'read' : 'all'} synced items and trigger dispatch actions
+                    </p>
                   </div>
-                  <div className="flex gap-3 items-center">
+                  <div className="flex gap-3 items-center flex-wrap">
+                    {/* Feed Dropdown Selector */}
+                    <div className="relative flex items-center">
+                      <select
+                        value={readerFeedFilter}
+                        onChange={e => setReaderFeedFilter(e.target.value)}
+                        className="appearance-none bg-bg-input border border-border-base rounded-xl pl-3.5 pr-8 py-2.5 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer max-w-[160px] truncate"
+                      >
+                        <option value="">All Feeds</option>
+                        {feeds.map(f => (
+                          <option key={f.id} value={f.id}>{f.title}</option>
+                        ))}
+                      </select>
+                      {readerFeedFilter && (
+                        <button 
+                          onClick={() => setReaderFeedFilter('')} 
+                          className="absolute right-7 top-3 text-text-muted hover:text-text-base cursor-pointer"
+                          title="Clear filter"
+                        >
+                          <X size={10} />
+                        </button>
+                      )}
+                      <Funnel size={12} className="absolute right-3 text-text-muted pointer-events-none" />
+                    </div>
+
+                    {/* Status Filter Button Group */}
+                    <div className="flex bg-bg-input border border-border-base rounded-xl p-1 gap-0.5">
+                      {[
+                        { id: 'unread', label: 'Unread' },
+                        { id: 'read', label: 'Read' },
+                        { id: 'all', label: 'All' }
+                      ].map(status => (
+                        <button
+                          key={status.id}
+                          onClick={() => setReaderStatusFilter(status.id as any)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-200 cursor-pointer ${
+                            readerStatusFilter === status.id
+                              ? 'bg-accent-primary text-white shadow-sm'
+                              : 'text-text-muted hover:text-text-base'
+                          }`}
+                        >
+                          {status.label}
+                        </button>
+                      ))}
+                    </div>
+
                     <motion.button 
                       whileTap={{ scale: 0.98 }}
                       onClick={async () => {
@@ -982,13 +1088,17 @@ export default function App() {
                       <ArrowsClockwise size={14} className={isLoading ? "animate-spin" : ""} />
                       <span>Sync Feeds</span>
                     </motion.button>
-                    <motion.button 
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleBulkMarkRead} 
-                      className="px-4 py-2.5 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer"
-                    >
-                      Mark All Read
-                    </motion.button>
+
+                    {readerStatusFilter === 'unread' && (
+                      <motion.button 
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleBulkMarkRead} 
+                        className="px-4 py-2.5 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer"
+                      >
+                        Mark All Read
+                      </motion.button>
+                    )}
+
                     <div className="relative">
                       <input 
                         type="text" 
@@ -1010,7 +1120,11 @@ export default function App() {
                     <div className="overflow-y-auto flex-grow flex flex-col gap-3 pr-2 scrollbar-thin">
                       {unreadItems.length === 0 ? (
                         <div className="p-12 text-center border border-dashed border-border-base rounded-2xl bg-bg-card/25 text-sm text-text-muted">
-                          Your unread queue is empty.
+                          {readerStatusFilter === 'unread' 
+                            ? 'Your unread queue is empty.' 
+                            : readerStatusFilter === 'read' 
+                              ? 'No read items found.' 
+                              : 'No items found.'}
                         </div>
                       ) : (
                         unreadItems.map(item => {
@@ -1023,13 +1137,20 @@ export default function App() {
                               className={`p-4 text-left rounded-xl transition duration-200 border cursor-pointer flex flex-col gap-2 ${
                                 isActive 
                                   ? 'bg-accent-primary/10 border-accent-primary/40 shadow-lg text-text-base' 
-                                  : 'bg-bg-card/20 border-border-base hover:bg-bg-card/50 text-text-muted'
+                                  : item.read === 1
+                                    ? 'bg-bg-card/10 border-border-base/40 opacity-60 hover:opacity-100 hover:bg-bg-card/30 text-text-muted'
+                                    : 'bg-bg-card/20 border-border-base hover:bg-bg-card/50 text-text-muted'
                               }`}
                             >
                               <div className="flex justify-between items-start gap-3 w-full">
-                                <span className="text-[10px] uppercase font-bold tracking-wide text-accent-primary px-2 py-0.5 rounded bg-accent-primary/5 border border-accent-primary/15 truncate">
-                                  {item.feed_title}
-                                </span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  {item.read === 0 && (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-accent-primary flex-shrink-0" title="Unread" />
+                                  )}
+                                  <span className="text-[10px] uppercase font-bold tracking-wide text-accent-primary px-2 py-0.5 rounded bg-accent-primary/5 border border-accent-primary/15 truncate">
+                                    {item.feed_title}
+                                  </span>
+                                </div>
                                 <span className="text-[10px] text-text-muted font-mono whitespace-nowrap self-center">
                                   {formatDate(item.timestamp).split(' ')[1]}
                                 </span>
@@ -1142,13 +1263,23 @@ export default function App() {
                               >
                                 Post to Telegram
                               </motion.button>
-                              <motion.button 
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => handleMarkRead(selectedReaderItem.id)}
-                                className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer"
-                              >
-                                Mark Read
-                              </motion.button>
+                              {selectedReaderItem.read === 1 ? (
+                                <motion.button 
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => handleMarkUnread(selectedReaderItem.id)}
+                                  className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer"
+                                >
+                                  Mark Unread
+                                </motion.button>
+                              ) : (
+                                <motion.button 
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => handleMarkRead(selectedReaderItem.id)}
+                                  className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer"
+                                >
+                                  Mark Read
+                                </motion.button>
+                              )}
                             </div>
                             
                             <a 
