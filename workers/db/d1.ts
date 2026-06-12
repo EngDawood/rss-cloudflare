@@ -1,15 +1,19 @@
-import type { FeedItem, FeedItemMedia, FeedItemMediaType } from '../types/feed';
+import type { FeedItem, FeedItemMedia, FeedItemMediaType, FeedMediaFilter } from '../types/feed';
+import type { ChannelConfig, ChannelSource, SourceType, FormatSettings } from '../types/telegram';
 
 // ── D1 row shapes ────────────────────────────────────────────────────────────
 
 export interface DbFeed {
 	id: string;
-	url: string;
+	source_type: string;   // SourceType — 'rss_url' for legacy/RSS feeds
+	source_value: string;  // URL for rss_url; username for instagram_user; etc.
 	title: string;
 	enabled: number;
+	check_interval_minutes: number;
 	last_fetched_at: number | null;
 	created_at: number;
 	ai_summary: string;   // 'inherit' | 'enable' | 'disable'
+	url: string;          // back-compat alias of source_value (SELECT-aliased)
 }
 
 export interface DbFeedWithCounts extends DbFeed {
@@ -79,7 +83,7 @@ export function dbItemToFeedItem(row: DbItem, feedTitle: string, feedLink: strin
 
 export async function getFeeds(db: D1Database): Promise<DbFeedWithCounts[]> {
 	const result = await db.prepare(`
-		SELECT f.*,
+		SELECT f.*, f.source_value AS url,
 			COUNT(i.id) as total_count,
 			SUM(CASE WHEN i.read = 0 THEN 1 ELSE 0 END) as unread_count
 		FROM feeds f
@@ -91,20 +95,54 @@ export async function getFeeds(db: D1Database): Promise<DbFeedWithCounts[]> {
 }
 
 export async function getFeedById(db: D1Database, feedId: string): Promise<DbFeed | null> {
-	return db.prepare('SELECT * FROM feeds WHERE id = ?').bind(feedId).first<DbFeed>();
+	return db.prepare('SELECT *, source_value AS url FROM feeds WHERE id = ?').bind(feedId).first<DbFeed>();
 }
 
+/** Look up a feed by its (source_type, source_value) identity. */
+export async function getFeedBySource(
+	db: D1Database,
+	sourceType: SourceType,
+	sourceValue: string,
+): Promise<DbFeed | null> {
+	return db.prepare('SELECT *, source_value AS url FROM feeds WHERE source_type = ? AND source_value = ?')
+		.bind(sourceType, sourceValue).first<DbFeed>();
+}
+
+/** Back-compat: look up an `rss_url` feed by its URL. */
 export async function getFeedByUrl(db: D1Database, url: string): Promise<DbFeed | null> {
-	return db.prepare('SELECT * FROM feeds WHERE url = ?').bind(url).first<DbFeed>();
+	return getFeedBySource(db, 'rss_url', url);
 }
 
-export async function insertFeed(db: D1Database, url: string, title: string): Promise<DbFeed> {
+/**
+ * Insert a core feed identified by (source_type, source_value). When a feed
+ * with the same identity already exists, the existing row is reused
+ * (INSERT OR IGNORE) and returned — this is the de-duplication guarantee.
+ */
+export async function upsertFeedBySource(
+	db: D1Database,
+	opts: { sourceType: SourceType; sourceValue: string; title?: string; checkIntervalMinutes?: number },
+): Promise<DbFeed> {
+	const existing = await getFeedBySource(db, opts.sourceType, opts.sourceValue);
+	if (existing) return existing;
 	const id = genId();
 	const now = Math.floor(Date.now() / 1000);
+	const interval = opts.checkIntervalMinutes ?? 60;
 	await db.prepare(
-		'INSERT INTO feeds (id, url, title, enabled, created_at) VALUES (?, ?, ?, 1, ?)'
-	).bind(id, url, title, now).run();
-	return { id, url, title, enabled: 1, last_fetched_at: null, created_at: now, ai_summary: 'inherit' };
+		`INSERT OR IGNORE INTO feeds (id, source_type, source_value, title, enabled, check_interval_minutes, created_at)
+		 VALUES (?, ?, ?, ?, 1, ?, ?)`
+	).bind(id, opts.sourceType, opts.sourceValue, opts.title ?? '', interval, now).run();
+	// Re-read to resolve the winning row (handles concurrent inserts).
+	const row = await getFeedBySource(db, opts.sourceType, opts.sourceValue);
+	return row ?? {
+		id, source_type: opts.sourceType, source_value: opts.sourceValue, title: opts.title ?? '',
+		enabled: 1, check_interval_minutes: interval, last_fetched_at: null, created_at: now,
+		ai_summary: 'inherit', url: opts.sourceValue,
+	};
+}
+
+/** Back-compat: insert an `rss_url` feed from a URL. */
+export async function insertFeed(db: D1Database, url: string, title: string): Promise<DbFeed> {
+	return upsertFeedBySource(db, { sourceType: 'rss_url', sourceValue: url, title });
 }
 
 export async function removeFeed(db: D1Database, feedId: string): Promise<void> {
@@ -203,7 +241,7 @@ export async function listNewItems(
 	params.push(limit);
 	const sql = `
 		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp, i.read,
-		       f.title as feed_title, f.url as feed_url
+		       f.title as feed_title, f.source_value as feed_url
 		FROM items i JOIN feeds f ON f.id = i.feed_id
 		WHERE ${where.length ? where.join(' AND ') : '1=1'}
 		ORDER BY i.timestamp DESC LIMIT ?
@@ -255,7 +293,7 @@ export async function searchItems(
 	params.push(limit);
 	const sql = `
 		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp, i.read,
-		       f.title as feed_title, f.url as feed_url
+		       f.title as feed_title, f.source_value as feed_url
 		FROM items i JOIN feeds f ON f.id = i.feed_id
 		WHERE ${where.join(' AND ')}
 		ORDER BY i.timestamp DESC LIMIT ?
@@ -672,4 +710,304 @@ export async function recall(db: D1Database, limit = 50, since?: number): Promis
 		messageType: row.message_type,
 		status: row.status,
 	}));
+}
+
+// ── Core consumers: channels + subscriptions (migration 0005) ─────────────────
+// One core `feeds` table feeds two typed consumers. Each consumer owns its own
+// subscription table; they share the content pipe, never each other's view.
+//   Telegram consumer : channels + telegram_subscriptions; dedup via post_log
+//   MCP consumer       : mcp_subscriptions; dedup via items.read (global cursor)
+
+export interface DbChannel {
+	id: string;                      // numeric Telegram chat id, as text
+	name: string;
+	enabled: number;
+	check_interval_minutes: number;
+	default_format: string | null;  // JSON Partial<FormatSettings>
+	last_check_timestamp: number;
+	created_at: number;
+}
+
+export interface DbTelegramSubscription {
+	id: string;
+	feed_id: string;
+	channel_id: string;
+	media_filter: string;
+	format: string | null;          // JSON Partial<FormatSettings>
+	enabled: number;
+	created_at: number;
+}
+
+export interface DbMcpSubscription {
+	id: string;
+	feed_id: string;
+	label: string | null;
+	enabled: number;
+	created_at: number;
+}
+
+// ── Channels ──────────────────────────────────────────────────────────────────
+
+export async function getChannels(db: D1Database): Promise<DbChannel[]> {
+	const result = await db.prepare('SELECT * FROM channels ORDER BY created_at ASC').all<DbChannel>();
+	return result.results;
+}
+
+export async function getChannelById(db: D1Database, id: string): Promise<DbChannel | null> {
+	return db.prepare('SELECT * FROM channels WHERE id = ?').bind(id).first<DbChannel>();
+}
+
+/** Insert or update a channel by its (numeric) Telegram id. */
+export async function upsertChannel(
+	db: D1Database,
+	opts: {
+		id: string;
+		name?: string;
+		enabled?: boolean;
+		checkIntervalMinutes?: number;
+		defaultFormat?: Partial<FormatSettings> | null;
+		lastCheckTimestamp?: number;
+	},
+): Promise<void> {
+	const now = Math.floor(Date.now() / 1000);
+	const format = opts.defaultFormat === undefined || opts.defaultFormat === null
+		? null
+		: JSON.stringify(opts.defaultFormat);
+	await db.prepare(
+		`INSERT INTO channels (id, name, enabled, check_interval_minutes, default_format, last_check_timestamp, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET
+			name = excluded.name,
+			enabled = excluded.enabled,
+			check_interval_minutes = excluded.check_interval_minutes,
+			default_format = excluded.default_format,
+			last_check_timestamp = excluded.last_check_timestamp`,
+	).bind(
+		opts.id,
+		opts.name ?? '',
+		opts.enabled === false ? 0 : 1,
+		opts.checkIntervalMinutes ?? 60,
+		format,
+		opts.lastCheckTimestamp ?? 0,
+		now,
+	).run();
+}
+
+export async function removeChannel(db: D1Database, id: string): Promise<void> {
+	await db.prepare('DELETE FROM channels WHERE id = ?').bind(id).run();
+}
+
+export async function setChannelEnabled(db: D1Database, id: string, enabled: boolean): Promise<void> {
+	await db.prepare('UPDATE channels SET enabled = ? WHERE id = ?').bind(enabled ? 1 : 0, id).run();
+}
+
+export async function updateChannelLastCheck(db: D1Database, id: string, timestamp: number): Promise<void> {
+	await db.prepare('UPDATE channels SET last_check_timestamp = ? WHERE id = ?').bind(timestamp, id).run();
+}
+
+// ── Telegram subscriptions ────────────────────────────────────────────────────
+
+export async function getTelegramSubscriptions(db: D1Database, channelId?: string): Promise<DbTelegramSubscription[]> {
+	if (channelId) {
+		const result = await db.prepare('SELECT * FROM telegram_subscriptions WHERE channel_id = ? ORDER BY created_at ASC')
+			.bind(channelId).all<DbTelegramSubscription>();
+		return result.results;
+	}
+	const result = await db.prepare('SELECT * FROM telegram_subscriptions ORDER BY created_at ASC')
+		.all<DbTelegramSubscription>();
+	return result.results;
+}
+
+export async function getTelegramSubscriptionsByFeed(db: D1Database, feedId: string): Promise<DbTelegramSubscription[]> {
+	const result = await db.prepare('SELECT * FROM telegram_subscriptions WHERE feed_id = ? AND enabled = 1')
+		.bind(feedId).all<DbTelegramSubscription>();
+	return result.results;
+}
+
+/** Subscribe a Telegram channel to a core feed (idempotent on channel_id+feed_id). */
+export async function addTelegramSubscription(
+	db: D1Database,
+	opts: { channelId: string; feedId: string; mediaFilter?: FeedMediaFilter; format?: Partial<FormatSettings> | null },
+): Promise<void> {
+	const id = genId();
+	const now = Math.floor(Date.now() / 1000);
+	const format = opts.format === undefined || opts.format === null ? null : JSON.stringify(opts.format);
+	await db.prepare(
+		`INSERT INTO telegram_subscriptions (id, feed_id, channel_id, media_filter, format, enabled, created_at)
+		 VALUES (?, ?, ?, ?, ?, 1, ?)
+		 ON CONFLICT(channel_id, feed_id) DO UPDATE SET
+			media_filter = excluded.media_filter,
+			format = excluded.format`,
+	).bind(id, opts.feedId, opts.channelId, opts.mediaFilter ?? 'all', format, now).run();
+}
+
+export async function removeTelegramSubscription(db: D1Database, channelId: string, feedId: string): Promise<void> {
+	await db.prepare('DELETE FROM telegram_subscriptions WHERE channel_id = ? AND feed_id = ?')
+		.bind(channelId, feedId).run();
+}
+
+export async function setTelegramSubscriptionEnabled(
+	db: D1Database,
+	channelId: string,
+	feedId: string,
+	enabled: boolean,
+): Promise<void> {
+	await db.prepare('UPDATE telegram_subscriptions SET enabled = ? WHERE channel_id = ? AND feed_id = ?')
+		.bind(enabled ? 1 : 0, channelId, feedId).run();
+}
+
+// ── MCP subscriptions ─────────────────────────────────────────────────────────
+
+export async function getMcpSubscriptions(db: D1Database): Promise<DbMcpSubscription[]> {
+	const result = await db.prepare('SELECT * FROM mcp_subscriptions WHERE enabled = 1 ORDER BY created_at ASC')
+		.all<DbMcpSubscription>();
+	return result.results;
+}
+
+/** Feed ids the MCP workspace is subscribed to (enabled only). */
+export async function getMcpSubscribedFeedIds(db: D1Database): Promise<string[]> {
+	const result = await db.prepare('SELECT feed_id FROM mcp_subscriptions WHERE enabled = 1')
+		.all<{ feed_id: string }>();
+	return result.results.map(r => r.feed_id);
+}
+
+/** Subscribe the MCP workspace to a core feed (idempotent on feed_id). */
+export async function addMcpSubscription(db: D1Database, feedId: string, label?: string): Promise<void> {
+	const id = genId();
+	const now = Math.floor(Date.now() / 1000);
+	await db.prepare(
+		`INSERT INTO mcp_subscriptions (id, feed_id, label, enabled, created_at)
+		 VALUES (?, ?, ?, 1, ?)
+		 ON CONFLICT(feed_id) DO UPDATE SET label = excluded.label, enabled = 1`,
+	).bind(id, feedId, label ?? null, now).run();
+}
+
+export async function removeMcpSubscription(db: D1Database, feedId: string): Promise<void> {
+	await db.prepare('DELETE FROM mcp_subscriptions WHERE feed_id = ?').bind(feedId).run();
+}
+
+// ── Telegram dedup (post_log) ─────────────────────────────────────────────────
+
+/**
+ * Has this item already been successfully posted to this chat? Backed by the
+ * idx_postlog_chat_item index. Only `status = 'ok'` rows count, so a failed
+ * send is retried on the next cycle.
+ */
+export async function wasPostedToChannel(db: D1Database, chatId: string, itemId: string): Promise<boolean> {
+	const row = await db.prepare(
+		`SELECT 1 FROM post_log WHERE chat_id = ? AND item_id = ? AND status = 'ok' LIMIT 1`,
+	).bind(chatId, itemId).first();
+	return row !== null;
+}
+
+// ── D1 ChannelConfig facade ───────────────────────────────────────────────────
+// Bridges the KV-era ChannelConfig shape to D1 so the ~16 bot command/callback
+// files can be migrated with minimal churn. The source `id` is always the feed
+// UUID (stable, unique per core feed) when read back from D1.
+
+/** Reconstruct a KV-era ChannelConfig from D1 (channels + telegram_subscriptions + feeds). */
+export async function getChannelConfigFromD1(db: D1Database, channelId: string): Promise<ChannelConfig | null> {
+	const channel = await getChannelById(db, channelId);
+	if (!channel) return null;
+
+	const subs = await getTelegramSubscriptions(db, channelId);
+	const sources: ChannelSource[] = [];
+	for (const sub of subs) {
+		const feed = await getFeedById(db, sub.feed_id);
+		if (feed) sources.push(dbTelegramSubToChannelSource(sub, feed));
+	}
+
+	return {
+		channelTitle: channel.name,
+		enabled: channel.enabled === 1,
+		checkIntervalMinutes: channel.check_interval_minutes,
+		lastCheckTimestamp: channel.last_check_timestamp,
+		sources,
+		defaultFormat: channel.default_format
+			? parseJsonSafe<Partial<FormatSettings>>(channel.default_format, {})
+			: undefined,
+	};
+}
+
+/**
+ * Write a KV-era ChannelConfig back to D1.
+ * Syncs the channels row and telegram_subscriptions (upserts new, removes deleted).
+ * Sources are always resolved by (source_type, source_value) → canonical feed.id,
+ * so shortHash-based ids from bot flows are transparently replaced by feed UUIDs.
+ */
+export async function saveChannelConfigToD1(
+	db: D1Database,
+	channelId: string,
+	config: ChannelConfig,
+): Promise<void> {
+	await upsertChannel(db, {
+		id: channelId,
+		name: config.channelTitle,
+		enabled: config.enabled,
+		checkIntervalMinutes: config.checkIntervalMinutes,
+		defaultFormat: config.defaultFormat ?? null,
+		lastCheckTimestamp: config.lastCheckTimestamp,
+	});
+
+	const existingSubs = await getTelegramSubscriptions(db, channelId);
+	const newFeedIds = new Set<string>();
+
+	for (const source of config.sources) {
+		const feed = await upsertFeedBySource(db, {
+			sourceType: source.type as SourceType,
+			sourceValue: source.value,
+		});
+		newFeedIds.add(feed.id);
+		await addTelegramSubscription(db, {
+			channelId,
+			feedId: feed.id,
+			mediaFilter: source.mediaFilter,
+			format: source.format ?? null,
+		});
+		if (!source.enabled) {
+			await setTelegramSubscriptionEnabled(db, channelId, feed.id, false);
+		} else {
+			await setTelegramSubscriptionEnabled(db, channelId, feed.id, true);
+		}
+	}
+
+	for (const sub of existingSubs) {
+		if (!newFeedIds.has(sub.feed_id)) {
+			await removeTelegramSubscription(db, channelId, sub.feed_id);
+		}
+	}
+}
+
+/** Return all D1 channel IDs — replaces getChannelsList(kv). */
+export async function getChannelsListD1(db: D1Database): Promise<string[]> {
+	const channels = await getChannels(db);
+	return channels.map(c => c.id);
+}
+
+/** Find a channel ID by its stored name (case-insensitive) — replaces findChannelByName(kv, name). */
+export async function findChannelByNameD1(db: D1Database, name: string): Promise<string | null> {
+	const clean = name.replace(/^@/, '').toLowerCase();
+	const channels = await getChannels(db);
+	const found = channels.find(
+		c => c.name.toLowerCase() === clean || c.name.toLowerCase() === `@${clean}`,
+	);
+	return found?.id ?? null;
+}
+
+// ── Mapper: telegram_subscription (+ feed) → ChannelSource ────────────────────
+// Bridges the D1 core-feeds world back to the KV-era `ChannelSource` shape so
+// the existing Telegram formatting/fetch code can stay unchanged. The source id
+// is the feed id (stable, unique per core feed).
+export function dbTelegramSubToChannelSource(
+	sub: DbTelegramSubscription,
+	feed: Pick<DbFeed, 'source_type' | 'source_value'>,
+): ChannelSource {
+	return {
+		id: sub.feed_id,
+		type: feed.source_type as SourceType,
+		value: feed.source_value,
+		mediaFilter: sub.media_filter as FeedMediaFilter,
+		enabled: sub.enabled === 1,
+		format: sub.format ? parseJsonSafe<Partial<FormatSettings>>(sub.format, {}) : undefined,
+	};
 }

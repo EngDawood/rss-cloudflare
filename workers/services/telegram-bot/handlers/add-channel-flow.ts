@@ -1,8 +1,7 @@
 import { InlineKeyboard } from 'grammy';
 import type { Bot, Context } from 'grammy';
-import type { ChannelConfig } from '../../../types/telegram';
 import { resolveChannel } from '../helpers/channel-resolver';
-import { getChannelsList, saveChannelsList, getChannelConfig, saveChannelConfig } from '../storage/kv-operations';
+import { getChannelById, upsertChannel } from '../../../db/d1';
 import { clearAdminState } from '../storage/admin-state';
 
 /**
@@ -11,9 +10,10 @@ import { clearAdminState } from '../storage/admin-state';
 export async function addChannelDirect(
 	ctx: Context,
 	bot: Bot,
-	kv: KVNamespace,
+	db: D1Database,
 	adminId: number,
-	arg: string
+	arg: string,
+	kv: KVNamespace,
 ): Promise<void> {
 	const resolved = await resolveChannel(bot, arg);
 	if (!resolved) {
@@ -34,24 +34,20 @@ export async function addChannelDirect(
 		);
 	}
 
-	const channels = await getChannelsList(kv);
-	if (channels.includes(resolved.id)) {
+	const existing = await getChannelById(db, resolved.id);
+	if (existing) {
 		await clearAdminState(kv, adminId);
 		await ctx.reply(`<b>${resolved.title}</b> is already registered. Use /channels to manage.`, { parse_mode: 'HTML' });
 		return;
 	}
 
-	const config: ChannelConfig = {
-		channelTitle: resolved.title,
+	await upsertChannel(db, {
+		id: resolved.id,
+		name: resolved.title,
 		enabled: true,
 		checkIntervalMinutes: 30,
 		lastCheckTimestamp: 0,
-		sources: [],
-	};
-
-	channels.push(resolved.id);
-	await saveChannelsList(kv, channels);
-	await saveChannelConfig(kv, resolved.id, config);
+	});
 	await clearAdminState(kv, adminId);
 
 	const keyboard = new InlineKeyboard()

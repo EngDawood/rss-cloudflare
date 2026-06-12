@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { handleInstagramFeed } from './routes/instagram';
 import { handleTelegramWebhook } from './routes/telegram';
 import { handleSetup } from './routes/setup';
-import { handleFoloWebhook } from './routes/folo';
 import { handleTestBridges } from './routes/test-bridges';
 import { checkAllFeeds } from './cron/check-feeds';
 import { refreshSavedFeeds } from './cron/refresh-feeds';
@@ -10,7 +9,7 @@ import { handleQueue } from './queue-handler';
 import { RSSReaderMCP } from './mcp/index';
 import { QueueTask } from './types/queue';
 import { MessageBatch } from '@cloudflare/workers-types';
-import { handleActionApi, handleChatApi } from './routes/action-api';
+import { handleActionApi, handleChatApi, handleMigrateChannels } from './routes/action-api';
 
 type HonoEnv = { Bindings: Env };
 
@@ -27,12 +26,12 @@ app.get('/test-rsshub', handleTestBridges);
 app.get('/test-rsshub/:u', handleTestBridges);
 
 app.post('/telegram/webhook', handleTelegramWebhook);
-app.post('/folo', handleFoloWebhook);
 app.get('/telegram/setup', handleSetup);
 
 // Administrative Action and Chat Agent APIs
 app.post('/api/action', handleActionApi);
 app.post('/api/chat', handleChatApi);
+app.post('/api/migrate-channels', handleMigrateChannels);
 
 // MCP server
 app.on(['GET', 'POST', 'DELETE'], ['/mcp', '/mcp/*'], async (c) => {

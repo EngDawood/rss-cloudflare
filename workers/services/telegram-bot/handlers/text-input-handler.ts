@@ -6,7 +6,7 @@ import { handleAddSourceValue, handleRemoveChannelConfirm } from './add-source-f
 import { detectMediaUrl } from '../../../utils/url-detector';
 import { downloadAndSendMedia } from './download-and-send';
 import { fetchYouTubeQualities, fetchFacebookInfo, fetchTikTokInfo } from '../../media-downloader';
-import { getChannelConfig, saveChannelConfig } from '../storage/kv-operations';
+import { getChannelConfigFromD1, saveChannelConfigToD1 } from '../../../db/d1';
 import { resolveFormatSettings } from '../../../utils/telegram-format';
 import { buildFormatKeyboard } from '../views/keyboard-builders';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
@@ -30,7 +30,7 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 	bot.on('message', async (ctx, next) => {
 		const origin = (ctx.message as any).forward_origin;
 		if (origin?.type === 'channel' && origin.chat) {
-			await addChannelDirect(ctx, bot, kv, adminId, String(origin.chat.id));
+			await addChannelDirect(ctx, bot, db, adminId, String(origin.chat.id), kv);
 			return;
 		}
 		await next();
@@ -42,7 +42,7 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 			const state = await getAdminState(kv, adminId);
 			if (text === '/skip') {
 				if (state?.action === 'setting_format_custom') {
-					await handleSetFormatCustom(ctx, bot, kv, adminId, state, '');
+					await handleSetFormatCustom(ctx, bot, kv, adminId, state, '', db);
 					return;
 				}
 				if (state?.action === 'setting_telegraph_token') {
@@ -188,16 +188,16 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 
 		switch (state.action) {
 			case 'adding_channel':
-				await addChannelDirect(ctx, bot, kv, adminId, text.trim());
+				await addChannelDirect(ctx, bot, db, adminId, text.trim(), kv);
 				break;
 			case 'adding_source':
-				await handleAddSourceValue(ctx, bot, kv, adminId, state, text, env);
+				await handleAddSourceValue(ctx, bot, kv, adminId, state, text, env, db);
 				break;
 			case 'removing_channel':
-				await handleRemoveChannelConfirm(ctx, kv, adminId, state, text);
+				await handleRemoveChannelConfirm(ctx, kv, adminId, state, text, db);
 				break;
 			case 'setting_format_custom':
-				await handleSetFormatCustom(ctx, bot, kv, adminId, state, text);
+				await handleSetFormatCustom(ctx, bot, kv, adminId, state, text, db);
 				break;
 			case 'setting_telegraph_token':
 				await handleSetTelegraphToken(ctx, kv, adminId, text, env.TELEGRAPH_ACCESS_TOKEN);
@@ -212,7 +212,7 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 				await handleTestAiSummary(ctx, kv, adminId, state, text, db, env);
 				break;
 			case 'testing_source':
-				await handleTestingSource(ctx, bot, env, kv, adminId, text.trim());
+				await handleTestingSource(ctx, bot, env, kv, adminId, text.trim(), db);
 				break;
 		}
 	});
@@ -224,12 +224,13 @@ async function handleSetFormatCustom(
 	kv: KVNamespace,
 	adminId: number,
 	state: AdminState,
-	text: string
+	text: string,
+	db: D1Database,
 ): Promise<void> {
 	const { channelId, sourceId, settingKey } = state.context || {};
 	if (!channelId || !settingKey) return;
 
-	const config = await getChannelConfig(kv, channelId);
+	const config = await getChannelConfigFromD1(db, channelId);
 	if (!config) { await ctx.reply('Channel not found.'); return; }
 
 	const value = text.trim();
@@ -241,7 +242,7 @@ async function handleSetFormatCustom(
 		if (!source.format) source.format = {};
 		if (value === '') delete (source.format as any)[settingKey];
 		else (source.format as any)[settingKey] = value;
-		await saveChannelConfig(kv, channelId, config);
+		await saveChannelConfigToD1(db, channelId, config);
 
 		const current = resolveFormatSettings(config.defaultFormat, source.format);
 		const keyboard = buildFormatKeyboard(
@@ -260,7 +261,7 @@ async function handleSetFormatCustom(
 		if (!config.defaultFormat) config.defaultFormat = {};
 		if (value === '') delete (config.defaultFormat as any)[settingKey];
 		else (config.defaultFormat as any)[settingKey] = value;
-		await saveChannelConfig(kv, channelId, config);
+		await saveChannelConfigToD1(db, channelId, config);
 
 		const current = resolveFormatSettings(config.defaultFormat);
 		const keyboard = buildFormatKeyboard(
@@ -414,7 +415,8 @@ async function handleTestingSource(
 	env: Env,
 	kv: KVNamespace,
 	adminId: number,
-	text: string
+	text: string,
+	db: D1Database,
 ): Promise<void> {
 	// Parse optional leading count: "5 @username" or just "@username"
 	let count = 1;
@@ -448,5 +450,5 @@ async function handleTestingSource(
 		enabled: true,
 	};
 
-	await fetchAndSendLatest(bot, env, ctx.chat!.id, source, count, false);
+	await fetchAndSendLatest(bot, env, ctx.chat!.id, source, count, false, db);
 }

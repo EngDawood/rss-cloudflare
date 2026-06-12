@@ -1,6 +1,6 @@
 import type { Bot } from 'grammy';
 import { InlineKeyboard } from 'grammy';
-import { getChannelsList, getChannelConfig } from '../storage/kv-operations';
+import { getChannelsListD1, getChannelConfigFromD1 } from '../../../db/d1';
 import { setAdminState } from '../storage/admin-state';
 import {
 	getConfig,
@@ -380,14 +380,14 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 	// ── Channel list ──────────────────────────────────────────────────────────
 
 	bot.callbackQuery('ai:channels', async (ctx) => {
-		const channelIds = await getChannelsList(kv);
+		const channelIds = await getChannelsListD1(db);
 		if (channelIds.length === 0) {
 			await ctx.answerCallbackQuery({ text: 'No channels registered yet.' });
 			return;
 		}
 		const keyboard = new InlineKeyboard();
 		for (const cid of channelIds) {
-			const cfg = await getChannelConfig(kv, cid);
+			const cfg = await getChannelConfigFromD1(db, cid);
 			const setting = await getChannelAiSummary(db, cid);
 			const label = truncate(cfg?.channelTitle || cid, 22) + ` [${setting}]`;
 			keyboard.text(label, `ai:ch:${cid}`).row();
@@ -404,7 +404,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 
 	bot.callbackQuery(/^ai:ch:(.+)$/, async (ctx) => {
 		const channelId = ctx.match![1];
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const { text, keyboard } = await channelMenuContent(db, channelId, config);
 		await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard });
 		await ctx.answerCallbackQuery();
@@ -413,7 +413,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 	bot.callbackQuery(/^ai:ch_set:([^:]+):([^:]+)$/, async (ctx) => {
 		const [, channelId, value] = ctx.match!;
 		await setChannelAiSummary(db, channelId, value as AiSummarySetting);
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const { text, keyboard } = await channelMenuContent(db, channelId, config);
 		await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard });
 		await ctx.answerCallbackQuery({ text: `Set to: ${value}` });
@@ -423,7 +423,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 
 	bot.callbackQuery(/^ai:ch_m:(.+)$/, async (ctx) => {
 		const channelId = ctx.match![1];
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const { text, keyboard } = await channelModelContent(db, channelId, config);
 		await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard });
 		await ctx.answerCallbackQuery();
@@ -433,7 +433,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 		const [, channelId, key] = ctx.match!;
 		const value = MODEL_OPTIONS[key]?.value;
 		if (value) await setChannelAiModel(db, channelId, value);
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const { text, keyboard } = await channelModelContent(db, channelId, config);
 		await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard });
 		await ctx.answerCallbackQuery({ text: value ? `Set to ${MODEL_OPTIONS[key].label}` : 'Unknown model' });
@@ -442,7 +442,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 	bot.callbackQuery(/^ai:ch_mr:(.+)$/, async (ctx) => {
 		const channelId = ctx.match![1];
 		await setChannelAiModel(db, channelId, null);
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const { text, keyboard } = await channelModelContent(db, channelId, config);
 		await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard });
 		await ctx.answerCallbackQuery({ text: 'Model reset to default' });
@@ -463,7 +463,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 	bot.callbackQuery(/^ai:ch_p:(.+)$/, async (ctx) => {
 		const channelId = ctx.match![1];
 		const row = await getChannelAiRow(db, channelId);
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const level = config?.channelTitle || channelId;
 		const { text, keyboard } = promptContent(
 			level, row.ai_prompt,
@@ -484,7 +484,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 		const channelId = ctx.match![1];
 		await setChannelAiPrompt(db, channelId, null);
 		const row = await getChannelAiRow(db, channelId);
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const level = config?.channelTitle || channelId;
 		const { text, keyboard } = promptContent(
 			level, row.ai_prompt,
@@ -498,7 +498,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 
 	bot.callbackQuery(/^ai:sources:(.+)$/, async (ctx) => {
 		const channelId = ctx.match![1];
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config?.sources?.length) {
 			await ctx.answerCallbackQuery({ text: 'No sources found.' });
 			return;
@@ -522,7 +522,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 
 	bot.callbackQuery(/^ai:src:([^:]+):([^:]+)$/, async (ctx) => {
 		const [, channelId, sourceId] = ctx.match!;
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const source = config?.sources?.find((s) => s.id === sourceId);
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found.' }); return; }
 		const { text, keyboard } = await sourceMenuContent(db, channelId, sourceId, source.value, config);
@@ -533,7 +533,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 	bot.callbackQuery(/^ai:src_set:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
 		const [, channelId, sourceId, value] = ctx.match!;
 		await setChannelAiSummary(db, `${channelId}:${sourceId}`, value as AiSummarySetting);
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const source = config?.sources?.find((s) => s.id === sourceId);
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found.' }); return; }
 		const { text, keyboard } = await sourceMenuContent(db, channelId, sourceId, source.value, config);
@@ -545,7 +545,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 
 	bot.callbackQuery(/^ai:src_m:([^:]+):([^:]+)$/, async (ctx) => {
 		const [, channelId, sourceId] = ctx.match!;
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const source = config?.sources?.find((s) => s.id === sourceId);
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found.' }); return; }
 		const { text, keyboard } = await sourceModelContent(db, channelId, sourceId, source.value, config);
@@ -557,7 +557,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 		const [, channelId, sourceId, key] = ctx.match!;
 		const value = MODEL_OPTIONS[key]?.value;
 		if (value) await setChannelAiModel(db, `${channelId}:${sourceId}`, value);
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const source = config?.sources?.find((s) => s.id === sourceId);
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found.' }); return; }
 		const { text, keyboard } = await sourceModelContent(db, channelId, sourceId, source.value, config);
@@ -568,7 +568,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 	bot.callbackQuery(/^ai:src_mr:([^:]+):([^:]+)$/, async (ctx) => {
 		const [, channelId, sourceId] = ctx.match!;
 		await setChannelAiModel(db, `${channelId}:${sourceId}`, null);
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const source = config?.sources?.find((s) => s.id === sourceId);
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found.' }); return; }
 		const { text, keyboard } = await sourceModelContent(db, channelId, sourceId, source.value, config);
@@ -591,7 +591,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 	bot.callbackQuery(/^ai:src_p:([^:]+):([^:]+)$/, async (ctx) => {
 		const [, channelId, sourceId] = ctx.match!;
 		const row = await getChannelAiRow(db, `${channelId}:${sourceId}`);
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const source = config?.sources?.find((s) => s.id === sourceId);
 		const level = source?.value ?? sourceId;
 		const { text, keyboard } = promptContent(
@@ -615,7 +615,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 		const [, channelId, sourceId] = ctx.match!;
 		await setChannelAiPrompt(db, `${channelId}:${sourceId}`, null);
 		const row = await getChannelAiRow(db, `${channelId}:${sourceId}`);
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const source = config?.sources?.find((s) => s.id === sourceId);
 		const level = source?.value ?? sourceId;
 		const { text, keyboard } = promptContent(
@@ -641,7 +641,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 
 	bot.callbackQuery(/^ai:ch_test:(.+)$/, async (ctx) => {
 		const channelId = ctx.match![1];
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const title = escapeHtml(config?.channelTitle || channelId);
 		await setAdminState(kv, adminId, { action: 'testing_ai_summary', context: { channelId } });
 		await ctx.editMessageText(
@@ -653,7 +653,7 @@ export function registerAiCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 
 	bot.callbackQuery(/^ai:src_test:([^:]+):([^:]+)$/, async (ctx) => {
 		const [, channelId, sourceId] = ctx.match!;
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const source = config?.sources?.find((s) => s.id === sourceId);
 		const label = escapeHtml(source?.value ?? sourceId);
 		await setAdminState(kv, adminId, { action: 'testing_ai_summary', context: { channelId, sourceId } });

@@ -1,6 +1,7 @@
 import { InlineKeyboard } from 'grammy';
 import type { Context } from 'grammy';
-import { getChannelsList, getChannelConfig, getFailedPosts } from '../storage/kv-operations';
+import { getFailedPosts } from '../storage/kv-operations';
+import { getChannelsListD1, getChannelConfigFromD1 } from '../../../db/d1';
 import { editOrReply } from '../helpers/edit-or-reply';
 import { sourceTypeIcon } from '../helpers/source-parser';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
@@ -10,10 +11,10 @@ import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
  */
 export async function showChannelsList(
 	ctx: Context,
-	kv: KVNamespace,
+	db: D1Database,
 	mode: 'reply' | 'edit' = 'reply'
 ): Promise<void> {
-	const channels = await getChannelsList(kv);
+	const channels = await getChannelsListD1(db);
 
 	if (channels.length === 0) {
 		const message = "You haven't added any channels yet. Use /add @channel to get started.";
@@ -27,7 +28,7 @@ export async function showChannelsList(
 
 	const keyboard = new InlineKeyboard();
 	for (const channelId of channels) {
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		const status = config?.enabled ? '✅' : '❌';
 		const label = config?.channelTitle || channelId;
 		const srcCount = config?.sources.length || 0;
@@ -49,10 +50,10 @@ export async function showChannelsList(
  */
 export async function showChannelConfig(
 	ctx: Context,
-	kv: KVNamespace,
+	db: D1Database,
 	channelId: string
 ): Promise<void> {
-	const config = await getChannelConfig(kv, channelId);
+	const config = await getChannelConfigFromD1(db, channelId);
 	if (!config) {
 		await editOrReply(ctx, `Channel <code>${channelId}</code> not found.`, { parse_mode: 'HTML' });
 		return;
@@ -108,10 +109,11 @@ export async function showChannelConfig(
 export async function showFailedPosts(
 	ctx: Context,
 	kv: KVNamespace,
+	db: D1Database,
 	channelId: string
 ): Promise<void> {
 	const posts = await getFailedPosts(kv, channelId);
-	const config = await getChannelConfig(kv, channelId);
+	const config = await getChannelConfigFromD1(db, channelId);
 	const title = config?.channelTitle || channelId;
 
 	let text = `<b>Failed Posts for ${escapeHtmlBot(title)}</b>\n\n`;

@@ -3,12 +3,11 @@ import type { ChannelSource } from '../../../types/telegram';
 import { fetchForSource } from '../../source-fetcher';
 import { formatFeedItem, resolveFormatSettings } from '../../../utils/telegram-format';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
-import { getCached, setCached } from '../../../utils/cache';
-import { CACHE_PREFIX_TELEGRAM_SENT, TELEGRAM_CONFIG_TTL } from '../../../constants';
 import { sendMediaToChannel, FileTooLargeError } from './send-media';
 import { sendFallbackMessage } from '../helpers/fallback-sender';
 import { enrichFeedItems } from '../../../utils/media-enrichment';
-import { getChannelConfig, addFailedPost, getAdminConfig } from '../storage/kv-operations';
+import { getChannelConfigFromD1 } from '../../../db/d1';
+import { addFailedPost, getAdminConfig } from '../storage/kv-operations';
 
 /**
  * Send an alert DM to the admin. Silently fails if notification itself errors.
@@ -32,11 +31,12 @@ export async function fetchAndSendLatest(
 	chatId: number,
 	source: ChannelSource,
 	count: number = 1,
-	useQueue: boolean = false
+	useQueue: boolean = false,
+	db?: D1Database,
 ): Promise<void> {
 	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
 	try {
-		const config = await getChannelConfig(env.CACHE, String(chatId));
+		const config = await getChannelConfigFromD1(db ?? env.DB, String(chatId));
 		const settings = resolveFormatSettings(config?.defaultFormat, source.format);
 
 		const result = await fetchForSource(source, env);
@@ -109,22 +109,6 @@ export async function fetchAndSendLatest(
 			await alertAdmin(bot, adminId,
 				`ℹ️ <b>Sync results for ${chatId}</b>\nSource: <code>${source.value}</code>\n${failures}/${items.length} post(s) ${action}.`
 			);
-		}
-
-		// Save sent links so cron doesn't re-send
-		const sentKey = `${CACHE_PREFIX_TELEGRAM_SENT}${chatId}:${source.id}`;
-		try {
-			const sentRaw = await getCached(env.CACHE, sentKey);
-			let sentLinks: string[] = [];
-			try {
-				const parsed = sentRaw ? JSON.parse(sentRaw) : [];
-				if (Array.isArray(parsed)) sentLinks = parsed;
-			} catch { /* start fresh */ }
-			const newLinks = result.items.map(item => item.link);
-			const merged = [...sentLinks, ...newLinks].slice(-200);
-			await setCached(env.CACHE, sentKey, JSON.stringify(merged), TELEGRAM_CONFIG_TTL);
-		} catch (err) {
-			console.error(`Failed to save sent links for ${source.value}:`, err);
 		}
 	} catch (err) {
 		console.error(`fetchAndSendLatest error for ${source.value}:`, err);
