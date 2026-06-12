@@ -3,66 +3,17 @@ import { z } from 'zod';
 import { Bot } from 'grammy';
 import { fetchFeed } from '../services/feed-fetcher';
 import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format';
-import { sendMediaToChannel } from '../services/telegram-bot/handlers/send-media';
 import { enrichFeedItems } from '../utils/media-enrichment';
 import {
 	getFeeds, getFeedById, getFeedByUrl, insertFeed, removeFeed, setFeedEnabled,
 	updateLastFetched, upsertItems, listNewItems, searchItems, getItemById,
 	markItemsRead, getConfig, setConfig, dbItemToFeedItem,
-	getChats, getChatByName, getDefaultChat, upsertChat, removeChat, setDefaultChat,
+	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
 	insertNote, listNotes, searchNotes, deleteNote,
-	insertPostLog, listPostLog, recall,
+	listPostLog, recall,
 } from '../db/d1';
+import { resolveTarget, logAndSend } from '../services/post-service';
 import type { TelegramMediaMessage } from '../types/telegram';
-
-async function resolveTarget(
-	db: D1Database,
-	target?: string,
-): Promise<{ chatId: number; chatName?: string }> {
-	if (!target) {
-		const def = await getDefaultChat(db);
-		if (!def) throw new Error('No target specified and no default chat configured. Use add_chat first.');
-		return { chatId: parseInt(def.chat_id, 10), chatName: def.name };
-	}
-	const byName = await getChatByName(db, target);
-	if (byName) return { chatId: parseInt(byName.chat_id, 10), chatName: byName.name };
-	const numId = parseInt(target, 10);
-	if (!isNaN(numId)) return { chatId: numId };
-	throw new Error(`Unknown chat target: "${target}". Use a registered chat name or a numeric chat id.`);
-}
-
-async function logAndSend(
-	db: D1Database,
-	bot: Bot,
-	chatId: number,
-	chatName: string | undefined,
-	message: TelegramMediaMessage,
-	itemId?: string,
-): Promise<void> {
-	const captionPreview = message.caption.slice(0, 200);
-	try {
-		await sendMediaToChannel(bot, chatId, message);
-		await insertPostLog(db, {
-			itemId,
-			chatName,
-			chatId: String(chatId),
-			messageType: message.type,
-			captionPreview,
-			status: 'ok',
-		});
-	} catch (e) {
-		await insertPostLog(db, {
-			itemId,
-			chatName,
-			chatId: String(chatId),
-			messageType: message.type,
-			captionPreview,
-			status: 'error',
-			error: e instanceof Error ? e.message : String(e),
-		});
-		throw e;
-	}
-}
 
 function ok(data: unknown) {
 	return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
