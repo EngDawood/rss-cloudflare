@@ -31,7 +31,6 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'/ai — Configure AI summary settings\n\n' +
 				'<b>More:</b>\n' +
 				'• Send any supported URL (TikTok, IG, X, YT) to download media\n' +
-				'• Use /folo for Folo integration\n' +
 				'• Use /cancel to stop any current action\n' +
 				'• Use /help for detailed instructions',
 			{ parse_mode: 'HTML' }
@@ -58,8 +57,6 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'• <code>/delay @my_channel 60</code> (check every hour)\n\n' +
 				'<b>Media Download:</b>\n' +
 				'Simply paste a link from TikTok, Instagram, X/Twitter, YouTube, Facebook, Threads, SoundCloud, Spotify, or Pinterest to download and receive the media file directly.\n\n' +
-				'<b>Folo Integration:</b>\n' +
-				'Use <code>/folo</code> to manage your Folo webhook subscriptions.\n\n' +
 				'<b>Telegraph Instant View:</b>\n' +
 				'Use <code>/telegraph</code> to enable/disable automatic Telegraph pages for long RSS articles, set the character threshold, and manage the access token.\n\n' +
 				'<b>AI Summaries:</b>\n' +

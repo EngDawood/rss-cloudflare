@@ -1,5 +1,5 @@
 import type { Bot } from 'grammy';
-import { getChannelsList, getChannelConfig } from '../storage/kv-operations';
+import { findChannelByNameD1 } from '../../../db/d1';
 
 /**
  * Resolve a channel reference (@username or numeric ID) to a numeric ID string + title.
@@ -30,27 +30,11 @@ export async function resolveChannel(bot: Bot, ref: string): Promise<{ id: strin
 }
 
 /**
- * Find channel ID by title or username from stored configurations.
- */
-export async function findChannelByName(kv: KVNamespace, name: string): Promise<string | null> {
-	const clean = name.replace(/^@/, '').toLowerCase();
-	const channels = await getChannelsList(kv);
-	for (const channelId of channels) {
-		const config = await getChannelConfig(kv, channelId);
-		if (!config) continue;
-		if (config.channelTitle.toLowerCase() === clean || config.channelTitle.toLowerCase() === `@${clean}`) {
-			return channelId;
-		}
-	}
-	return null;
-}
-
-/**
  * Resolve a channel argument: accepts @username, numeric ID, or stored channel name.
  */
 export async function resolveChannelArg(
 	bot: Bot,
-	kv: KVNamespace,
+	db: D1Database,
 	arg: string
 ): Promise<{ id: string; title: string; isMember: boolean } | null> {
 	// 1. If it's a numeric ID (-100123...)
@@ -64,8 +48,8 @@ export async function resolveChannelArg(
 		if (resolved) return resolved;
 	}
 
-	// 3. Try finding by stored name (case-insensitive)
-	const found = await findChannelByName(kv, arg);
+	// 3. Try finding by stored name (case-insensitive) in D1
+	const found = await findChannelByNameD1(db, arg);
 	if (found) {
 		return resolveChannel(bot, found);
 	}

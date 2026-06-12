@@ -1,12 +1,11 @@
 import { InlineKeyboard } from 'grammy';
 import type { Bot, Context } from 'grammy';
 import type { AdminState, ChannelSource } from '../../../types/telegram';
-import { getChannelConfig, saveChannelConfig, getChannelsList, saveChannelsList } from '../storage/kv-operations';
+import { getChannelConfigFromD1, saveChannelConfigToD1, getChannelsListD1, removeChannel } from '../../../db/d1';
 import { clearAdminState } from '../storage/admin-state';
 import { shortHash, sourceTypeLabel } from '../helpers/source-parser';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
 import { fetchAndSendLatest } from './fetch-and-send';
-import { CACHE_PREFIX_TELEGRAM_CHANNEL } from '../../../constants';
 
 /**
  * Handle the text input for adding a new source (URL, username, or hashtag).
@@ -18,7 +17,8 @@ export async function handleAddSourceValue(
 	adminId: number,
 	state: AdminState,
 	text: string,
-	env: Env
+	env: Env,
+	db: D1Database,
 ): Promise<void> {
 	const channelId = state.context?.channelId;
 	const sourceType = state.context?.sourceType;
@@ -29,7 +29,7 @@ export async function handleAddSourceValue(
 		return;
 	}
 
-	const config = await getChannelConfig(kv, channelId);
+	const config = await getChannelConfigFromD1(db, channelId);
 	if (!config) {
 		await clearAdminState(kv, adminId);
 		await ctx.reply('Channel not found.');
@@ -50,15 +50,16 @@ export async function handleAddSourceValue(
 		id = `rss_${shortHash(value)}`;
 	} else if (sourceType === 'instagram_user') {
 		id = `usr_${shortHash(value)}`;
-	} else if (sourceType === 'instagram_story') {
-		id = `igst_${shortHash(value)}`;
 	} else if (sourceType === 'instagram_tag') {
 		id = `tag_${shortHash(value)}`;
+	} else if (sourceType === 'instagram_story') {
+		id = `igst_${shortHash(value)}`;
 	} else if (sourceType === 'tiktok_user') {
 		id = `tiktok_${shortHash(value)}`;
 	}
 
-	if (config.sources.some((s) => s.id === id)) {
+	// Duplicate check by value (D1 sources use feed UUIDs as ids, not shortHash ids)
+	if (config.sources.some((s) => s.value === value)) {
 		await clearAdminState(kv, adminId);
 		await ctx.reply(`Source "${value}" already exists for this channel.`);
 		return;
@@ -73,7 +74,7 @@ export async function handleAddSourceValue(
 	};
 
 	config.sources.push(source);
-	await saveChannelConfig(kv, channelId, config);
+	await saveChannelConfigToD1(db, channelId, config);
 	await clearAdminState(kv, adminId);
 
 	const keyboard = new InlineKeyboard()
@@ -86,7 +87,7 @@ export async function handleAddSourceValue(
 	);
 
 	// Fetch and send latest posts immediately
-	await fetchAndSendLatest(bot, env, parseInt(channelId, 10), source);
+	await fetchAndSendLatest(bot, env, parseInt(channelId, 10), source, 1, false, db);
 }
 
 /**
@@ -97,7 +98,8 @@ export async function handleRemoveChannelConfirm(
 	kv: KVNamespace,
 	adminId: number,
 	state: AdminState,
-	text: string
+	text: string,
+	db: D1Database,
 ): Promise<void> {
 	if (text.trim().toLowerCase() !== 'yes') {
 		await clearAdminState(kv, adminId);
@@ -111,10 +113,7 @@ export async function handleRemoveChannelConfirm(
 		return;
 	}
 
-	const channels = await getChannelsList(kv);
-	const updated = channels.filter((id) => id !== channelId);
-	await saveChannelsList(kv, updated);
-	await kv.delete(`${CACHE_PREFIX_TELEGRAM_CHANNEL}${channelId}:config`);
+	await removeChannel(db, channelId);
 	await clearAdminState(kv, adminId);
 	await ctx.reply(`Channel <code>${channelId}</code> removed.`, { parse_mode: 'HTML' });
 }

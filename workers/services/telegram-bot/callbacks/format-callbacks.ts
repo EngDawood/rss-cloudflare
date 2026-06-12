@@ -1,6 +1,6 @@
 import type { Bot } from 'grammy';
 import type { FormatSettings } from '../../../types/telegram';
-import { getChannelConfig, saveChannelConfig } from '../storage/kv-operations';
+import { getChannelConfigFromD1, saveChannelConfigToD1 } from '../../../db/d1';
 import { resolveFormatSettings } from '../../../utils/telegram-format';
 import { cycleFormatValue, formatValueText } from '../helpers/format-settings';
 import { buildFormatKeyboard } from '../views/keyboard-builders';
@@ -14,13 +14,14 @@ import { setAdminState } from '../storage/admin-state';
  */
 export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): void {
 	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
+	const db = env.DB;
 
 	// Cycle source format setting: fs:CHID:SRCID:SETTING
 	bot.callbackQuery(/^fs:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
 		const sourceId = ctx.match[2];
 		const setting = ctx.match[3] as keyof FormatSettings;
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 		const source = config.sources.find((s) => s.id === sourceId);
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found' }); return; }
@@ -33,7 +34,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		} else {
 			(source.format as any)[setting] = nextVal;
 		}
-		await saveChannelConfig(kv, channelId, config);
+		await saveChannelConfigToD1(db, channelId, config);
 
 		const updated = resolveFormatSettings(config.defaultFormat, source.format);
 		const keyboard = buildFormatKeyboard(
@@ -70,7 +71,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 	bot.callbackQuery(/^fd:([^:]+):([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
 		const setting = ctx.match[2] as keyof FormatSettings;
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 
 		if (!config.defaultFormat) config.defaultFormat = {};
@@ -81,7 +82,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		} else {
 			(config.defaultFormat as any)[setting] = nextVal;
 		}
-		await saveChannelConfig(kv, channelId, config);
+		await saveChannelConfigToD1(db, channelId, config);
 
 		const updated = resolveFormatSettings(config.defaultFormat);
 		const keyboard = buildFormatKeyboard(
@@ -117,7 +118,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 	bot.callbackQuery(/^fs_v:([^:]+):([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
 		const sourceId = ctx.match[2];
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 		const source = config.sources.find((s) => s.id === sourceId);
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found' }); return; }
@@ -140,7 +141,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 	// View channel default format settings: fd_v:CHID
 	bot.callbackQuery(/^fd_v:([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 
 		const current = resolveFormatSettings(config.defaultFormat);
@@ -162,13 +163,13 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 	bot.callbackQuery(/^fs_r:([^:]+):([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
 		const sourceId = ctx.match[2];
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 		const source = config.sources.find((s) => s.id === sourceId);
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found' }); return; }
 
 		delete source.format;
-		await saveChannelConfig(kv, channelId, config);
+		await saveChannelConfigToD1(db, channelId, config);
 
 		const current = resolveFormatSettings(config.defaultFormat);
 		const keyboard = buildFormatKeyboard(
@@ -188,11 +189,11 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 	// Reset channel defaults to system defaults: fd_r:CHID
 	bot.callbackQuery(/^fd_r:([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 
 		delete config.defaultFormat;
-		await saveChannelConfig(kv, channelId, config);
+		await saveChannelConfigToD1(db, channelId, config);
 
 		const current = resolveFormatSettings();
 		const keyboard = buildFormatKeyboard(

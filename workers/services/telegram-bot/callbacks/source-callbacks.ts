@@ -2,7 +2,7 @@ import { InlineKeyboard } from 'grammy';
 import type { Bot } from 'grammy';
 import type { SourceType } from '../../../types/telegram';
 import type { FeedMediaFilter } from '../../../types/feed';
-import { getChannelConfig, saveChannelConfig } from '../storage/kv-operations';
+import { getChannelConfigFromD1, saveChannelConfigToD1 } from '../../../db/d1';
 import { setAdminState } from '../storage/admin-state';
 import { showSourceDetail } from '../views/source-views';
 import { showChannelConfig } from '../views/channel-views';
@@ -13,6 +13,7 @@ import { editOrReply } from '../helpers/edit-or-reply';
  */
 export function registerSourceCallbacks(bot: Bot, env: Env, kv: KVNamespace): void {
 	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
+	const db = env.DB;
 
 	// Add source → source type selection
 	bot.callbackQuery(/^add_src:([^:]+)$/, async (ctx) => {
@@ -57,7 +58,7 @@ export function registerSourceCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 	bot.callbackQuery(/^src_detail:([^:]+):([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
 		const sourceId = ctx.match[2];
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 
 		const source = config.sources.find((s) => s.id === sourceId);
@@ -71,14 +72,14 @@ export function registerSourceCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 	bot.callbackQuery(/^src_toggle:([^:]+):([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
 		const sourceId = ctx.match[2];
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 
 		const source = config.sources.find((s) => s.id === sourceId);
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found' }); return; }
 
 		source.enabled = !source.enabled;
-		await saveChannelConfig(kv, channelId, config);
+		await saveChannelConfigToD1(db, channelId, config);
 		await showSourceDetail(ctx, channelId, source);
 		await ctx.answerCallbackQuery({ text: source.enabled ? '✅ Enabled' : '❌ Disabled' });
 	});
@@ -87,12 +88,12 @@ export function registerSourceCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 	bot.callbackQuery(/^src_remove:([^:]+):([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
 		const sourceId = ctx.match[2];
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 
 		config.sources = config.sources.filter((s) => s.id !== sourceId);
-		await saveChannelConfig(kv, channelId, config);
-		await showChannelConfig(ctx, kv, channelId);
+		await saveChannelConfigToD1(db, channelId, config);
+		await showChannelConfig(ctx, db, channelId);
 		await ctx.answerCallbackQuery({ text: 'Source removed' });
 	});
 
@@ -101,14 +102,14 @@ export function registerSourceCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		const channelId = ctx.match[1];
 		const sourceId = ctx.match[2];
 		const mediaFilter = ctx.match[3] as FeedMediaFilter;
-		const config = await getChannelConfig(kv, channelId);
+		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 
 		const source = config.sources.find((s) => s.id === sourceId);
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found' }); return; }
 
 		source.mediaFilter = mediaFilter;
-		await saveChannelConfig(kv, channelId, config);
+		await saveChannelConfigToD1(db, channelId, config);
 		await showSourceDetail(ctx, channelId, source);
 		await ctx.answerCallbackQuery({ text: `Filter: ${mediaFilter}` });
 	});
