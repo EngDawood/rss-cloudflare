@@ -3,6 +3,96 @@ import type { ChannelSource } from '../types/telegram';
 import { fetchFeed } from './feed-fetcher';
 import { RSS_ITEMS_LIMIT, FEED_CACHE_TTL } from '../constants';
 
+// How many instances to try before giving up (top-ranked via KV benchmark)
+const INSTANCE_RETRY_LIMIT = 3;
+
+// The official RSSHub domain — extract paths from it but never add it to the instance pool (often down/blocked)
+const RSSHUB_APP = 'https://rsshub.app';
+
+export type DetectedFeedSource = {
+	type: 'rsshub' | 'rss_bridge';
+	value: string;        // path for rsshub (e.g. '/thegradient/posts'), query for rss_bridge
+	promote: string | null; // instance URL to promote in KV, null = don't promote
+};
+
+/**
+ * Parse a full RSSHub or RSS-Bridge URL into its canonical path/query and detected instance.
+ * Returns null if the URL doesn't match any known pattern.
+ *
+ * rsshub.app URLs are recognised but the instance is NOT promoted (it is unreliable).
+ * All other RSSHub/RSS-Bridge instances ARE promoted to top of the KV sorted list.
+ */
+export async function detectAndPromoteSource(
+	url: string,
+	cache?: KVNamespace
+): Promise<DetectedFeedSource | null> {
+	let parsed: URL;
+	try { parsed = new URL(url); } catch { return null; }
+
+	const origin = parsed.origin;
+
+	// ── RSS-Bridge ───────────────────────────────────────────────────────────
+	const bridgeMatch = RSS_BRIDGE_INSTANCES.find(inst => url.startsWith(inst));
+	if (bridgeMatch) {
+		const value = url.substring(bridgeMatch.length) || '/';
+		if (cache) await promoteInstanceInKV(cache, 'rssbridge', bridgeMatch);
+		return { type: 'rss_bridge', value, promote: bridgeMatch };
+	}
+
+	// Unknown RSS-Bridge-like host (hostname contains 'rss-bridge' or 'rssbridge')
+	if (parsed.hostname.includes('rss-bridge') || parsed.hostname.includes('rssbridge')) {
+		const value = url.substring(origin.length) || '/';
+		if (cache) await promoteInstanceInKV(cache, 'rssbridge', origin, true);
+		return { type: 'rss_bridge', value, promote: origin };
+	}
+
+	// ── RSSHub — rsshub.app special case ────────────────────────────────────
+	if (origin === RSSHUB_APP || url.startsWith(RSSHUB_APP + '/')) {
+		const value = parsed.pathname + parsed.search;
+		return { type: 'rsshub', value, promote: null }; // don't promote rsshub.app
+	}
+
+	// Known RSSHub instance
+	const rsshubMatch = RSSHUB_INSTANCES.find(inst => url.startsWith(inst));
+	if (rsshubMatch) {
+		const value = parsed.pathname + parsed.search;
+		if (cache) await promoteInstanceInKV(cache, 'rsshub', rsshubMatch);
+		return { type: 'rsshub', value, promote: rsshubMatch };
+	}
+
+	// Unknown RSSHub-like host (hostname contains 'rsshub' or starts with 'hub.')
+	if (parsed.hostname.includes('rsshub') || parsed.hostname.startsWith('hub.')) {
+		const value = parsed.pathname + parsed.search;
+		if (cache) await promoteInstanceInKV(cache, 'rsshub', origin, true);
+		return { type: 'rsshub', value, promote: origin };
+	}
+
+	return null;
+}
+
+async function promoteInstanceInKV(
+	cache: KVNamespace,
+	type: 'rssbridge' | 'rsshub',
+	instance: string,
+	addIfMissing = false
+): Promise<void> {
+	const key = `instances:sorted:${type}`;
+	const defaultList = type === 'rssbridge' ? RSS_BRIDGE_INSTANCES : RSSHUB_INSTANCES;
+	try {
+		const raw = await cache.get(key);
+		let list: string[] = raw ? (JSON.parse(raw) as string[]) : [...defaultList];
+		if (!list.includes(instance)) {
+			if (!addIfMissing) return;
+			list = [instance, ...list];
+		} else {
+			list = [instance, ...list.filter(i => i !== instance)];
+		}
+		await cache.put(key, JSON.stringify(list));
+	} catch {
+		// best-effort
+	}
+}
+
 // --- RSS-Bridge Public Instances (failover list) ---
 export const RSS_BRIDGE_INSTANCES = [
 	'https://rssbridge.prenghy.org',
@@ -98,7 +188,10 @@ export async function fetchForSource(source: ChannelSource, env?: Env): Promise<
 		case 'rss_url':
 			return await fetchRssUrl(source.value, env);
 		case 'rsshub_url':
+		case 'rsshub':
 			return await fetchRSSHubUrl(source.value, env);
+		case 'rss_bridge':
+			return await fetchRssBridgeGeneric(source.value, env);
 		case 'tiktok_user':
 			return await fetchTikTokUser(source.value, env);
 		default:
@@ -131,8 +224,8 @@ async function fetchRssUrl(url: string, env?: Env): Promise<FetchResult> {
 			const queryPath = url.substring(matchedInstance.length); // e.g., "/?action=display&bridge=..."
 			console.log(`[RSSBridge] URL ${matchedInstance} failed, trying other instances...`);
 
-			// Fetch sorted instances from KV
-			const activeInstances = await getSortedInstances('rssbridge', env?.CACHE);
+			// Fetch sorted instances from KV, limit to top N
+			const activeInstances = (await getSortedInstances('rssbridge', env?.CACHE)).slice(0, INSTANCE_RETRY_LIMIT);
 
 			for (const instance of activeInstances) {
 				if (instance === matchedInstance) continue;
@@ -156,7 +249,7 @@ async function fetchRssUrl(url: string, env?: Env): Promise<FetchResult> {
  * Fetch a RSSHub path via all known RSSHub instances, with failover.
  * The value stored is the path+query (e.g. "/anthropic/news"), not a full URL.
  */
-async function fetchRSSHubUrl(path: string, env?: Env): Promise<FetchResult> {
+export async function fetchRSSHubUrl(path: string, env?: Env): Promise<FetchResult> {
 	return fetchFromRSSBridgeInstances(
 		(instance) => `${instance}${path}`,
 		`rsshub:${path}`,
@@ -249,6 +342,19 @@ export async function fetchInstagramTag(hashtag: string, env?: Env): Promise<Fet
 }
 
 /**
+ * Fetch an RSS-Bridge query string (without instance prefix) via top ranked instances.
+ * The value stored is the query string (e.g. "/?action=display&bridge=..."), not a full URL.
+ */
+export async function fetchRssBridgeGeneric(queryString: string, env?: Env): Promise<FetchResult> {
+	return fetchFromRSSBridgeInstances(
+		(instance) => `${instance}${queryString}`,
+		`rss_bridge:${queryString.substring(0, 60)}`,
+		RSS_BRIDGE_INSTANCES,
+		env
+	);
+}
+
+/**
  * Try each RSS-Bridge instance in order, return first successful result.
  */
 async function fetchFromRSSBridgeInstances(
@@ -267,8 +373,8 @@ async function fetchFromRSSBridgeInstances(
 		type = 'tiktok';
 	}
 
-	// Fetch sorted instances from KV
-	const activeInstances = await getSortedInstances(type, env?.CACHE);
+	// Fetch sorted instances from KV, limit to top N to avoid exhausting timeouts
+	const activeInstances = (await getSortedInstances(type, env?.CACHE)).slice(0, INSTANCE_RETRY_LIMIT);
 
 	for (const instance of activeInstances) {
 		const url = buildUrl(instance);

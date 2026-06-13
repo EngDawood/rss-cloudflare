@@ -1,6 +1,11 @@
 import type { Context } from 'hono';
 import { Bot } from 'grammy';
 import { fetchFeed } from '../services/feed-fetcher';
+import { RSS_BRIDGE_INSTANCES, RSS_BRIDGE_TIKTOK_INSTANCES, RSSHUB_INSTANCES, fetchForSource, detectAndPromoteSource } from '../services/source-fetcher';
+import { runInstanceBenchmark } from '../cron/benchmark-instances';
+import type { ChannelSource } from '../types/telegram';
+import type { FetchResult } from '../types/feed';
+import type { DbFeed } from '../db/d1';
 import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format';
 import { sendMediaToChannel } from '../services/telegram-bot/handlers/send-media';
 import { enrichFeedItems } from '../utils/media-enrichment';
@@ -67,6 +72,14 @@ async function logAndSend(
 	}
 }
 
+function fetchDbFeed(feed: DbFeed, env: Env): Promise<FetchResult> {
+	if (feed.source_type === 'rsshub' || feed.source_type === 'rss_bridge') {
+		const src: ChannelSource = { id: '', type: feed.source_type as ChannelSource['type'], value: feed.url, mediaFilter: 'all', enabled: true };
+		return fetchForSource(src, env);
+	}
+	return fetchFeed(feed.url, feed.title || undefined);
+}
+
 export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 	// 1. Authenticate if MCP_AUTH_TOKEN is configured
 	const auth = c.req.header('Authorization');
@@ -106,15 +119,23 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 			case 'add_feed': {
 				const { url, title } = params;
 				if (!url) return c.json({ error: 'url parameter is required' }, 400);
-				const existing = await getFeedByUrl(db, url);
-				if (existing) return c.json({ data: { message: 'Feed already exists', feed: existing } });
 
-				const result = await fetchFeed(url, title);
+				const detected = await detectAndPromoteSource(url, c.env.CACHE);
+				const canonicalUrl = detected ? detected.value : url;
+				const sourceType = detected ? detected.type : 'rss_url';
+
+				const existing = await getFeedByUrl(db, canonicalUrl);
+				if (existing) return c.json({ data: { message: 'Feed already exists', feed: existing, detected } });
+
+				const result = detected
+					? await fetchForSource({ id: '', type: detected.type as ChannelSource['type'], value: detected.value, mediaFilter: 'all', enabled: true }, c.env)
+					: await fetchFeed(url, title);
+
 				const feedTitle = title || result.feedTitle || url;
-				const feed = await insertFeed(db, url, feedTitle);
+				const feed = await insertFeed(db, canonicalUrl, feedTitle, sourceType);
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
-				return c.json({ data: { feed, itemsInserted: inserted, errors: result.errors } });
+				return c.json({ data: { feed, itemsInserted: inserted, errors: result.errors, detected } });
 			}
 			case 'remove_feed': {
 				const { feedId } = params;
@@ -137,7 +158,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				if (!feedId) return c.json({ error: 'feedId is required' }, 400);
 				const feed = await getFeedById(db, feedId);
 				if (!feed) return c.json({ error: `Feed ${feedId} not found` }, 404);
-				const result = await fetchFeed(feed.url, feed.title || undefined);
+				const result = await fetchDbFeed(feed, c.env);
 				const inserted = await upsertItems(db, feedId, result.items);
 				await updateLastFetched(db, feedId);
 				return c.json({ data: { feedId, itemsFetched: result.items.length, itemsInserted: inserted, errors: result.errors } });
@@ -148,7 +169,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				const results: Array<{ feedId: string; title: string; inserted: number; errors: number }> = [];
 				for (const feed of enabled) {
 					try {
-						const result = await fetchFeed(feed.url, feed.title || undefined);
+						const result = await fetchDbFeed(feed, c.env);
 						const inserted = await upsertItems(db, feed.id, result.items);
 						await updateLastFetched(db, feed.id);
 						results.push({ feedId: feed.id, title: feed.title, inserted, errors: result.errors.length });
@@ -377,6 +398,36 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 					return c.json({ data: { summary } });
 				}
 				return c.json({ error: 'AI summarization failed. Check that your AI_GATEWAY_TOKEN secret is configured and you have active internet connection.' }, 500);
+			}
+
+			// ── Instance management ───────────────────────────────────────────────────
+			case 'get_instances': {
+				const cache = c.env.CACHE;
+				const [bridgeRaw, tiktokRaw, rsshubRaw] = await Promise.all([
+					cache?.get('instances:sorted:rssbridge'),
+					cache?.get('instances:sorted:tiktok'),
+					cache?.get('instances:sorted:rsshub'),
+				]);
+				return c.json({
+					data: {
+						rssbridge: bridgeRaw ? JSON.parse(bridgeRaw) : RSS_BRIDGE_INSTANCES,
+						tiktok: tiktokRaw ? JSON.parse(tiktokRaw) : RSS_BRIDGE_TIKTOK_INSTANCES,
+						rsshub: rsshubRaw ? JSON.parse(rsshubRaw) : RSSHUB_INSTANCES,
+					}
+				});
+			}
+			case 'set_instances': {
+				const { type, instances } = params;
+				if (!type || !Array.isArray(instances)) return c.json({ error: 'type and instances[] are required' }, 400);
+				if (!['rssbridge', 'tiktok', 'rsshub'].includes(type)) return c.json({ error: 'type must be rssbridge, tiktok, or rsshub' }, 400);
+				if (!c.env.CACHE) return c.json({ error: 'KV CACHE binding not available' }, 500);
+				await c.env.CACHE.put(`instances:sorted:${type}`, JSON.stringify(instances));
+				return c.json({ data: { type, count: instances.length } });
+			}
+			case 'run_benchmark': {
+				if (!c.env.CACHE) return c.json({ error: 'KV CACHE binding not available' }, 500);
+				await runInstanceBenchmark(c.env);
+				return c.json({ data: { ok: true } });
 			}
 
 			default:

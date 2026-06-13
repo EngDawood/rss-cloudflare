@@ -1,12 +1,17 @@
 import { RSS_BRIDGE_INSTANCES, RSS_BRIDGE_TIKTOK_INSTANCES, RSSHUB_INSTANCES } from '../services/source-fetcher';
 
-const BENCHMARK_TIMEOUT_MS = 5000; // 5 seconds timeout per instance
+const BENCHMARK_TIMEOUT_MS = 12000; // 12 seconds timeout per instance (feed fetch is slower than ping)
 const BENCHMARK_INTERVAL_MS = 60 * 60 * 1000; // Run once per hour
+
+// Probe paths that return actual feed items to verify content delivery, not just reachability
+const RSS_BRIDGE_PROBE = '/?action=display&bridge=HackerNewsBridge&format=Atom';
+const RSSHUB_PROBE = '/hackernews/best';
 
 interface BenchmarkResult {
 	instance: string;
 	success: boolean;
 	durationMs: number;
+	itemCount: number; // Number of feed items returned; 0 means reachable but no content
 }
 
 /**
@@ -35,38 +40,44 @@ export async function maybeRunInstanceBenchmark(env: Env): Promise<void> {
 }
 
 /**
- * Benchmark a single instance by fetching its root URL.
+ * Counts RSS/Atom feed items in a response body.
  */
-async function benchmarkInstance(instance: string): Promise<BenchmarkResult> {
+function countFeedItems(xml: string): number {
+	return (xml.match(/<(item|entry)[\s>]/g) ?? []).length;
+}
+
+/**
+ * Benchmark a single instance by fetching a real probe feed path.
+ * Scores by items returned, not just HTTP reachability.
+ */
+async function benchmarkInstance(instance: string, probePath: string): Promise<BenchmarkResult> {
+	const url = `${instance}${probePath}`;
 	const start = Date.now();
 	try {
 		const controller = new AbortController();
 		const timeout = setTimeout(() => controller.abort(), BENCHMARK_TIMEOUT_MS);
 
-		// Use a lightweight HEAD or GET request to the root path of the instance
-		const response = await fetch(instance, {
-			method: 'GET',
+		const response = await fetch(url, {
 			signal: controller.signal,
 			headers: {
 				'User-Agent': 'Mozilla/5.0 (compatible; RSSBot-HealthCheck/1.0)',
+				Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
 			},
 		});
 
 		clearTimeout(timeout);
 		const durationMs = Date.now() - start;
 
-		// We consider a status < 500 as reachable (even 4xx is a response from the server)
-		return {
-			instance,
-			success: response.status < 500,
-			durationMs,
-		};
-	} catch (err) {
-		return {
-			instance,
-			success: false,
-			durationMs: Date.now() - start,
-		};
+		if (!response.ok) {
+			return { instance, success: false, durationMs, itemCount: 0 };
+		}
+
+		const xml = await response.text();
+		const itemCount = countFeedItems(xml);
+
+		return { instance, success: true, durationMs, itemCount };
+	} catch {
+		return { instance, success: false, durationMs: Date.now() - start, itemCount: 0 };
 	}
 }
 
@@ -79,24 +90,22 @@ export async function runInstanceBenchmark(env: Env): Promise<void> {
 	try {
 		console.log('[Benchmark] Benchmarking all instances...');
 
-		// 1. Benchmark RSS-Bridge instances (full list)
-		const bridgePromises = RSS_BRIDGE_INSTANCES.map(inst => benchmarkInstance(inst));
+		// 1. Benchmark RSS-Bridge instances using a real feed probe
+		const bridgePromises = RSS_BRIDGE_INSTANCES.map(inst => benchmarkInstance(inst, RSS_BRIDGE_PROBE));
 		const bridgeResults = await Promise.all(bridgePromises);
 
-		// Sort: successful first, then sorted by duration ascending
 		const sortedBridge = sortBenchmarkResults(bridgeResults);
 		console.log(`[Benchmark] Sorted RSS-Bridge instances: ${sortedBridge.slice(0, 5).join(', ')}...`);
 		await env.CACHE.put('instances:sorted:rssbridge', JSON.stringify(sortedBridge));
 
-		// 2. Benchmark RSS-Bridge TikTok instances (specifically verified ones)
-		const tiktokPromises = RSS_BRIDGE_TIKTOK_INSTANCES.map(inst => benchmarkInstance(inst));
+		// 2. Benchmark RSS-Bridge TikTok instances (same probe — reachability still matters)
+		const tiktokPromises = RSS_BRIDGE_TIKTOK_INSTANCES.map(inst => benchmarkInstance(inst, RSS_BRIDGE_PROBE));
 		const tiktokResults = await Promise.all(tiktokPromises);
 		const sortedTiktok = sortBenchmarkResults(tiktokResults);
-		// Ensure that we preserve any custom prioritizing order or just standard speed sorting
 		await env.CACHE.put('instances:sorted:tiktok', JSON.stringify(sortedTiktok));
 
-		// 3. Benchmark RSSHub instances
-		const rsshubPromises = RSSHUB_INSTANCES.map(inst => benchmarkInstance(inst));
+		// 3. Benchmark RSSHub instances using a real feed probe
+		const rsshubPromises = RSSHUB_INSTANCES.map(inst => benchmarkInstance(inst, RSSHUB_PROBE));
 		const rsshubResults = await Promise.all(rsshubPromises);
 		const sortedRsshub = sortBenchmarkResults(rsshubResults);
 		console.log(`[Benchmark] Sorted RSSHub instances: ${sortedRsshub.slice(0, 5).join(', ')}...`);
@@ -109,14 +118,17 @@ export async function runInstanceBenchmark(env: Env): Promise<void> {
 }
 
 /**
- * Sorts benchmark results so successful instances are first (fastest first),
- * followed by failed instances.
+ * Sorts benchmark results by content quality first, then speed.
+ * Priority: instances with items > instances reachable but empty > failed instances.
+ * Within each tier, faster is better.
  */
 function sortBenchmarkResults(results: BenchmarkResult[]): string[] {
 	return [...results]
 		.sort((a, b) => {
-			if (a.success && !b.success) return -1;
-			if (!a.success && b.success) return 1;
+			const aHasItems = a.itemCount > 0;
+			const bHasItems = b.itemCount > 0;
+			if (aHasItems !== bHasItems) return aHasItems ? -1 : 1;
+			if (a.success !== b.success) return a.success ? -1 : 1;
 			return a.durationMs - b.durationMs;
 		})
 		.map(r => r.instance);

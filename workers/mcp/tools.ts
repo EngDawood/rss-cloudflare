@@ -2,6 +2,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { Bot } from 'grammy';
 import { fetchFeed } from '../services/feed-fetcher';
+import { fetchForSource, detectAndPromoteSource } from '../services/source-fetcher';
+import type { ChannelSource } from '../types/telegram';
+import type { DbFeed } from '../db/d1';
+import type { FetchResult } from '../types/feed';
 import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format';
 import { sendMediaToChannel } from '../services/telegram-bot/handlers/send-media';
 import { enrichFeedItems } from '../utils/media-enrichment';
@@ -75,23 +79,38 @@ function err(message: string) {
 export function registerTools(server: McpServer, env: Env): void {
 	const db = env.DB;
 
+	const fetchDbFeed = (feed: DbFeed): Promise<FetchResult> => {
+		if (feed.source_type === 'rsshub' || feed.source_type === 'rss_bridge') {
+			const src: ChannelSource = { id: '', type: feed.source_type as ChannelSource['type'], value: feed.url, mediaFilter: 'all', enabled: true };
+			return fetchForSource(src, env);
+		}
+		return fetchFeed(feed.url, feed.title || undefined);
+	};
+
 	// ── Feed management ──────────────────────────────────────────────────────
 
 	server.tool(
 		'add_feed',
-		'Add an RSS/Atom feed URL to the saved list and fetch its initial items.',
-		{ url: z.string().url(), title: z.string().optional() },
+		'Add an RSS/Atom feed URL to the saved list and fetch its initial items. Automatically detects RSSHub and RSS-Bridge URLs and stores them instance-independently.',
+		{ url: z.string(), title: z.string().optional() },
 		async ({ url, title }) => {
 			try {
-				const existing = await getFeedByUrl(db, url);
-				if (existing) return ok({ message: 'Feed already exists', feed: existing });
+				const detected = await detectAndPromoteSource(url, env.CACHE);
+				const canonicalUrl = detected ? detected.value : url;
+				const sourceType = detected ? detected.type : 'rss_url';
 
-				const result = await fetchFeed(url, title);
+				const existing = await getFeedByUrl(db, canonicalUrl);
+				if (existing) return ok({ message: 'Feed already exists', feed: existing, detected });
+
+				const result = detected
+					? await fetchForSource({ id: '', type: detected.type as ChannelSource['type'], value: detected.value, mediaFilter: 'all', enabled: true }, env)
+					: await fetchFeed(url, title);
+
 				const feedTitle = title || result.feedTitle || url;
-				const feed = await insertFeed(db, url, feedTitle);
+				const feed = await insertFeed(db, canonicalUrl, feedTitle, sourceType);
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
-				return ok({ feed, itemsInserted: inserted, errors: result.errors });
+				return ok({ feed, itemsInserted: inserted, errors: result.errors, detected });
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));
 			}
@@ -154,7 +173,7 @@ export function registerTools(server: McpServer, env: Env): void {
 			try {
 				const feed = await getFeedById(db, feedId);
 				if (!feed) return err(`Feed ${feedId} not found`);
-				const result = await fetchFeed(feed.url, feed.title || undefined);
+				const result = await fetchDbFeed(feed);
 				const inserted = await upsertItems(db, feedId, result.items);
 				await updateLastFetched(db, feedId);
 				return ok({ feedId, itemsFetched: result.items.length, itemsInserted: inserted, errors: result.errors });
@@ -175,7 +194,7 @@ export function registerTools(server: McpServer, env: Env): void {
 				const results: Array<{ feedId: string; title: string; inserted: number; errors: number }> = [];
 				for (const feed of enabled) {
 					try {
-						const result = await fetchFeed(feed.url, feed.title || undefined);
+						const result = await fetchDbFeed(feed);
 						const inserted = await upsertItems(db, feed.id, result.items);
 						await updateLastFetched(db, feed.id);
 						results.push({ feedId: feed.id, title: feed.title, inserted, errors: result.errors.length });

@@ -10,6 +10,7 @@ export interface DbFeed {
 	last_fetched_at: number | null;
 	created_at: number;
 	ai_summary: string;   // 'inherit' | 'enable' | 'disable'
+	source_type?: string | null; // 'rsshub' | 'rss_bridge' | 'rss_url' | null (null = legacy rss_url)
 }
 
 export interface DbFeedWithCounts extends DbFeed {
@@ -113,13 +114,13 @@ export async function getFeedByUrl(db: D1Database, url: string): Promise<DbFeed 
 	return db.prepare('SELECT * FROM feeds WHERE url = ?').bind(url).first<DbFeed>();
 }
 
-export async function insertFeed(db: D1Database, url: string, title: string): Promise<DbFeed> {
+export async function insertFeed(db: D1Database, url: string, title: string, sourceType?: string): Promise<DbFeed> {
 	const id = genId();
 	const now = Math.floor(Date.now() / 1000);
 	await db.prepare(
-		'INSERT INTO feeds (id, url, title, enabled, created_at) VALUES (?, ?, ?, 1, ?)'
-	).bind(id, url, title, now).run();
-	return { id, url, title, enabled: 1, last_fetched_at: null, created_at: now, ai_summary: 'inherit' };
+		'INSERT INTO feeds (id, url, title, enabled, created_at, source_type) VALUES (?, ?, ?, 1, ?, ?)'
+	).bind(id, url, title, now, sourceType ?? null).run();
+	return { id, url, title, enabled: 1, last_fetched_at: null, created_at: now, ai_summary: 'inherit', source_type: sourceType ?? null };
 }
 
 export async function removeFeed(db: D1Database, feedId: string): Promise<void> {
