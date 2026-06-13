@@ -115,13 +115,17 @@ The MCP server is served at `/mcp` via `RSSReaderMCP extends McpAgent<Env>` (Clo
 
 **Config:** `get_config`
 
-### D1 Tables (binding: `DB`, database: `rss-reader`)
-- `feeds` — RSS/Atom feed URLs with enabled flag
+### D1 Tables (binding: `DB`, database: `rss-reader`) — 10 tables, migrations 0001–0005 applied
+- `feeds` — unified sources: `(source_type, source_value)` — `rss_url` | `instagram_user` | `tiktok_user` | `instagram_story`
 - `items` — parsed feed entries; `media` column is `JSON FeedItemMedia[]` (URLs only, not bytes)
-- `config` — flat key→value config store (legacy)
-- `chats` — named Telegram chat targets; partial unique index enforces at most one default
+- `config` — flat key→value config store
+- `chats` — named MCP Telegram targets; partial unique index enforces at most one default
 - `notes` — freeform agent-written notes/recaps with optional item/chat refs
-- `post_log` — auto-written on every Telegram send (ok + error); `posted_at` timestamp
+- `post_log` — auto-written on every Telegram send (ok + error); `posted_at` timestamp; dedup by `(chat_id, item_id)`
+- `channels` — Telegram channels managed by the bot (id = numeric Telegram chat ID)
+- `telegram_subscriptions` — M2M: `(feed_id, channel_id, media_filter, format, enabled)`
+- `mcp_subscriptions` — M2M: feeds scoped to MCP agent (currently unused/empty)
+- `channel_ai_settings` — per-channel and per-source AI summarizer overrides
 
 ### Internal MCP helpers (not exported)
 - `resolveTarget(db, target?)` — resolves chat name / raw numeric id / default chat → `{chatId, chatName?}`
@@ -178,16 +182,14 @@ POST /telegram                                 # Webhook endpoint for bot update
 
 **Cron job:** `check-feeds.ts` runs every N minutes (configurable per channel), fetches new posts, sends to Telegram channels.
 
-## Queue Architecture (feat/Queue branch)
+## Queue Architecture
 
-The cron → send path uses a **two-tier Cloudflare Queue** system:
+The cron → send path uses a **two-tier Cloudflare Queue** system (D1-backed, KV sent-set eliminated as of Phase 3):
 
-- **Tier 1 (`FEED_FETCH_QUEUE`):** `processFetchTask()` in `src/queue-handler.ts` — fetches source, deduplicates via KV sent set (`telegram:sent:{channelId}:{sourceId}`), enriches items (Telegraph/TikTok), queues up to 5 items to Tier 2.
+- **Tier 1 (`FEED_FETCH_QUEUE`):** `processFetchTask()` in `workers/queue-handler.ts` — fetches feed by `feedId`, upserts items to D1, loops over all `telegram_subscriptions` for the feed, deduplicates via `wasPostedToChannel(db, chatId, itemId)` (post_log).
 - **Tier 2 (`TELEGRAM_SEND_QUEUE`):** `processSendTask()` — formats `FeedItem` → `TelegramMediaMessage` via `formatFeedItem()`, sends via `sendMediaToChannel()`. Handles 429 rate-limiting by re-throwing for Cloudflare retry.
-- Queue task types defined in `src/types/queue.ts`: `FetchTask { type, channelId, sourceId }` and `SendTask { type, channelId, item, settings }`.
-- `src/cron/check-feeds.ts` — cron entry point; also `src/cron/refresh-feeds.ts` (new).
-
-**Key coupling point:** `queue-handler.ts` is hard-wired to Telegram (`Bot`, `sendMediaToChannel`, grammY). The planned Publisher abstraction (see below) will generalize this.
+- Queue task types in `workers/types/queue.ts`: `FetchTask { feedId }` and `SendTask { channelId, item, settings }`.
+- `workers/cron/check-feeds.ts` — cron entry point: reads D1 `channels`+`telegram_subscriptions`, bucket-schedules, deduplicates by `feed_id`, emits one `FetchTask{feedId}` per due feed.
 
 ## Multi-Platform Publishing (planned, not yet implemented)
 
