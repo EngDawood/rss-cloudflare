@@ -12,7 +12,6 @@
 		"cf-typegen": "wrangler types",
 		"build": "tsc -p app/tsconfig.app.json && vite build app",
 		"preview": "vite preview app",
-		"types": "wrangler types",
 		"lint": "eslint app"
 	},
 	"devDependencies": {

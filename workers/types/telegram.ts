@@ -26,7 +26,7 @@ export interface AdminConfig {
 	};
 }
 
-export type SourceType = 'instagram_user' | 'instagram_tag' | 'instagram_story' | 'rss_url' | 'rsshub_url' | 'rsshub' | 'rss_bridge' | 'tiktok_user';
+export type SourceType = 'instagram_user' | 'instagram_tag' | 'instagram_story' | 'rss_url' | 'rsshub_url' | 'tiktok_user';
 
 // Channel source configuration
 export interface ChannelSource {
