@@ -54,7 +54,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 
 				const result = await fetchFeed(url, title);
 				const feedTitle = title || result.feedTitle || url;
-				const feed = await insertFeed(db, url, feedTitle);
+				const feed = await upsertFeedBySource(db, { sourceType: 'rss_url', sourceValue: url, title: feedTitle });
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
 				return c.json({ data: { feed, itemsInserted: inserted, errors: result.errors } });

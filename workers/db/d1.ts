@@ -19,6 +19,7 @@ export interface DbFeed {
 export interface DbFeedWithCounts extends DbFeed {
 	total_count: number;
 	unread_count: number;
+	telegram_channel_ids: string | null; // comma-separated channel IDs from GROUP_CONCAT, null if none
 }
 
 export interface DbItem {
@@ -116,7 +117,7 @@ export async function getFeedByUrl(db: D1Database, url: string): Promise<DbFeed 
 /**
  * Insert a core feed identified by (source_type, source_value). When a feed
  * with the same identity already exists, the existing row is reused
- * (INSERT OR IGNORE) and returned — this is the de-duplication guarantee.
+ * (INSERT OR IGNORE) — this is the de-duplication guarantee.
  */
 export async function upsertFeedBySource(
 	db: D1Database,
@@ -131,7 +132,6 @@ export async function upsertFeedBySource(
 		`INSERT OR IGNORE INTO feeds (id, source_type, source_value, title, enabled, check_interval_minutes, created_at)
 		 VALUES (?, ?, ?, ?, 1, ?, ?)`
 	).bind(id, opts.sourceType, opts.sourceValue, opts.title ?? '', interval, now).run();
-	// Re-read to resolve the winning row (handles concurrent inserts).
 	const row = await getFeedBySource(db, opts.sourceType, opts.sourceValue);
 	return row ?? {
 		id, source_type: opts.sourceType, source_value: opts.sourceValue, title: opts.title ?? '',
@@ -1011,3 +1011,4 @@ export function dbTelegramSubToChannelSource(
 		format: sub.format ? parseJsonSafe<Partial<FormatSettings>>(sub.format, {}) : undefined,
 	};
 }
+

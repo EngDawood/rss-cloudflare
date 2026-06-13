@@ -5,7 +5,7 @@ import { fetchFeed } from '../services/feed-fetcher';
 import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format';
 import { enrichFeedItems } from '../utils/media-enrichment';
 import {
-	getFeeds, getFeedById, getFeedByUrl, insertFeed, removeFeed, setFeedEnabled,
+	getFeeds, getFeedById, getFeedByUrl, insertFeed, upsertFeedBySource, removeFeed, setFeedEnabled,
 	updateLastFetched, upsertItems, listNewItems, searchItems, getItemById,
 	markItemsRead, getConfig, setConfig, dbItemToFeedItem,
 	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
@@ -39,7 +39,7 @@ export function registerTools(server: McpServer, env: Env): void {
 
 				const result = await fetchFeed(url, title);
 				const feedTitle = title || result.feedTitle || url;
-				const feed = await insertFeed(db, url, feedTitle);
+				const feed = await upsertFeedBySource(db, { sourceType: 'rss_url', sourceValue: url, title: feedTitle });
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
 				return ok({ feed, itemsInserted: inserted, errors: result.errors });
