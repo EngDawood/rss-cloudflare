@@ -72,8 +72,30 @@ export default function App() {
   // Skeletons / Loading states
   const [isLoading, setIsLoading] = useState(true);
 
+  // Feed filter (persisted across navigation)
+  const [feedViewFilter, setFeedViewFilterState] = useState<'all' | 'mcp' | 'telegram'>(
+    () => (localStorage.getItem('rss_feed_filter') as 'all' | 'mcp' | 'telegram') || 'all'
+  );
+  const [selectedChannelId, setSelectedChannelIdState] = useState<string | null>(
+    () => localStorage.getItem('rss_channel_filter') || null
+  );
+  const setFeedViewFilter = (v: 'all' | 'mcp' | 'telegram') => {
+    setFeedViewFilterState(v);
+    localStorage.setItem('rss_feed_filter', v);
+    if (v !== 'telegram') {
+      setSelectedChannelIdState(null);
+      localStorage.removeItem('rss_channel_filter');
+    }
+  };
+  const setSelectedChannelId = (id: string | null) => {
+    setSelectedChannelIdState(id);
+    if (id) localStorage.setItem('rss_channel_filter', id);
+    else localStorage.removeItem('rss_channel_filter');
+  };
+
   // Data states
   const [feeds, setFeeds] = useState<any[]>([]);
+  const [channels, setChannels] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
   const [unreadItems, setUnreadItems] = useState<any[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
@@ -229,7 +251,7 @@ export default function App() {
       if (activeTab === 'feeds') loadFeeds();
       else if (activeTab === 'reader') {
         loadReaderItems();
-        loadFeeds(true); // Load silently to populate filters dropdown
+        if (feeds.length === 0) loadFeeds(true); // populate category filter + dropdown
       }
       else if (activeTab === 'telegram') loadChats();
       else if (activeTab === 'sandbox') loadSandboxOptions();
@@ -240,8 +262,12 @@ export default function App() {
   // ── Feeds Tab ─────────────────────────────────────────────────────────────
   const loadFeeds = async (silent = false) => {
     if (!silent) setIsLoading(true);
-    const res = await callApi('list_feeds');
-    if (!res.error) setFeeds(res.data || []);
+    const [feedsRes, channelsRes] = await Promise.all([
+      callApi('list_feeds'),
+      callApi('list_channels'),
+    ]);
+    if (!feedsRes.error) setFeeds(feedsRes.data || []);
+    if (!channelsRes.error) setChannels(channelsRes.data || []);
     if (!silent) setIsLoading(false);
   };
 
@@ -716,6 +742,18 @@ export default function App() {
     }
   };
 
+  // Derived: feeds filtered by MCP/Telegram/channel selection
+  const filteredFeeds = feeds.filter(feed => {
+    const channelIds: string[] = feed.telegram_channel_ids || [];
+    if (feedViewFilter === 'mcp') return channelIds.length === 0;
+    if (feedViewFilter === 'telegram') {
+      if (channelIds.length === 0) return false;
+      if (selectedChannelId) return channelIds.includes(selectedChannelId);
+      return true;
+    }
+    return true; // 'all'
+  });
+
   const springTransition = { type: 'spring', stiffness: 100, damping: 20 } as const;
 
   return (
@@ -914,14 +952,56 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Feed Category Filter Bar */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex bg-bg-input border border-border-base rounded-xl p-1 gap-0.5">
+                    {([
+                      { id: 'all', label: 'All Feeds' },
+                      { id: 'mcp', label: 'MCP Only' },
+                      { id: 'telegram', label: 'Telegram' },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.id}
+                        onClick={() => setFeedViewFilter(opt.id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-200 cursor-pointer ${
+                          feedViewFilter === opt.id
+                            ? 'bg-accent-primary text-white shadow-sm'
+                            : 'text-text-muted hover:text-text-base'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {feedViewFilter === 'telegram' && channels.length > 0 && (
+                    <select
+                      value={selectedChannelId || ''}
+                      onChange={e => setSelectedChannelId(e.target.value || null)}
+                      className="bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
+                    >
+                      <option value="">All Channels</option>
+                      {channels.map(ch => (
+                        <option key={ch.id} value={ch.id}>{ch.name || ch.id}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  <span className="text-[11px] text-text-muted font-mono">
+                    {filteredFeeds.length} / {feeds.length} feeds
+                  </span>
+                </div>
+
                 {/* Feeds Card Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {feeds.length === 0 ? (
+                  {filteredFeeds.length === 0 ? (
                     <div className="lg:col-span-2 p-12 text-center border border-dashed border-border-base rounded-2xl bg-bg-card/25 text-sm text-text-muted">
-                      No feeds registered. Click "Add Feed" to start importing content.
+                      {feeds.length === 0
+                        ? 'No feeds registered. Click "Add Feed" to start importing content.'
+                        : `No ${feedViewFilter === 'mcp' ? 'MCP-only' : feedViewFilter === 'telegram' ? 'Telegram' : ''} feeds found.`}
                     </div>
                   ) : (
-                    feeds.map(feed => (
+                    filteredFeeds.map(feed => (
                       <motion.div 
                         key={feed.id}
                         whileHover={{ y: -4 }}
@@ -1052,6 +1132,43 @@ export default function App() {
                     </p>
                   </div>
                   <div className="flex gap-3 items-center flex-wrap">
+                    {/* Category Filter */}
+                    <div className="flex bg-bg-input border border-border-base rounded-xl p-1 gap-0.5">
+                      {([
+                        { id: 'all', label: 'All' },
+                        { id: 'mcp', label: 'MCP' },
+                        { id: 'telegram', label: 'Telegram' },
+                      ] as const).map(opt => (
+                        <button
+                          key={opt.id}
+                          onClick={() => {
+                            setFeedViewFilter(opt.id);
+                            setReaderFeedFilter([]); // reset specific feed selection on category change
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-200 cursor-pointer ${
+                            feedViewFilter === opt.id
+                              ? 'bg-accent-primary text-white shadow-sm'
+                              : 'text-text-muted hover:text-text-base'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {feedViewFilter === 'telegram' && channels.length > 0 && (
+                      <select
+                        value={selectedChannelId || ''}
+                        onChange={e => { setSelectedChannelId(e.target.value || null); setReaderFeedFilter([]); }}
+                        className="bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
+                      >
+                        <option value="">All Channels</option>
+                        {channels.map(ch => (
+                          <option key={ch.id} value={ch.id}>{ch.name || ch.id}</option>
+                        ))}
+                      </select>
+                    )}
+
                     {/* Feed Dropdown Multi-Selector */}
                     <div className="relative flex items-center" ref={feedDropdownRef}>
                       <button
@@ -1062,7 +1179,7 @@ export default function App() {
                           {readerFeedFilter.length === 0
                             ? 'All Feeds'
                             : readerFeedFilter.length === 1
-                              ? feeds.find(f => f.id === readerFeedFilter[0])?.title || '1 Feed Selected'
+                              ? filteredFeeds.find(f => f.id === readerFeedFilter[0])?.title || '1 Feed Selected'
                               : `${readerFeedFilter.length} Feeds`}
                         </span>
                         <Funnel size={12} className="absolute right-3 text-text-muted pointer-events-none" />
@@ -1094,8 +1211,8 @@ export default function App() {
                             <div className="flex justify-between items-center px-1.5 py-1 border-b border-border-base mb-1">
                               <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Filter Feeds</span>
                               <div className="flex gap-2">
-                                <button 
-                                  onClick={() => setReaderFeedFilter(feeds.map(f => f.id))}
+                                <button
+                                  onClick={() => setReaderFeedFilter(filteredFeeds.map(f => f.id))}
                                   className="text-[9px] font-bold text-accent-primary hover:underline cursor-pointer"
                                 >
                                   Select All
@@ -1108,10 +1225,10 @@ export default function App() {
                                 </button>
                               </div>
                             </div>
-                            {feeds.length === 0 ? (
-                              <div className="p-4 text-center text-xs text-text-muted">No feeds available</div>
+                            {filteredFeeds.length === 0 ? (
+                              <div className="p-4 text-center text-xs text-text-muted">No feeds in this category</div>
                             ) : (
-                              feeds.map(f => {
+                              filteredFeeds.map(f => {
                                 const isChecked = readerFeedFilter.includes(f.id);
                                 return (
                                   <label 

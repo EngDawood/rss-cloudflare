@@ -86,12 +86,20 @@ export async function getFeeds(db: D1Database): Promise<DbFeedWithCounts[]> {
 	const result = await db.prepare(`
 		SELECT f.*, f.source_value AS url,
 			COUNT(i.id) as total_count,
-			SUM(CASE WHEN i.read = 0 THEN 1 ELSE 0 END) as unread_count
+			SUM(CASE WHEN i.read = 0 THEN 1 ELSE 0 END) as unread_count,
+			(SELECT GROUP_CONCAT(ts.channel_id) FROM telegram_subscriptions ts WHERE ts.feed_id = f.id) as telegram_channel_ids
 		FROM feeds f
 		LEFT JOIN items i ON i.feed_id = f.id
 		GROUP BY f.id
 		ORDER BY f.created_at ASC
 	`).all<DbFeedWithCounts>();
+	return result.results;
+}
+
+export async function getChannels(db: D1Database): Promise<DbChannel[]> {
+	const result = await db.prepare(
+		'SELECT id, name, enabled FROM channels ORDER BY name ASC'
+	).all<DbChannel>();
 	return result.results;
 }
 

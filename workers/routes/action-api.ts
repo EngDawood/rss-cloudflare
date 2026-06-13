@@ -44,7 +44,17 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 			// ── Feed management ──────────────────────────────────────────────────────
 			case 'list_feeds': {
 				const feeds = await getFeeds(db);
-				return c.json({ data: feeds });
+				const normalized = feeds.map(f => ({
+					...f,
+					telegram_channel_ids: f.telegram_channel_ids
+						? f.telegram_channel_ids.split(',').filter(Boolean)
+						: [],
+				}));
+				return c.json({ data: normalized });
+			}
+			case 'list_channels': {
+				const channels = await getChannels(db);
+				return c.json({ data: channels });
 			}
 			case 'add_feed': {
 				const { url, title } = params;
