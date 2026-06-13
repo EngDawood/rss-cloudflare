@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Rss, BookOpen, TelegramLogo, PaperPlaneTilt, 
-  Clock, Terminal, ChatCircleText, Plus, 
-  Trash, Gear, 
+import {
+  Rss, BookOpen, TelegramLogo, PaperPlaneTilt,
+  Clock, Terminal, ChatCircleText, Plus,
+  Trash, Gear, GlobeSimple,
   ArrowsClockwise, Sparkle, Note, MagnifyingGlass,
   ArrowRight, ShieldCheck, ShieldWarning, CaretLeft, CaretRight, X, Sun, Moon,
-  Eye, Funnel
+  Eye, Funnel, ArrowUp, ArrowDown
 } from '@phosphor-icons/react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -139,6 +139,11 @@ export default function App() {
   const [toolResult, setToolResult] = useState('');
   const [isExecutingTool, setIsExecutingTool] = useState(false);
 
+  // Instances management state
+  const [instances, setInstances] = useState<{ rssbridge: string[]; tiktok: string[]; rsshub: string[] }>({ rssbridge: [], tiktok: [], rsshub: [] });
+  const [isBenchmarking, setIsBenchmarking] = useState(false);
+  const [newInstanceInputs, setNewInstanceInputs] = useState({ rssbridge: '', tiktok: '', rsshub: '' });
+
   // Chat Agent state
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolsCalled?: string[] }>>([
     { role: 'assistant', content: 'Hi there! I am your RSS & MCP Agent. You can ask me to list your feeds, check for unread articles, search for posts, or save notes. How can I help you today?' }
@@ -256,6 +261,7 @@ export default function App() {
       else if (activeTab === 'telegram') loadChats();
       else if (activeTab === 'sandbox') loadSandboxOptions();
       else if (activeTab === 'logs') loadLogsAndConfig();
+      else if (activeTab === 'instances') loadInstances();
     }
   }, [activeTab, isAuthenticated]);
 
@@ -269,6 +275,45 @@ export default function App() {
     if (!feedsRes.error) setFeeds(feedsRes.data || []);
     if (!channelsRes.error) setChannels(channelsRes.data || []);
     if (!silent) setIsLoading(false);
+  };
+
+  const loadInstances = async () => {
+    const res = await callApi('get_instances');
+    if (!res.error) setInstances(res.data);
+  };
+
+  const handleSaveInstances = async (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
+    const res = await callApi('set_instances', { type, instances: instances[type] });
+    if (res.error) showToast(`Failed to save: ${res.error}`, 'error');
+    else showToast(`${type} instances saved (${instances[type].length} entries)`, 'success');
+  };
+
+  const handleRunBenchmark = async () => {
+    setIsBenchmarking(true);
+    showToast('Running benchmark — probing all instances with a real feed…', 'info');
+    const res = await callApi('run_benchmark');
+    if (res.error) showToast(`Benchmark failed: ${res.error}`, 'error');
+    else { showToast('Benchmark complete — instances re-ranked by items found + speed', 'success'); await loadInstances(); }
+    setIsBenchmarking(false);
+  };
+
+  const moveInstance = (type: 'rssbridge' | 'tiktok' | 'rsshub', index: number, dir: -1 | 1) => {
+    const list = [...instances[type]];
+    const target = index + dir;
+    if (target < 0 || target >= list.length) return;
+    [list[index], list[target]] = [list[target], list[index]];
+    setInstances(prev => ({ ...prev, [type]: list }));
+  };
+
+  const removeInstance = (type: 'rssbridge' | 'tiktok' | 'rsshub', index: number) => {
+    setInstances(prev => ({ ...prev, [type]: prev[type].filter((_, i) => i !== index) }));
+  };
+
+  const addInstance = (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
+    const url = newInstanceInputs[type].trim().replace(/\/$/, '');
+    if (!url || instances[type].includes(url)) return;
+    setInstances(prev => ({ ...prev, [type]: [...prev[type], url] }));
+    setNewInstanceInputs(prev => ({ ...prev, [type]: '' }));
   };
 
   const handleAddFeed = async (e: React.FormEvent) => {
@@ -854,7 +899,8 @@ export default function App() {
                   { id: 'sandbox', label: 'Post Sandbox', icon: PaperPlaneTilt },
                   { id: 'logs', label: 'Recall & Logs', icon: Clock },
                   { id: 'playground', label: 'MCP Playground', icon: Terminal },
-                  { id: 'chat', label: 'Agent Chat', icon: ChatCircleText }
+                  { id: 'chat', label: 'Agent Chat', icon: ChatCircleText },
+                  { id: 'instances', label: 'Instances', icon: GlobeSimple }
                 ].map(tab => {
                   const Icon = tab.icon;
                   const active = activeTab === tab.id;
@@ -2048,6 +2094,99 @@ export default function App() {
                       <ArrowRight size={14} />
                     </motion.button>
                   </form>
+                </div>
+              </motion.div>
+            )}
+
+            {!isLoading && activeTab === 'instances' && (
+              <motion.div
+                key="instances"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="flex flex-col gap-6"
+              >
+                <div className="flex justify-between items-center flex-wrap gap-4">
+                  <div>
+                    <h2 className="font-bold text-2xl tracking-tight text-text-base">Instance Management</h2>
+                    <p className="text-xs text-text-muted mt-1">Reorder, add, or remove RSS-Bridge and RSSHub instances. Top 3 are tried on each fetch.</p>
+                  </div>
+                  <motion.button
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleRunBenchmark}
+                    disabled={isBenchmarking}
+                    className="flex items-center gap-2 px-4.5 py-2.5 text-xs font-bold text-text-base bg-bg-input border border-border-base rounded-xl hover:bg-neutral-850 transition duration-200 cursor-pointer disabled:opacity-50"
+                  >
+                    <ArrowsClockwise size={14} className={isBenchmarking ? 'animate-spin' : ''} />
+                    <span>{isBenchmarking ? 'Benchmarking…' : 'Run Benchmark'}</span>
+                  </motion.button>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                  {([
+                    { key: 'rssbridge' as const, label: 'RSS-Bridge', color: 'blue' },
+                    { key: 'tiktok' as const, label: 'TikTok-Specific', color: 'rose' },
+                    { key: 'rsshub' as const, label: 'RSSHub', color: 'emerald' },
+                  ]).map(({ key, label, color }) => (
+                    <div key={key} className="liquid-glass p-5 rounded-2xl flex flex-col gap-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted">{label}</h3>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          color === 'blue' ? 'bg-blue-500/10 text-blue-400' :
+                          color === 'rose' ? 'bg-rose-500/10 text-rose-400' :
+                          'bg-emerald-500/10 text-emerald-400'
+                        }`}>{instances[key].length} instances</span>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 max-h-80 overflow-y-auto pr-1">
+                        {instances[key].map((url, idx) => (
+                          <div key={url} className="flex items-center gap-2 bg-bg-input border border-border-base rounded-xl px-3 py-2">
+                            <span className="text-[10px] font-mono text-text-muted w-4 text-right flex-shrink-0">{idx + 1}</span>
+                            <span className="text-xs font-mono text-text-base truncate flex-1 min-w-0">{url}</span>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <button
+                                onClick={() => moveInstance(key, idx, -1)}
+                                disabled={idx === 0}
+                                className="p-1 rounded-lg text-text-muted hover:text-text-base hover:bg-white/5 disabled:opacity-20 cursor-pointer transition"
+                              ><ArrowUp size={11} /></button>
+                              <button
+                                onClick={() => moveInstance(key, idx, 1)}
+                                disabled={idx === instances[key].length - 1}
+                                className="p-1 rounded-lg text-text-muted hover:text-text-base hover:bg-white/5 disabled:opacity-20 cursor-pointer transition"
+                              ><ArrowDown size={11} /></button>
+                              <button
+                                onClick={() => removeInstance(key, idx)}
+                                className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/10 cursor-pointer transition"
+                              ><Trash size={11} /></button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex gap-2 border-t border-border-base pt-3">
+                        <input
+                          type="url"
+                          placeholder="https://new-instance.example.com"
+                          value={newInstanceInputs[key]}
+                          onChange={e => setNewInstanceInputs(prev => ({ ...prev, [key]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addInstance(key); } }}
+                          className="flex-1 bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary font-mono min-w-0"
+                        />
+                        <button
+                          onClick={() => addInstance(key)}
+                          className="px-3 py-2 rounded-xl bg-bg-input border border-border-base text-text-muted hover:text-text-base transition cursor-pointer flex-shrink-0"
+                        ><Plus size={13} /></button>
+                      </div>
+
+                      <motion.button
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handleSaveInstances(key)}
+                        className="w-full py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary-hover text-white font-bold text-xs transition duration-200 cursor-pointer"
+                      >
+                        Save Order
+                      </motion.button>
+                    </div>
+                  ))}
                 </div>
               </motion.div>
             )}
