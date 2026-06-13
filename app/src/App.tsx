@@ -141,7 +141,9 @@ export default function App() {
 
   // Instances management state
   const [instances, setInstances] = useState<{ rssbridge: string[]; tiktok: string[]; rsshub: string[] }>({ rssbridge: [], tiktok: [], rsshub: [] });
-  const [isBenchmarking, setIsBenchmarking] = useState(false);
+  const [isBenchmarking, setIsBenchmarking] = useState<{ rssbridge: boolean; tiktok: boolean; rsshub: boolean }>({ rssbridge: false, tiktok: false, rsshub: false });
+  const [isTesting, setIsTesting] = useState<{ rssbridge: boolean; tiktok: boolean; rsshub: boolean }>({ rssbridge: false, tiktok: false, rsshub: false });
+  const [testResults, setTestResults] = useState<{ rssbridge: null | { url: string; success: boolean; durationMs: number; itemCount: number }; tiktok: null | { url: string; success: boolean; durationMs: number; itemCount: number }; rsshub: null | { url: string; success: boolean; durationMs: number; itemCount: number } }>({ rssbridge: null, tiktok: null, rsshub: null });
   const [newInstanceInputs, setNewInstanceInputs] = useState({ rssbridge: '', tiktok: '', rsshub: '' });
 
   // Chat Agent state
@@ -288,13 +290,24 @@ export default function App() {
     else showToast(`${type} instances saved (${instances[type].length} entries)`, 'success');
   };
 
-  const handleRunBenchmark = async () => {
-    setIsBenchmarking(true);
-    showToast('Running benchmark — probing all instances with a real feed…', 'info');
-    const res = await callApi('run_benchmark');
+  const handleRunBenchmark = async (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
+    setIsBenchmarking(prev => ({ ...prev, [type]: true }));
+    showToast(`Benchmarking ${type} instances…`, 'info');
+    const res = await callApi('run_benchmark', { type });
     if (res.error) showToast(`Benchmark failed: ${res.error}`, 'error');
-    else { showToast('Benchmark complete — instances re-ranked by items found + speed', 'success'); await loadInstances(); }
-    setIsBenchmarking(false);
+    else { showToast(`${type} instances re-ranked by items found + speed`, 'success'); await loadInstances(); }
+    setIsBenchmarking(prev => ({ ...prev, [type]: false }));
+  };
+
+  const handleTestInstance = async (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
+    const url = newInstanceInputs[type].trim();
+    if (!url) return;
+    setIsTesting(prev => ({ ...prev, [type]: true }));
+    setTestResults(prev => ({ ...prev, [type]: null }));
+    const res = await callApi('test_instance', { url, type });
+    if (!res.error) setTestResults(prev => ({ ...prev, [type]: { ...res.data, url } }));
+    else showToast(`Test failed: ${res.error}`, 'error');
+    setIsTesting(prev => ({ ...prev, [type]: false }));
   };
 
   const moveInstance = (type: 'rssbridge' | 'tiktok' | 'rsshub', index: number, dir: -1 | 1) => {
@@ -2106,39 +2119,39 @@ export default function App() {
                 exit={{ opacity: 0, y: -8 }}
                 className="flex flex-col gap-6"
               >
-                <div className="flex justify-between items-center flex-wrap gap-4">
-                  <div>
-                    <h2 className="font-bold text-2xl tracking-tight text-text-base">Instance Management</h2>
-                    <p className="text-xs text-text-muted mt-1">Reorder, add, or remove RSS-Bridge and RSSHub instances. Top 3 are tried on each fetch.</p>
-                  </div>
-                  <motion.button
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleRunBenchmark}
-                    disabled={isBenchmarking}
-                    className="flex items-center gap-2 px-4.5 py-2.5 text-xs font-bold text-text-base bg-bg-input border border-border-base rounded-xl hover:bg-neutral-850 transition duration-200 cursor-pointer disabled:opacity-50"
-                  >
-                    <ArrowsClockwise size={14} className={isBenchmarking ? 'animate-spin' : ''} />
-                    <span>{isBenchmarking ? 'Benchmarking…' : 'Run Benchmark'}</span>
-                  </motion.button>
+                <div>
+                  <h2 className="font-bold text-2xl tracking-tight text-text-base">Instance Management</h2>
+                  <p className="text-xs text-text-muted mt-1">Reorder, add, or remove instances. Top 3 are tried on each fetch — benchmark ranks by items returned, then speed.</p>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <div className="flex flex-col gap-4">
                   {([
                     { key: 'rssbridge' as const, label: 'RSS-Bridge', color: 'blue' },
                     { key: 'tiktok' as const, label: 'TikTok-Specific', color: 'rose' },
                     { key: 'rsshub' as const, label: 'RSSHub', color: 'emerald' },
                   ]).map(({ key, label, color }) => (
                     <div key={key} className="liquid-glass p-5 rounded-2xl flex flex-col gap-4">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted">{label}</h3>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          color === 'blue' ? 'bg-blue-500/10 text-blue-400' :
-                          color === 'rose' ? 'bg-rose-500/10 text-rose-400' :
-                          'bg-emerald-500/10 text-emerald-400'
-                        }`}>{instances[key].length} instances</span>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted">{label}</h3>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            color === 'blue' ? 'bg-blue-500/10 text-blue-400' :
+                            color === 'rose' ? 'bg-rose-500/10 text-rose-400' :
+                            'bg-emerald-500/10 text-emerald-400'
+                          }`}>{instances[key].length}</span>
+                        </div>
+                        <motion.button
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => handleRunBenchmark(key)}
+                          disabled={isBenchmarking[key]}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-text-muted bg-bg-input border border-border-base rounded-lg hover:text-text-base transition duration-200 cursor-pointer disabled:opacity-50 flex-shrink-0"
+                        >
+                          <ArrowsClockwise size={11} className={isBenchmarking[key] ? 'animate-spin' : ''} />
+                          <span>{isBenchmarking[key] ? 'Testing…' : 'Benchmark'}</span>
+                        </motion.button>
                       </div>
 
-                      <div className="flex flex-col gap-1.5 max-h-80 overflow-y-auto pr-1">
+                      <div className="flex flex-col gap-1.5">
                         {instances[key].map((url, idx) => (
                           <div key={url} className="flex items-center gap-2 bg-bg-input border border-border-base rounded-xl px-3 py-2">
                             <span className="text-[10px] font-mono text-text-muted w-4 text-right flex-shrink-0">{idx + 1}</span>
@@ -2185,6 +2198,25 @@ export default function App() {
                       >
                         Save Order
                       </motion.button>
+
+                      <div className="flex flex-col gap-2 border-t border-border-base pt-3">
+                        <motion.button
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => handleTestInstance(key)}
+                          disabled={isTesting[key] || !newInstanceInputs[key].trim()}
+                          className="w-full py-2 rounded-xl bg-bg-input border border-border-base text-text-muted hover:text-text-base font-bold text-xs transition duration-200 cursor-pointer disabled:opacity-40 flex items-center justify-center gap-2"
+                        >
+                          <ArrowsClockwise size={12} className={isTesting[key] ? 'animate-spin' : ''} />
+                          <span>{isTesting[key] ? 'Testing…' : 'Test URL above'}</span>
+                        </motion.button>
+                        {testResults[key] && (
+                          <div className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs border ${testResults[key]!.itemCount > 0 ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : testResults[key]!.success ? 'bg-yellow-500/5 border-yellow-500/20 text-yellow-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'}`}>
+                            <span className="font-bold">{testResults[key]!.itemCount > 0 ? '✓' : testResults[key]!.success ? '!' : '✗'}</span>
+                            <span className="font-mono truncate flex-1 min-w-0 text-[10px]">{testResults[key]!.url}</span>
+                            <span className="flex-shrink-0 font-mono">{testResults[key]!.itemCount} items · {testResults[key]!.durationMs}ms</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
