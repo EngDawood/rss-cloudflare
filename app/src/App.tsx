@@ -73,18 +73,38 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   // Feed filter (persisted across navigation)
-  const [feedViewFilter, setFeedViewFilterState] = useState<'all' | 'mcp' | 'telegram'>(
-    () => (localStorage.getItem('rss_feed_filter') as 'all' | 'mcp' | 'telegram') || 'all'
+  const [feedViewFilter, setFeedViewFilterState] = useState<'all' | 'mcp' | 'telegram' | 'category'>(
+    () => (localStorage.getItem('rss_feed_filter') as 'all' | 'mcp' | 'telegram' | 'category') || 'all'
   );
   const [selectedChannelId, setSelectedChannelIdState] = useState<string | null>(
     () => localStorage.getItem('rss_channel_filter') || null
   );
-  const setFeedViewFilter = (v: 'all' | 'mcp' | 'telegram') => {
+  const [selectedFeedCategoryId, setSelectedFeedCategoryIdState] = useState<string | null>(
+    () => localStorage.getItem('rss_category_filter') || null
+  );
+  const [categoryFeedIds, setCategoryFeedIds] = useState<Record<string, string[]>>({});
+  const setFeedViewFilter = (v: 'all' | 'mcp' | 'telegram' | 'category') => {
     setFeedViewFilterState(v);
     localStorage.setItem('rss_feed_filter', v);
     if (v !== 'telegram') {
       setSelectedChannelIdState(null);
       localStorage.removeItem('rss_channel_filter');
+    }
+    if (v !== 'mcp' && v !== 'category') {
+      setSelectedFeedCategoryIdState(null);
+      localStorage.removeItem('rss_category_filter');
+    }
+  };
+  const setSelectedFeedCategoryId = async (id: string | null) => {
+    setSelectedFeedCategoryIdState(id);
+    if (id) {
+      localStorage.setItem('rss_category_filter', id);
+      if (!categoryFeedIds[id]) {
+        const res = await callApi('get_category_feeds', { categoryId: id });
+        if (!res.error) setCategoryFeedIds(prev => ({ ...prev, [id]: (res.data || []).map((f: any) => f.id) }));
+      }
+    } else {
+      localStorage.removeItem('rss_category_filter');
     }
   };
   const setSelectedChannelId = (id: string | null) => {
@@ -96,6 +116,8 @@ export default function App() {
   // Data states
   const [feeds, setFeeds] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [readerCategoryId, setReaderCategoryIdState] = useState<string>('');
   const [chats, setChats] = useState<any[]>([]);
   const [unreadItems, setUnreadItems] = useState<any[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
@@ -270,12 +292,14 @@ export default function App() {
   // ── Feeds Tab ─────────────────────────────────────────────────────────────
   const loadFeeds = async (silent = false) => {
     if (!silent) setIsLoading(true);
-    const [feedsRes, channelsRes] = await Promise.all([
+    const [feedsRes, channelsRes, catsRes] = await Promise.all([
       callApi('list_feeds'),
       callApi('list_channels'),
+      callApi('list_categories'),
     ]);
     if (!feedsRes.error) setFeeds(feedsRes.data || []);
     if (!channelsRes.error) setChannels(channelsRes.data || []);
+    if (!catsRes.error) setCategories(catsRes.data || []);
     if (!silent) setIsLoading(false);
   };
 
@@ -408,22 +432,27 @@ export default function App() {
     let res;
     const unreadOnly = readerStatusFilter === 'unread';
     const readOnly = readerStatusFilter === 'read';
-    const activeFeeds = readerFeedFilter.length > 0 ? readerFeedFilter : undefined;
+
+    // Resolve feed IDs: explicit selection wins; otherwise use category filter (MCP mode only)
+    let activeFeeds: string[] | undefined = readerFeedFilter.length > 0 ? readerFeedFilter : undefined;
+    if (!activeFeeds && (feedViewFilter === 'mcp' || feedViewFilter === 'category') && readerCategoryId) {
+      activeFeeds = categoryFeedIds[readerCategoryId];
+    }
 
     if (readerSearch.trim()) {
-      res = await callApi('search_items', { 
-        query: readerSearch, 
-        feedId: activeFeeds, 
-        unreadOnly, 
-        readOnly, 
-        limit: 30 
+      res = await callApi('search_items', {
+        query: readerSearch,
+        feedId: activeFeeds,
+        unreadOnly,
+        readOnly,
+        limit: 30
       });
     } else {
-      res = await callApi('list_new_items', { 
-        feedId: activeFeeds, 
-        unreadOnly, 
-        readOnly, 
-        limit: 30 
+      res = await callApi('list_new_items', {
+        feedId: activeFeeds,
+        unreadOnly,
+        readOnly,
+        limit: 30
       });
     }
     if (!res.error) {
@@ -448,7 +477,7 @@ export default function App() {
       return () => clearTimeout(delayDebounce);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readerSearch, readerFeedFilterStr, readerStatusFilter]);
+  }, [readerSearch, readerFeedFilterStr, readerStatusFilter, readerCategoryId]);
 
   const handleMarkRead = async (id: string) => {
     const res = await callApi('mark_read', { ids: [id] });
@@ -800,10 +829,17 @@ export default function App() {
     }
   };
 
-  // Derived: feeds filtered by MCP/Telegram/channel selection
+  // Derived: feeds filtered by MCP/Telegram/channel/category selection
   const filteredFeeds = feeds.filter(feed => {
     const channelIds: string[] = feed.telegram_channel_ids || [];
-    if (feedViewFilter === 'mcp') return channelIds.length === 0;
+    if (feedViewFilter === 'mcp' || feedViewFilter === 'category') {
+      if (channelIds.length !== 0) return false; // must be MCP-only
+      if (selectedFeedCategoryId) {
+        const ids = categoryFeedIds[selectedFeedCategoryId];
+        return ids ? ids.includes(feed.id) : true;
+      }
+      return true;
+    }
     if (feedViewFilter === 'telegram') {
       if (channelIds.length === 0) return false;
       if (selectedChannelId) return channelIds.includes(selectedChannelId);
@@ -1012,7 +1048,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Feed Category Filter Bar */}
+                {/* Feed Filter Bar */}
                 <div className="flex items-center gap-3 flex-wrap">
                   <div className="flex bg-bg-input border border-border-base rounded-xl p-1 gap-0.5">
                     {([
@@ -1024,7 +1060,7 @@ export default function App() {
                         key={opt.id}
                         onClick={() => setFeedViewFilter(opt.id)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-200 cursor-pointer ${
-                          feedViewFilter === opt.id
+                          (feedViewFilter === opt.id || (opt.id === 'mcp' && feedViewFilter === 'category'))
                             ? 'bg-accent-primary text-white shadow-sm'
                             : 'text-text-muted hover:text-text-base'
                         }`}
@@ -1043,6 +1079,25 @@ export default function App() {
                       <option value="">All Channels</option>
                       {channels.map(ch => (
                         <option key={ch.id} value={ch.id}>{ch.name || ch.id}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  {(feedViewFilter === 'mcp' || feedViewFilter === 'category') && categories.length > 0 && (
+                    <select
+                      value={selectedFeedCategoryId || ''}
+                      onChange={e => {
+                        const id = e.target.value || null;
+                        setFeedViewFilterState(id ? 'category' : 'mcp');
+                        if (id) localStorage.setItem('rss_feed_filter', 'category');
+                        else localStorage.setItem('rss_feed_filter', 'mcp');
+                        setSelectedFeedCategoryId(id);
+                      }}
+                      className="bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
+                    >
+                      <option value="">All Categories</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name} ({cat.feed_count})</option>
                       ))}
                     </select>
                   )}
@@ -1152,7 +1207,7 @@ export default function App() {
                     </p>
                   </div>
                   <div className="flex gap-3 items-center flex-wrap">
-                    {/* Category Filter */}
+                    {/* View Filter */}
                     <div className="flex bg-bg-input border border-border-base rounded-xl p-1 gap-0.5">
                       {([
                         { id: 'all', label: 'All' },
@@ -1163,10 +1218,11 @@ export default function App() {
                           key={opt.id}
                           onClick={() => {
                             setFeedViewFilter(opt.id);
-                            setReaderFeedFilter([]); // reset specific feed selection on category change
+                            setReaderFeedFilter([]);
+                            setReaderCategoryIdState('');
                           }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-200 cursor-pointer ${
-                            feedViewFilter === opt.id
+                            (feedViewFilter === opt.id || (opt.id === 'mcp' && feedViewFilter === 'category'))
                               ? 'bg-accent-primary text-white shadow-sm'
                               : 'text-text-muted hover:text-text-base'
                           }`}
@@ -1185,6 +1241,30 @@ export default function App() {
                         <option value="">All Channels</option>
                         {channels.map(ch => (
                           <option key={ch.id} value={ch.id}>{ch.name || ch.id}</option>
+                        ))}
+                      </select>
+                    )}
+
+                    {(feedViewFilter === 'mcp' || feedViewFilter === 'category') && categories.length > 0 && (
+                      <select
+                        value={readerCategoryId}
+                        onChange={async e => {
+                          const catId = e.target.value;
+                          setReaderCategoryIdState(catId);
+                          setReaderFeedFilter([]);
+                          if (catId && !categoryFeedIds[catId]) {
+                            const res = await callApi('get_category_feeds', { categoryId: catId });
+                            if (!res.error) {
+                              const ids = (res.data || []).map((f: any) => f.id);
+                              setCategoryFeedIds(prev => ({ ...prev, [catId]: ids }));
+                            }
+                          }
+                        }}
+                        className="bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
+                      >
+                        <option value="">All Categories</option>
+                        {categories.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name} ({cat.feed_count})</option>
                         ))}
                       </select>
                     )}
