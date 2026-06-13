@@ -1259,30 +1259,3 @@ export async function saveChannelConfigToD1(
 	}
 }
 
-export async function getChannelsListD1(db: D1Database): Promise<string[]> {
-	const channels = await getChannels(db);
-	return channels.map(c => c.id);
-}
-
-export async function findChannelByNameD1(db: D1Database, name: string): Promise<string | null> {
-	const clean = name.replace(/^@/, '').toLowerCase();
-	const channels = await getChannels(db);
-	const found = channels.find(
-		c => c.name.toLowerCase() === clean || c.name.toLowerCase() === `@${clean}`,
-	);
-	return found?.id ?? null;
-}
-
-export function dbTelegramSubToChannelSource(
-	sub: DbTelegramSubscription,
-	feed: Pick<DbFeed, 'source_type' | 'source_value'>,
-): ChannelSource {
-	return {
-		id: sub.feed_id,
-		type: feed.source_type as SourceType,
-		value: feed.source_value,
-		mediaFilter: sub.media_filter as FeedMediaFilter,
-		enabled: sub.enabled === 1,
-		format: sub.format ? parseJsonSafe<Partial<FormatSettings>>(sub.format, {}) : undefined,
-	};
-}
