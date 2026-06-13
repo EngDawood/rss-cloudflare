@@ -689,3 +689,101 @@ export async function recall(db: D1Database, limit = 50, since?: number): Promis
 		status: row.status,
 	}));
 }
+
+// ── Feed categories ───────────────────────────────────────────────────────────
+
+export interface DbFeedCategory {
+	id: string;
+	name: string;
+	created_at: number;
+	feed_count: number;
+}
+
+export async function listCategories(db: D1Database): Promise<DbFeedCategory[]> {
+	const result = await db.prepare(`
+		SELECT c.id, c.name, c.created_at,
+		       COUNT(m.feed_id) as feed_count
+		FROM feed_categories c
+		LEFT JOIN feed_category_members m ON m.category_id = c.id
+		GROUP BY c.id
+		ORDER BY c.name ASC
+	`).all<DbFeedCategory>();
+	return result.results;
+}
+
+export async function getCategoryByName(db: D1Database, name: string): Promise<DbFeedCategory | null> {
+	return db.prepare(`
+		SELECT c.id, c.name, c.created_at, COUNT(m.feed_id) as feed_count
+		FROM feed_categories c
+		LEFT JOIN feed_category_members m ON m.category_id = c.id
+		WHERE c.name = ?
+		GROUP BY c.id
+	`).bind(name).first<DbFeedCategory>();
+}
+
+export async function getCategoryById(db: D1Database, id: string): Promise<DbFeedCategory | null> {
+	return db.prepare(`
+		SELECT c.id, c.name, c.created_at, COUNT(m.feed_id) as feed_count
+		FROM feed_categories c
+		LEFT JOIN feed_category_members m ON m.category_id = c.id
+		WHERE c.id = ?
+		GROUP BY c.id
+	`).bind(id).first<DbFeedCategory>();
+}
+
+export async function createCategory(db: D1Database, name: string): Promise<DbFeedCategory> {
+	const id = genId();
+	const now = Math.floor(Date.now() / 1000);
+	await db.prepare('INSERT INTO feed_categories (id, name, created_at) VALUES (?, ?, ?)')
+		.bind(id, name, now).run();
+	return { id, name, created_at: now, feed_count: 0 };
+}
+
+export async function deleteCategory(db: D1Database, id: string): Promise<void> {
+	await db.prepare('DELETE FROM feed_categories WHERE id = ?').bind(id).run();
+}
+
+export async function addFeedToCategory(db: D1Database, categoryId: string, feedId: string): Promise<void> {
+	await db.prepare(
+		'INSERT OR IGNORE INTO feed_category_members (category_id, feed_id) VALUES (?, ?)'
+	).bind(categoryId, feedId).run();
+}
+
+export async function removeFeedFromCategory(db: D1Database, categoryId: string, feedId: string): Promise<void> {
+	await db.prepare(
+		'DELETE FROM feed_category_members WHERE category_id = ? AND feed_id = ?'
+	).bind(categoryId, feedId).run();
+}
+
+export async function getFeedsInCategory(db: D1Database, categoryId: string): Promise<DbFeedWithCounts[]> {
+	const result = await db.prepare(`
+		SELECT f.*,
+			COUNT(i.id) as total_count,
+			SUM(CASE WHEN i.read = 0 THEN 1 ELSE 0 END) as unread_count,
+			(SELECT GROUP_CONCAT(ts.channel_id) FROM telegram_subscriptions ts WHERE ts.feed_id = f.id) as telegram_channel_ids
+		FROM feeds f
+		JOIN feed_category_members m ON m.feed_id = f.id
+		LEFT JOIN items i ON i.feed_id = f.id
+		WHERE m.category_id = ?
+		GROUP BY f.id
+		ORDER BY f.title ASC
+	`).bind(categoryId).all<DbFeedWithCounts>();
+	return result.results;
+}
+
+export async function getFeedIdsInCategory(db: D1Database, categoryId: string): Promise<string[]> {
+	const result = await db.prepare(
+		'SELECT feed_id FROM feed_category_members WHERE category_id = ?'
+	).bind(categoryId).all<{ feed_id: string }>();
+	return result.results.map(r => r.feed_id);
+}
+
+export async function getCategoriesForFeed(db: D1Database, feedId: string): Promise<Array<{ id: string; name: string }>> {
+	const result = await db.prepare(`
+		SELECT c.id, c.name FROM feed_categories c
+		JOIN feed_category_members m ON m.category_id = c.id
+		WHERE m.feed_id = ?
+		ORDER BY c.name ASC
+	`).bind(feedId).all<{ id: string; name: string }>();
+	return result.results;
+}

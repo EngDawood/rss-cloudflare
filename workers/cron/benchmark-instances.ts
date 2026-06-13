@@ -50,7 +50,7 @@ function countFeedItems(xml: string): number {
  * Benchmark a single instance by fetching a real probe feed path.
  * Scores by items returned, not just HTTP reachability.
  */
-async function benchmarkInstance(instance: string, probePath: string): Promise<BenchmarkResult> {
+export async function benchmarkInstance(instance: string, probePath: string): Promise<BenchmarkResult> {
 	const url = `${instance}${probePath}`;
 	const start = Date.now();
 	try {
@@ -84,34 +84,37 @@ async function benchmarkInstance(instance: string, probePath: string): Promise<B
 /**
  * Runs a benchmark for all RSS-Bridge and RSSHub instances, sorting them by speed and caching in KV.
  */
-export async function runInstanceBenchmark(env: Env): Promise<void> {
+export async function runInstanceBenchmark(env: Env, type?: 'rssbridge' | 'tiktok' | 'rsshub'): Promise<void> {
 	if (!env.CACHE) return;
 
 	try {
-		console.log('[Benchmark] Benchmarking all instances...');
+		const runBridge = !type || type === 'rssbridge';
+		const runTiktok = !type || type === 'tiktok';
+		const runRsshub = !type || type === 'rsshub';
 
-		// 1. Benchmark RSS-Bridge instances using a real feed probe
-		const bridgePromises = RSS_BRIDGE_INSTANCES.map(inst => benchmarkInstance(inst, RSS_BRIDGE_PROBE));
-		const bridgeResults = await Promise.all(bridgePromises);
+		console.log(`[Benchmark] Benchmarking ${type ?? 'all'} instances...`);
 
-		const sortedBridge = sortBenchmarkResults(bridgeResults);
-		console.log(`[Benchmark] Sorted RSS-Bridge instances: ${sortedBridge.slice(0, 5).join(', ')}...`);
-		await env.CACHE.put('instances:sorted:rssbridge', JSON.stringify(sortedBridge));
+		if (runBridge) {
+			const results = await Promise.all(RSS_BRIDGE_INSTANCES.map(inst => benchmarkInstance(inst, RSS_BRIDGE_PROBE)));
+			const sorted = sortBenchmarkResults(results);
+			console.log(`[Benchmark] Sorted RSS-Bridge: ${sorted.slice(0, 5).join(', ')}...`);
+			await env.CACHE.put('instances:sorted:rssbridge', JSON.stringify(sorted));
+		}
 
-		// 2. Benchmark RSS-Bridge TikTok instances (same probe — reachability still matters)
-		const tiktokPromises = RSS_BRIDGE_TIKTOK_INSTANCES.map(inst => benchmarkInstance(inst, RSS_BRIDGE_PROBE));
-		const tiktokResults = await Promise.all(tiktokPromises);
-		const sortedTiktok = sortBenchmarkResults(tiktokResults);
-		await env.CACHE.put('instances:sorted:tiktok', JSON.stringify(sortedTiktok));
+		if (runTiktok) {
+			const results = await Promise.all(RSS_BRIDGE_TIKTOK_INSTANCES.map(inst => benchmarkInstance(inst, RSS_BRIDGE_PROBE)));
+			const sorted = sortBenchmarkResults(results);
+			await env.CACHE.put('instances:sorted:tiktok', JSON.stringify(sorted));
+		}
 
-		// 3. Benchmark RSSHub instances using a real feed probe
-		const rsshubPromises = RSSHUB_INSTANCES.map(inst => benchmarkInstance(inst, RSSHUB_PROBE));
-		const rsshubResults = await Promise.all(rsshubPromises);
-		const sortedRsshub = sortBenchmarkResults(rsshubResults);
-		console.log(`[Benchmark] Sorted RSSHub instances: ${sortedRsshub.slice(0, 5).join(', ')}...`);
-		await env.CACHE.put('instances:sorted:rsshub', JSON.stringify(sortedRsshub));
+		if (runRsshub) {
+			const results = await Promise.all(RSSHUB_INSTANCES.map(inst => benchmarkInstance(inst, RSSHUB_PROBE)));
+			const sorted = sortBenchmarkResults(results);
+			console.log(`[Benchmark] Sorted RSSHub: ${sorted.slice(0, 5).join(', ')}...`);
+			await env.CACHE.put('instances:sorted:rsshub', JSON.stringify(sorted));
+		}
 
-		console.log('[Benchmark] Instance speed test benchmark completed and saved to KV.');
+		console.log('[Benchmark] Benchmark completed and saved to KV.');
 	} catch (err) {
 		console.error('[Benchmark] Error running instance benchmark:', err);
 	}
