@@ -90,6 +90,12 @@ export function parseSourceRef(ref: string): { type: SourceType; value: string; 
 			}
 		}
 
+		// RSS-Bridge URL (known instance) → extract native source for failover support
+		const rssBridgeSource = detectRSSBridgeSource(trimmed);
+		if (rssBridgeSource) {
+			return rssBridgeSource;
+		}
+
 		// RSSHub URL (rsshub.app or known instance) → extract path for instance failover
 		const rsshubPath = detectRSSHubPath(trimmed);
 		if (rsshubPath) {

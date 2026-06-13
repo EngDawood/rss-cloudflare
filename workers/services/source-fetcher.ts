@@ -8,12 +8,30 @@ export const RSS_BRIDGE_INSTANCES = [
 	'https://rssbridge.prenghy.org',
 	'https://rss-bridge.sans-nuage.fr',
 	'https://rss.bloat.cat',
+	'https://rss-bridge.org/bridge01',
+	'https://rssbridge.flossboxin.org.in',
+	'https://rss-bridge.cheredeprince.net',
+	'https://rss-bridge.lewd.tech',
+	'https://wtf.roflcopter.fr/rss-bridge',
+	'https://rss.nixnet.services',
+	'https://rss-bridge.ggc-project.de',
+	'https://rssbridge.boldair.dev',
+	'https://rss-bridge.bb8.fun',
+	'https://ololbu.ru/rss-bridge',
+	'https://tools.bheil.net/rss-bridge',
+	'https://bridge.suumitsu.eu',
+	'https://feed.eugenemolotov.ru',
+	'https://rss-bridge.mediani.de',
+	'https://rb.ash.fail',
+	'https://rss.noleron.com',
+	'https://rssbridge.projectsegfau.lt',
+	'https://rb.vern.cc'
 ];
 
 // RSS-Bridge instances known to have TikTokBridge enabled
 export const RSS_BRIDGE_TIKTOK_INSTANCES = [
 	'https://rss-bridge.org/bridge01',
-	...RSS_BRIDGE_INSTANCES
+	...RSS_BRIDGE_INSTANCES.filter(inst => inst !== 'https://rss-bridge.org/bridge01')
 ];
 
 // RSSHub public instances for Instagram Stories fallback
@@ -30,6 +48,37 @@ export const RSSHUB_INSTANCES = [
 	'https://rsshub.cups.moe',
 	'https://rss.4040940.xyz'
 ];
+
+/**
+ * Retrieve sorted instances list from KV CACHE or fall back to default hardcoded lists.
+ */
+export async function getSortedInstances(
+	type: 'rssbridge' | 'tiktok' | 'rsshub',
+	cache?: KVNamespace
+): Promise<string[]> {
+	const defaultList = 
+		type === 'rssbridge' ? RSS_BRIDGE_INSTANCES :
+		type === 'tiktok' ? RSS_BRIDGE_TIKTOK_INSTANCES :
+		RSSHUB_INSTANCES;
+
+	if (!cache) {
+		return defaultList;
+	}
+
+	try {
+		const cached = await cache.get(`instances:sorted:${type}`);
+		if (cached) {
+			const parsed = JSON.parse(cached) as string[];
+			if (Array.isArray(parsed) && parsed.length > 0) {
+				return parsed;
+			}
+		}
+	} catch (err) {
+		console.error(`[SourceFetcher] Error fetching sorted instances for ${type}:`, err);
+	}
+
+	return defaultList;
+}
 
 /**
  * Route to correct fetcher based on source type.
@@ -82,7 +131,10 @@ async function fetchRssUrl(url: string, env?: Env): Promise<FetchResult> {
 			const queryPath = url.substring(matchedInstance.length); // e.g., "/?action=display&bridge=..."
 			console.log(`[RSSBridge] URL ${matchedInstance} failed, trying other instances...`);
 
-			for (const instance of RSS_BRIDGE_INSTANCES) {
+			// Fetch sorted instances from KV
+			const activeInstances = await getSortedInstances('rssbridge', env?.CACHE);
+
+			for (const instance of activeInstances) {
 				if (instance === matchedInstance) continue;
 				const altUrl = instance + queryPath;
 				console.log(`[RSSBridge] Failover trying ${instance}...`);
@@ -207,7 +259,18 @@ async function fetchFromRSSBridgeInstances(
 ): Promise<FetchResult> {
 	const allErrors: FetchResult['errors'] = [];
 
-	for (const instance of instances) {
+	// Determine type based on the input list
+	let type: 'rssbridge' | 'tiktok' | 'rsshub' = 'rssbridge';
+	if (instances === RSSHUB_INSTANCES) {
+		type = 'rsshub';
+	} else if (instances === RSS_BRIDGE_TIKTOK_INSTANCES) {
+		type = 'tiktok';
+	}
+
+	// Fetch sorted instances from KV
+	const activeInstances = await getSortedInstances(type, env?.CACHE);
+
+	for (const instance of activeInstances) {
 		const url = buildUrl(instance);
 		console.log(`[RSSBridge] Trying ${instance} for ${label}...`);
 
