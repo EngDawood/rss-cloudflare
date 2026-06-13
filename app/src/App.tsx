@@ -1131,46 +1131,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Test Parser Sandbox */}
-                <div className="mt-8 border-t border-border-base pt-8">
-                  <h3 className="font-bold text-lg text-text-base">Test Feed Parser</h3>
-                  <p className="text-xs text-text-muted mt-1">Download and preview items from any external feed before registering it</p>
-                  
-                  <div className="liquid-glass mt-4 p-6 rounded-2xl flex flex-col gap-4">
-                    <div className="flex gap-3 flex-wrap">
-                      <input 
-                        type="url" 
-                        value={testFeedUrl} 
-                        onChange={e => setTestFeedUrl(e.target.value)} 
-                        placeholder="Enter external RSS/Atom URL..." 
-                        className="flex-grow bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono"
-                      />
-                      <motion.button 
-                        whileTap={{ scale: 0.98 }}
-                        onClick={handleTestFeed}
-                        disabled={isTestingFeed}
-                        className="px-6 py-3 text-sm font-bold rounded-xl bg-accent-primary text-white hover:bg-accent-primary-hover transition duration-200 disabled:opacity-50 cursor-pointer"
-                      >
-                        {isTestingFeed ? 'Parsing...' : 'Test Fetch'}
-                      </motion.button>
-                    </div>
-
-                    {testFeedItems.length > 0 && (
-                      <div className="mt-4 border-t border-border-base pt-4">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-text-muted mb-3">Feed preview outcomes</h4>
-                        <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-2">
-                          {testFeedItems.map((item, idx) => (
-                            <div key={idx} className="p-4 rounded-xl bg-bg-input border border-border-base">
-                              <span className="font-bold text-sm text-text-base block">{item.title}</span>
-                              <span className="text-xs text-text-muted block mt-1 font-mono">By {item.author || 'unknown'} | {formatDate(item.timestamp)}</span>
-                              <p className="text-xs text-text-muted mt-2 line-clamp-2 max-w-[80ch]">{item.text}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
               </motion.div>
             )}
 
@@ -2219,6 +2179,47 @@ export default function App() {
                       </div>
                     </div>
                   ))}
+                </div>
+
+                {/* Test Parser Sandbox */}
+                <div className="border-t border-border-base pt-6">
+                  <h3 className="font-bold text-lg text-text-base">Test Feed Parser</h3>
+                  <p className="text-xs text-text-muted mt-1">Download and preview items from any external feed before registering it</p>
+
+                  <div className="liquid-glass mt-4 p-6 rounded-2xl flex flex-col gap-4">
+                    <div className="flex gap-3 flex-wrap">
+                      <input
+                        type="url"
+                        value={testFeedUrl}
+                        onChange={e => setTestFeedUrl(e.target.value)}
+                        placeholder="Enter external RSS/Atom URL..."
+                        className="flex-grow bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono"
+                      />
+                      <motion.button
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleTestFeed}
+                        disabled={isTestingFeed}
+                        className="px-6 py-3 text-sm font-bold rounded-xl bg-accent-primary text-white hover:bg-accent-primary-hover transition duration-200 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isTestingFeed ? 'Parsing...' : 'Test Fetch'}
+                      </motion.button>
+                    </div>
+
+                    {testFeedItems.length > 0 && (
+                      <div className="mt-4 border-t border-border-base pt-4">
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-text-muted mb-3">Feed preview outcomes</h4>
+                        <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-2">
+                          {testFeedItems.map((item, idx) => (
+                            <div key={idx} className="p-4 rounded-xl bg-bg-input border border-border-base">
+                              <span className="font-bold text-sm text-text-base block">{item.title}</span>
+                              <span className="text-xs text-text-muted block mt-1 font-mono">By {item.author || 'unknown'} | {formatDate(item.timestamp)}</span>
+                              <p className="text-xs text-text-muted mt-2 line-clamp-2 max-w-[80ch]">{item.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             )}
