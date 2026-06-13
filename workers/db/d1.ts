@@ -96,13 +96,6 @@ export async function getFeeds(db: D1Database): Promise<DbFeedWithCounts[]> {
 	return result.results;
 }
 
-export async function getChannels(db: D1Database): Promise<DbChannel[]> {
-	const result = await db.prepare(
-		'SELECT id, name, enabled FROM channels ORDER BY name ASC'
-	).all<DbChannel>();
-	return result.results;
-}
-
 export async function getFeedById(db: D1Database, feedId: string): Promise<DbFeed | null> {
 	return db.prepare('SELECT *, source_value AS url FROM feeds WHERE id = ?').bind(feedId).first<DbFeed>();
 }
