@@ -5,6 +5,7 @@ import {
 	sourceTypeIcon,
 	sourceTypeLabel,
 	detectRSSBridgeSource,
+	detectRSSHubSource,
 } from '../workers/services/telegram-bot/helpers/source-parser';
 
 // ---------------------------------------------------------------------------
@@ -181,13 +182,22 @@ describe('parseSourceRef', () => {
 		expect(result!.id).toMatch(/^tiktok_/);
 	});
 
-	it('should auto-detect RSSHub URL', () => {
+	it('should auto-detect RSSHub Instagram stories URL as instagram_story', () => {
 		const url = 'https://rsshub.rssforever.com/picnob.info/user/baharadawna/stories?limit=10';
 		const result = parseSourceRef(url);
 		expect(result).not.toBeNull();
-		expect(result!.type).toBe('rsshub_url');
-		expect(result!.value).toBe('/picnob.info/user/baharadawna/stories?limit=10');
-		expect(result!.id).toMatch(/^rsshub_/);
+		expect(result!.type).toBe('instagram_story');
+		expect(result!.value).toBe('baharadawna');
+		expect(result!.id).toMatch(/^igst_/);
+	});
+
+	it('should auto-detect RSSHub Instagram posts URL as instagram_user', () => {
+		const url = 'https://rsshub.cups.moe/picnob.info/user/baharadawna/posts?limit=10';
+		const result = parseSourceRef(url);
+		expect(result).not.toBeNull();
+		expect(result!.type).toBe('instagram_user');
+		expect(result!.value).toBe('baharadawna');
+		expect(result!.id).toMatch(/^usr_/);
 	});
 
 	it('should detect rsshub.app URLs as rsshub_url', () => {
@@ -252,6 +262,8 @@ describe('sourceTypeIcon', () => {
 		expect(sourceTypeIcon('instagram_story')).toBe('📸');
 		expect(sourceTypeIcon('tiktok_user')).toBe('🎵');
 		expect(sourceTypeIcon('rsshub_url')).toBe('📡');
+		expect(sourceTypeIcon('rsshub')).toBe('📡');
+		expect(sourceTypeIcon('rss_bridge')).toBe('🌉');
 		expect(sourceTypeIcon('rss_url')).toBe('🌐');
 	});
 
@@ -275,6 +287,8 @@ describe('sourceTypeLabel', () => {
 		expect(sourceTypeLabel('instagram_story')).toBe('IG Story');
 		expect(sourceTypeLabel('tiktok_user')).toBe('TikTok');
 		expect(sourceTypeLabel('rsshub_url')).toBe('RSSHub');
+		expect(sourceTypeLabel('rsshub')).toBe('RSSHub');
+		expect(sourceTypeLabel('rss_bridge')).toBe('RSS-Bridge');
 		expect(sourceTypeLabel('rss_url')).toBe('RSS');
 		// legacy
 		expect(sourceTypeLabel('username')).toBe('IG User');
@@ -283,6 +297,63 @@ describe('sourceTypeLabel', () => {
 
 	it('should return type as-is for unknown type', () => {
 		expect(sourceTypeLabel('some_custom_type')).toBe('some_custom_type');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// detectRSSHubSource
+// ---------------------------------------------------------------------------
+describe('detectRSSHubSource', () => {
+	it('should return null for non-RSSHub URLs', () => {
+		expect(detectRSSHubSource('https://example.com/feed.xml')).toBeNull();
+		expect(detectRSSHubSource('https://news.ycombinator.com/rss')).toBeNull();
+	});
+
+	it('should detect picnob posts as instagram_user', () => {
+		const url = 'https://rsshub.cups.moe/picnob.info/user/baharadawna/posts?limit=10';
+		const result = detectRSSHubSource(url);
+		expect(result).not.toBeNull();
+		expect(result!.type).toBe('instagram_user');
+		expect(result!.value).toBe('baharadawna');
+		expect(result!.id).toBe(`usr_${shortHash('baharadawna')}`);
+	});
+
+	it('should detect picnob stories as instagram_story', () => {
+		const url = 'https://rsshub.rssforever.com/picnob.info/user/baharadawna/stories?limit=10';
+		const result = detectRSSHubSource(url);
+		expect(result).not.toBeNull();
+		expect(result!.type).toBe('instagram_story');
+		expect(result!.value).toBe('baharadawna');
+		expect(result!.id).toBe(`igst_${shortHash('baharadawna')}`);
+	});
+
+	it('should detect picnob paths via rsshub.app as instagram sources', () => {
+		const postsUrl = 'https://rsshub.app/picnob.info/user/someuser/posts';
+		const postsResult = detectRSSHubSource(postsUrl);
+		expect(postsResult!.type).toBe('instagram_user');
+		expect(postsResult!.value).toBe('someuser');
+
+		const storiesUrl = 'https://rsshub.app/picnob.info/user/someuser/stories';
+		const storiesResult = detectRSSHubSource(storiesUrl);
+		expect(storiesResult!.type).toBe('instagram_story');
+		expect(storiesResult!.value).toBe('someuser');
+	});
+
+	it('should return rsshub_url for non-picnob RSSHub paths', () => {
+		const url = 'https://rsshub.cups.moe/anthropic/news';
+		const result = detectRSSHubSource(url);
+		expect(result).not.toBeNull();
+		expect(result!.type).toBe('rsshub_url');
+		expect(result!.value).toBe('/anthropic/news');
+		expect(result!.id).toMatch(/^rsshub_/);
+	});
+
+	it('should return rsshub_url for rsshub.app non-picnob paths', () => {
+		const url = 'https://rsshub.app/hackernews/best';
+		const result = detectRSSHubSource(url);
+		expect(result).not.toBeNull();
+		expect(result!.type).toBe('rsshub_url');
+		expect(result!.value).toBe('/hackernews/best');
 	});
 });
 
