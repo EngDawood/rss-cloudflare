@@ -86,7 +86,8 @@ export async function getFeeds(db: D1Database): Promise<DbFeedWithCounts[]> {
 	const result = await db.prepare(`
 		SELECT f.*, f.source_value AS url,
 			COUNT(i.id) as total_count,
-			SUM(CASE WHEN i.read = 0 THEN 1 ELSE 0 END) as unread_count
+			SUM(CASE WHEN i.read = 0 THEN 1 ELSE 0 END) as unread_count,
+			(SELECT GROUP_CONCAT(ts.channel_id) FROM telegram_subscriptions ts WHERE ts.feed_id = f.id) as telegram_channel_ids
 		FROM feeds f
 		LEFT JOIN items i ON i.feed_id = f.id
 		GROUP BY f.id
@@ -1012,3 +1013,12 @@ export function dbTelegramSubToChannelSource(
 	};
 }
 
+// ── Category stubs (tables not yet migrated) ──────────────────────────────────
+
+export async function listCategories(_db: D1Database): Promise<{ id: string; name: string }[]> {
+	return [];
+}
+
+export async function getFeedsInCategory(_db: D1Database, _categoryId: string): Promise<DbFeedWithCounts[]> {
+	return [];
+}

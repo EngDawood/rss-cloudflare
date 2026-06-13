@@ -13,6 +13,7 @@ import {
 	listPostLog, recall, updateItemSummary,
 	upsertFeedBySource, upsertChannel, addTelegramSubscription, addMcpSubscription,
 	getChannels, getTelegramSubscriptions, getMcpSubscriptions,
+	listCategories, getFeedsInCategory,
 } from '../db/d1';
 import { resolveTarget, logAndSend } from '../services/post-service';
 import { getChannelsList, getChannelConfig } from '../services/telegram-bot/storage/kv-operations';
@@ -44,7 +45,33 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 			// ── Feed management ──────────────────────────────────────────────────────
 			case 'list_feeds': {
 				const feeds = await getFeeds(db);
-				return c.json({ data: feeds });
+				const normalized = feeds.map(f => ({
+					...f,
+					telegram_channel_ids: f.telegram_channel_ids
+						? f.telegram_channel_ids.split(',').filter(Boolean)
+						: [],
+				}));
+				return c.json({ data: normalized });
+			}
+			case 'list_channels': {
+				const channels = await getChannels(db);
+				return c.json({ data: channels });
+			}
+			case 'list_categories': {
+				const categories = await listCategories(db);
+				return c.json({ data: categories });
+			}
+			case 'get_category_feeds': {
+				const { categoryId } = params;
+				if (!categoryId) return c.json({ error: 'categoryId is required' }, 400);
+				const categoryFeeds = await getFeedsInCategory(db, categoryId);
+				const normalized = categoryFeeds.map(f => ({
+					...f,
+					telegram_channel_ids: f.telegram_channel_ids
+						? f.telegram_channel_ids.split(',').filter(Boolean)
+						: [],
+				}));
+				return c.json({ data: normalized });
 			}
 			case 'add_feed': {
 				const { url, title } = params;
