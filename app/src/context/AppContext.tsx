@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useApi } from '../hooks/useApi';
 import type { ApiResponse } from '../hooks/useApi';
 
@@ -134,17 +135,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [readerCategoryId, setReaderCategoryId] = useState<string>('');
 
   // Toast Helpers
-  const showToast = (message: string, type: Toast['type'] = 'info') => {
+  const removeToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       removeToast(id);
     }, 5000);
-  };
-
-  const removeToast = (id: number) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
+  }, [removeToast]);
 
   // API Client Hook
   const { callApi, isApiLoading } = useApi(token, (msg) => {
@@ -191,7 +192,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     else localStorage.removeItem('rss_channel_filter');
   };
 
-  const verifyToken = async () => {
+  const verifyToken = useCallback(async () => {
     setIsLoading(true);
     const res = await callApi('get_config');
     if (res.error) {
@@ -211,7 +212,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!catsRes.error) setCategories(catsRes.data || []);
     }
     setIsLoading(false);
-  };
+  }, [callApi]);
 
   // Data Loading Helpers
   const loadFeeds = async (silent = false) => {
@@ -293,8 +294,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Token sync effect
   useEffect(() => {
-    verifyToken();
-  }, [token]);
+    const timer = setTimeout(() => {
+      verifyToken();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [token, verifyToken]);
 
   // Theme Sync Effect
   useEffect(() => {

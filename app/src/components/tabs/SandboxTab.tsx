@@ -19,13 +19,13 @@ export const SandboxTab: React.FC = () => {
       return;
     }
 
-    let params: any = { target: sandboxTarget, type: sandboxType, caption: sandboxCaption };
+    const params: any = { target: sandboxTarget, type: sandboxType, caption: sandboxCaption };
     if (sandboxType !== 'text' && sandboxType !== 'album') {
       params.mediaUrl = sandboxMediaUrl;
     } else if (sandboxType === 'album') {
       try {
         params.media = JSON.parse(sandboxAlbumJson);
-      } catch (err) {
+      } catch {
         showToast('Invalid album media JSON structure.', 'error');
         return;
       }
