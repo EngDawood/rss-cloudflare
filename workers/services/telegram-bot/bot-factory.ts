@@ -4,7 +4,6 @@ import { registerChannelCommands } from './commands/channel-commands';
 import { registerSubscriptionCommands } from './commands/subscription-commands';
 import { registerFormatCommands } from './commands/format-commands';
 import { registerDiagnosticCommands } from './commands/diagnostic-commands';
-import { registerFoloCommands } from './commands/folo-commands';
 import { registerTelegraphCommands } from './commands/telegraph-commands';
 import { registerAiCommands } from './commands/ai-commands';
 import { registerTextInputHandler } from './handlers/text-input-handler';
@@ -22,6 +21,7 @@ export function createBot(env: Env): Bot {
 	const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
 	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
 	const kv = env.CACHE;
+	const db = env.DB;
 
 	// Global error handler
 	bot.catch(async (err) => {
@@ -68,14 +68,13 @@ export function createBot(env: Env): Bot {
 	});
 
 	// Register all command handlers (PRESERVE ORIGINAL ORDER)
-	registerInfoCommands(bot, env, kv);          // /start, /help, /cancel
-	registerChannelCommands(bot, env, kv);       // /add, /channels, /status, /enable, /disable
-	registerSubscriptionCommands(bot, env, kv);  // /sub, /unsub, /delay, /seed, /list
-	registerFormatCommands(bot, env, kv);        // /set_default, /set
-	registerDiagnosticCommands(bot, env, kv);    // /test, /debug
-	registerFoloCommands(bot, env, kv);          // /folo
-	registerTelegraphCommands(bot, env, kv);     // /telegraph
-	registerAiCommands(bot, env, kv);            // /ai
+	registerInfoCommands(bot, env, kv);               // /start, /help, /cancel
+	registerChannelCommands(bot, env, kv);            // /add, /channels, /status, /enable, /disable
+	registerSubscriptionCommands(bot, env, kv);       // /sub, /unsub, /delay, /seed, /list
+	registerFormatCommands(bot, env, kv);             // /set_default, /set
+	registerDiagnosticCommands(bot, env, kv);         // /test, /debug
+	registerTelegraphCommands(bot, env, kv);          // /telegraph
+	registerAiCommands(bot, env, kv);                 // /ai
 
 	// Register text input handler (multi-step flows)
 	registerTextInputHandler(bot, env, kv);

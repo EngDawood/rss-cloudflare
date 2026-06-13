@@ -1,5 +1,5 @@
 import type { Bot } from 'grammy';
-import { getChannelsList, getChannelConfig, saveChannelConfig } from '../storage/kv-operations';
+import { getChannelsListD1, getChannelConfigFromD1, saveChannelConfigToD1 } from '../../../db/d1';
 import { setAdminState } from '../storage/admin-state';
 import { resolveChannelArg } from '../helpers/channel-resolver';
 import { showChannelsList } from '../views/channel-views';
@@ -10,13 +10,14 @@ import { addChannelDirect } from '../handlers/add-channel-flow';
  */
 export function registerChannelCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
+	const db = env.DB;
 
 	// /add @channel or /add -100xxx
 	bot.command('add', async (ctx) => {
 		const arg = ctx.match?.trim();
 		if (arg) {
 			// Direct add with argument
-			await addChannelDirect(ctx, bot, kv, adminId, arg);
+			await addChannelDirect(ctx, bot, db, adminId, arg, kv);
 		} else {
 			await setAdminState(kv, adminId, { action: 'adding_channel' });
 			await ctx.reply(
@@ -29,11 +30,11 @@ export function registerChannelCommands(bot: Bot, env: Env, kv: KVNamespace): vo
 	});
 
 	bot.command('channels', async (ctx) => {
-		await showChannelsList(ctx, kv);
+		await showChannelsList(ctx, db);
 	});
 
 	bot.command('status', async (ctx) => {
-		const channels = await getChannelsList(kv);
+		const channels = await getChannelsListD1(db);
 		if (channels.length === 0) {
 			await ctx.reply('No channels configured. Use /add @channel to add one.');
 			return;
@@ -41,7 +42,7 @@ export function registerChannelCommands(bot: Bot, env: Env, kv: KVNamespace): vo
 
 		let text = '<b>Status Overview</b>\n\n';
 		for (const channelId of channels) {
-			const config = await getChannelConfig(kv, channelId);
+			const config = await getChannelConfigFromD1(db, channelId);
 			if (!config) continue;
 			const status = config.enabled ? '✅' : '❌';
 			text += `${status} <b>${config.channelTitle}</b>\n`;
@@ -54,12 +55,12 @@ export function registerChannelCommands(bot: Bot, env: Env, kv: KVNamespace): vo
 	bot.command('enable', async (ctx) => {
 		const arg = ctx.match?.trim();
 		if (!arg) { await ctx.reply('Usage: <code>/enable @channel</code>', { parse_mode: 'HTML' }); return; }
-		const resolved = await resolveChannelArg(bot, kv, arg);
+		const resolved = await resolveChannelArg(bot, db, arg);
 		if (!resolved) { await ctx.reply('Channel not found.'); return; }
-		const config = await getChannelConfig(kv, resolved.id);
+		const config = await getChannelConfigFromD1(db, resolved.id);
 		if (!config) { await ctx.reply('Channel not registered.'); return; }
 		config.enabled = true;
-		await saveChannelConfig(kv, resolved.id, config);
+		await saveChannelConfigToD1(db, resolved.id, config);
 		await ctx.reply(`✅ <b>${resolved.title}</b> enabled.`, { parse_mode: 'HTML' });
 	});
 
@@ -67,12 +68,12 @@ export function registerChannelCommands(bot: Bot, env: Env, kv: KVNamespace): vo
 	bot.command('disable', async (ctx) => {
 		const arg = ctx.match?.trim();
 		if (!arg) { await ctx.reply('Usage: <code>/disable @channel</code>', { parse_mode: 'HTML' }); return; }
-		const resolved = await resolveChannelArg(bot, kv, arg);
+		const resolved = await resolveChannelArg(bot, db, arg);
 		if (!resolved) { await ctx.reply('Channel not found.'); return; }
-		const config = await getChannelConfig(kv, resolved.id);
+		const config = await getChannelConfigFromD1(db, resolved.id);
 		if (!config) { await ctx.reply('Channel not registered.'); return; }
 		config.enabled = false;
-		await saveChannelConfig(kv, resolved.id, config);
+		await saveChannelConfigToD1(db, resolved.id, config);
 		await ctx.reply(`❌ <b>${resolved.title}</b> disabled.`, { parse_mode: 'HTML' });
 	});
 }

@@ -1,5 +1,5 @@
 import type { Bot } from 'grammy';
-import { getChannelConfig } from '../storage/kv-operations';
+import { getChannelConfigFromD1 } from '../../../db/d1';
 import { resolveChannelArg } from '../helpers/channel-resolver';
 import { resolveFormatSettings } from '../../../utils/telegram-format';
 import { buildFormatKeyboard } from '../views/keyboard-builders';
@@ -9,6 +9,8 @@ import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
  * Register format settings commands.
  */
 export function registerFormatCommands(bot: Bot, env: Env, kv: KVNamespace): void {
+	const db = env.DB;
+
 	// /set_default @channel — channel default format settings
 	bot.command('set_default', async (ctx) => {
 		const arg = ctx.match?.trim();
@@ -16,9 +18,9 @@ export function registerFormatCommands(bot: Bot, env: Env, kv: KVNamespace): voi
 			await ctx.reply('Usage: <code>/set_default @channel</code>', { parse_mode: 'HTML' });
 			return;
 		}
-		const resolved = await resolveChannelArg(bot, kv, arg);
+		const resolved = await resolveChannelArg(bot, db, arg);
 		if (!resolved) { await ctx.reply(`Channel "${arg}" not found.`); return; }
-		const config = await getChannelConfig(kv, resolved.id);
+		const config = await getChannelConfigFromD1(db, resolved.id);
 		if (!config) { await ctx.reply('Channel not registered.'); return; }
 
 		const current = resolveFormatSettings(config.defaultFormat);
@@ -47,9 +49,9 @@ export function registerFormatCommands(bot: Bot, env: Env, kv: KVNamespace): voi
 		}
 		const [channelRef, ...sourceRefParts] = args;
 		const sourceRef = sourceRefParts.join(' ');
-		const resolvedChannel = await resolveChannelArg(bot, kv, channelRef);
+		const resolvedChannel = await resolveChannelArg(bot, db, channelRef);
 		if (!resolvedChannel) { await ctx.reply(`Channel "${channelRef}" not found.`); return; }
-		const config = await getChannelConfig(kv, resolvedChannel.id);
+		const config = await getChannelConfigFromD1(db, resolvedChannel.id);
 		if (!config) { await ctx.reply('Channel not registered.'); return; }
 
 		const sourceValue = sourceRef.replace(/^[@#]/, '');

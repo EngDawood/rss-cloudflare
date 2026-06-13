@@ -1,12 +1,15 @@
-import type { FeedItem, FeedItemMedia, FeedItemMediaType } from '../types/feed';
+import type { FeedItem, FeedItemMedia, FeedItemMediaType, FeedMediaFilter } from '../types/feed';
+import type { ChannelConfig, ChannelSource, SourceType, FormatSettings } from '../types/telegram';
 
 // ── D1 row shapes ────────────────────────────────────────────────────────────
 
 export interface DbFeed {
 	id: string;
-	url: string;
+	source_type: string;   // SourceType — 'rss_url' for legacy/RSS feeds
+	source_value: string;  // URL for rss_url; username for instagram_user; etc.
 	title: string;
 	enabled: number;
+	check_interval_minutes: number;
 	last_fetched_at: number | null;
 	created_at: number;
 	ai_summary: string;   // 'inherit' | 'enable' | 'disable'
@@ -87,7 +90,7 @@ export function dbItemToFeedItem(row: DbItem, feedTitle: string, feedLink: strin
 
 export async function getFeeds(db: D1Database): Promise<DbFeedWithCounts[]> {
 	const result = await db.prepare(`
-		SELECT f.*,
+		SELECT f.*, f.source_value AS url,
 			COUNT(i.id) as total_count,
 			SUM(CASE WHEN i.read = 0 THEN 1 ELSE 0 END) as unread_count,
 			(SELECT GROUP_CONCAT(ts.channel_id) FROM telegram_subscriptions ts WHERE ts.feed_id = f.id) as telegram_channel_ids
@@ -107,16 +110,28 @@ export async function getChannels(db: D1Database): Promise<DbChannel[]> {
 }
 
 export async function getFeedById(db: D1Database, feedId: string): Promise<DbFeed | null> {
-	return db.prepare('SELECT * FROM feeds WHERE id = ?').bind(feedId).first<DbFeed>();
+	return db.prepare('SELECT *, source_value AS url FROM feeds WHERE id = ?').bind(feedId).first<DbFeed>();
 }
 
+/** Look up a feed by its (source_type, source_value) identity. */
+export async function getFeedBySource(
+	db: D1Database,
+	sourceType: SourceType,
+	sourceValue: string,
+): Promise<DbFeed | null> {
+	return db.prepare('SELECT *, source_value AS url FROM feeds WHERE source_type = ? AND source_value = ?')
+		.bind(sourceType, sourceValue).first<DbFeed>();
+}
+
+/** Back-compat: look up an `rss_url` feed by its URL. */
 export async function getFeedByUrl(db: D1Database, url: string): Promise<DbFeed | null> {
-	return db.prepare('SELECT * FROM feeds WHERE url = ?').bind(url).first<DbFeed>();
+	return getFeedBySource(db, 'rss_url', url);
 }
 
 export async function insertFeed(db: D1Database, url: string, title: string, sourceType?: string): Promise<DbFeed> {
 	const id = genId();
 	const now = Math.floor(Date.now() / 1000);
+	const interval = opts.checkIntervalMinutes ?? 60;
 	await db.prepare(
 		'INSERT INTO feeds (id, url, title, enabled, created_at, source_type) VALUES (?, ?, ?, 1, ?, ?)'
 	).bind(id, url, title, now, sourceType ?? null).run();
@@ -219,7 +234,7 @@ export async function listNewItems(
 	params.push(limit);
 	const sql = `
 		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp, i.read,
-		       f.title as feed_title, f.url as feed_url
+		       f.title as feed_title, f.source_value as feed_url
 		FROM items i JOIN feeds f ON f.id = i.feed_id
 		WHERE ${where.length ? where.join(' AND ') : '1=1'}
 		ORDER BY i.timestamp DESC LIMIT ?
@@ -271,7 +286,7 @@ export async function searchItems(
 	params.push(limit);
 	const sql = `
 		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp, i.read,
-		       f.title as feed_title, f.url as feed_url
+		       f.title as feed_title, f.source_value as feed_url
 		FROM items i JOIN feeds f ON f.id = i.feed_id
 		WHERE ${where.join(' AND ')}
 		ORDER BY i.timestamp DESC LIMIT ?

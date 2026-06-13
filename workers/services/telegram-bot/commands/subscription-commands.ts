@@ -1,22 +1,22 @@
 import type { Bot } from 'grammy';
 import type { ChannelSource } from '../../../types/telegram';
-import { getChannelsList, saveChannelsList, getChannelConfig, saveChannelConfig } from '../storage/kv-operations';
+import { getChannelsListD1, getChannelConfigFromD1, saveChannelConfigToD1, upsertChannel, insertPostLog } from '../../../db/d1';
 import { resolveChannelArg } from '../helpers/channel-resolver';
 import { parseSourceRef, sourceTypeLabel, sourceTypeIcon, detectRSSBridgeSource } from '../helpers/source-parser';
 import { fetchAndSendLatest } from '../handlers/fetch-and-send';
 import { fetchForSource } from '../../source-fetcher';
 import { fetchFeed } from '../../feed-fetcher';
-import { getCached, setCached } from '../../../utils/cache';
-import { CACHE_PREFIX_TELEGRAM_SENT, TELEGRAM_CONFIG_TTL } from '../../../constants';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
 
 /**
  * Register subscription management commands.
  */
 export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace): void {
+	const db = env.DB;
+
 	// /list — List all subscriptions across all channels
 	bot.command('list', async (ctx) => {
-		const channels = await getChannelsList(kv);
+		const channels = await getChannelsListD1(db);
 		if (channels.length === 0) {
 			await ctx.reply('No channels configured. Use /add @channel to add one.');
 			return;
@@ -26,7 +26,7 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 		let foundAny = false;
 
 		for (const channelId of channels) {
-			const config = await getChannelConfig(kv, channelId);
+			const config = await getChannelConfigFromD1(db, channelId);
 			if (!config || config.sources.length === 0) continue;
 
 			foundAny = true;
@@ -72,7 +72,7 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 		}
 		const sourceRef = sourceRefParts.join(' ');
 
-		const resolved = await resolveChannelArg(bot, kv, channelRef);
+		const resolved = await resolveChannelArg(bot, db, channelRef);
 		if (!resolved) {
 			await ctx.reply(`Channel "${channelRef}" not found. Register it first with <code>/add ${channelRef}</code>`, { parse_mode: 'HTML' });
 			return;
@@ -87,12 +87,16 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 		}
 
 		// Auto-register channel if not yet registered
-		let config = await getChannelConfig(kv, resolved.id);
+		let config = await getChannelConfigFromD1(db, resolved.id);
 		if (!config) {
 			config = { channelTitle: resolved.title, enabled: true, checkIntervalMinutes: 30, lastCheckTimestamp: 0, sources: [] };
-			const channels = await getChannelsList(kv);
-			channels.push(resolved.id);
-			await saveChannelsList(kv, channels);
+			await upsertChannel(db, {
+				id: resolved.id,
+				name: resolved.title,
+				enabled: true,
+				checkIntervalMinutes: 30,
+				lastCheckTimestamp: 0,
+			});
 		}
 
 		let parsed = parseSourceRef(sourceRef);
@@ -109,7 +113,7 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 			}
 		}
 
-		if (config.sources.some((s) => s.id === parsed.id)) {
+		if (config.sources.some((s) => s.value === parsed.value)) {
 			await ctx.reply(`Already subscribed to <b>${escapeHtmlBot(parsed.value)}</b> in <b>${resolved.title}</b>.`, { parse_mode: 'HTML' });
 			return;
 		}
@@ -146,7 +150,7 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 
 		const source: ChannelSource = { id: parsed.id, type: parsed.type, value: parsed.value, mediaFilter: 'all', enabled: true };
 		config.sources.push(source);
-		await saveChannelConfig(kv, resolved.id, config);
+		await saveChannelConfigToD1(db, resolved.id, config);
 
 		const typeLabel = sourceTypeLabel(parsed.type);
 		if (postCount > 0) {
@@ -154,7 +158,7 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 				`✅ <b>${resolved.title}</b> subscribed to ${typeLabel}: <b>${escapeHtmlBot(parsed.value)}</b>\n\nFetching latest ${postCount} post(s)...`,
 				{ parse_mode: 'HTML' }
 			);
-			await fetchAndSendLatest(bot, env, parseInt(resolved.id, 10), source, postCount, false);
+			await fetchAndSendLatest(bot, env, parseInt(resolved.id, 10), source, postCount, false, db);
 		} else {
 			await ctx.reply(
 				`✅ <b>${resolved.title}</b> subscribed to ${typeLabel}: <b>${escapeHtmlBot(parsed.value)}</b>\n\nNew posts will arrive on next cron check.`,
@@ -172,17 +176,17 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 		}
 		const [channelRef, ...sourceRefParts] = args;
 		const sourceRef = sourceRefParts.join(' ');
-		const resolved = await resolveChannelArg(bot, kv, channelRef);
+		const resolved = await resolveChannelArg(bot, db, channelRef);
 		if (!resolved) { await ctx.reply(`Channel "${channelRef}" not found.`); return; }
 
-		const config = await getChannelConfig(kv, resolved.id);
+		const config = await getChannelConfigFromD1(db, resolved.id);
 		if (!config) { await ctx.reply('Channel not registered.'); return; }
 
 		const parsed = parseSourceRef(sourceRef);
 		const before = config.sources.length;
 		config.sources = config.sources.filter((s) => {
-			// Match by id, value, or legacy value
-			if (parsed && s.id === parsed.id) return false;
+			// Match by value
+			if (parsed && s.value === parsed.value) return false;
 			if (s.value === sourceRef.replace(/^[@#]/, '')) return false;
 			return true;
 		});
@@ -190,7 +194,7 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 			await ctx.reply(`Source "${sourceRef}" not found in <b>${resolved.title}</b>.`, { parse_mode: 'HTML' });
 			return;
 		}
-		await saveChannelConfig(kv, resolved.id, config);
+		await saveChannelConfigToD1(db, resolved.id, config);
 		await ctx.reply(`✅ Removed <b>${escapeHtmlBot(sourceRef)}</b> from <b>${resolved.title}</b>.`, { parse_mode: 'HTML' });
 	});
 
@@ -207,14 +211,14 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 			await ctx.reply('Delay must be at least 5 minutes.');
 			return;
 		}
-		const resolvedChannel = await resolveChannelArg(bot, kv, channelRef);
+		const resolvedChannel = await resolveChannelArg(bot, db, channelRef);
 		if (!resolvedChannel) { await ctx.reply(`Channel "${channelRef}" not found.`); return; }
 
-		const config = await getChannelConfig(kv, resolvedChannel.id);
+		const config = await getChannelConfigFromD1(db, resolvedChannel.id);
 		if (!config) { await ctx.reply('Channel not registered.'); return; }
 
 		config.checkIntervalMinutes = minutes;
-		await saveChannelConfig(kv, resolvedChannel.id, config);
+		await saveChannelConfigToD1(db, resolvedChannel.id, config);
 		await ctx.reply(`⏱ <b>${resolvedChannel.title}</b> delay set to <b>${minutes} min</b>`, { parse_mode: 'HTML' });
 	});
 
@@ -233,13 +237,13 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 		const channelRef = args[0];
 		const sourceRef = args.length > 1 ? args.slice(1).join(' ') : null;
 
-		const resolved = await resolveChannelArg(bot, kv, channelRef);
+		const resolved = await resolveChannelArg(bot, db, channelRef);
 		if (!resolved) {
 			await ctx.reply(`Channel "${channelRef}" not found.`);
 			return;
 		}
 
-		const config = await getChannelConfig(kv, resolved.id);
+		const config = await getChannelConfigFromD1(db, resolved.id);
 		if (!config || config.sources.length === 0) {
 			await ctx.reply('No sources configured for this channel.');
 			return;
@@ -253,7 +257,7 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 				await ctx.reply('Invalid source. Use @username, #hashtag, or a feed URL.');
 				return;
 			}
-			const found = config.sources.find((s) => s.id === parsed.id);
+			const found = config.sources.find((s) => s.value === parsed.value);
 			if (!found) {
 				await ctx.reply(`Source "${sourceRef}" not found in <b>${resolved.title}</b>.`, { parse_mode: 'HTML' });
 				return;
@@ -273,16 +277,16 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 					results.push(`${sourceTypeIcon(source.type)} ${escapeHtmlBot(source.value)} — no items found`);
 					continue;
 				}
-				const sentKey = `${CACHE_PREFIX_TELEGRAM_SENT}${resolved.id}:${source.id}`;
-				const sentRaw = await getCached(kv, sentKey);
-				let sentLinks: string[] = [];
-				try {
-					const parsed = sentRaw ? JSON.parse(sentRaw) : [];
-					if (Array.isArray(parsed)) sentLinks = parsed;
-				} catch { /* start fresh */ }
-				const newLinks = result.items.map(item => item.link);
-				const merged = [...sentLinks, ...newLinks].slice(-50);
-				await setCached(kv, sentKey, JSON.stringify(merged), TELEGRAM_CONFIG_TTL);
+				// Insert post_log rows to mark items as seeded (replaces KV sent-set)
+				for (const item of result.items) {
+					await insertPostLog(db, {
+						itemId: item.id,
+						chatId: resolved.id,
+						messageType: 'seeded',
+						captionPreview: item.title.slice(0, 200),
+						status: 'ok',
+					});
+				}
 				results.push(`${sourceTypeIcon(source.type)} ${escapeHtmlBot(source.value)} — marked ${result.items.length} items as seen`);
 			} catch (err) {
 				results.push(`${sourceTypeIcon(source.type)} ${escapeHtmlBot(source.value)} — error: ${err}`);

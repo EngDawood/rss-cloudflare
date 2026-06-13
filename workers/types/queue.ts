@@ -2,12 +2,12 @@ import type { FeedItem } from './feed';
 import type { FormatSettings } from './telegram';
 
 /**
- * Task for fetching a specific source for a channel.
+ * Task for fetching a core feed by its D1 feed id.
+ * One task is emitted per due feed (deduped across all subscribing channels).
  */
 export interface FetchTask {
 	type: 'fetch';
-	channelId: string;
-	sourceId: string;
+	feedId: string;
 }
 
 /**

@@ -26,12 +26,12 @@ app.get('/test-bridges', handleTest);
 app.get('/test-bridges/:u', handleTest);
 
 app.post('/telegram/webhook', handleTelegramWebhook);
-app.post('/folo', handleFoloWebhook);
 app.get('/telegram/setup', handleSetup);
 
 // Administrative Action and Chat Agent APIs
 app.post('/api/action', handleActionApi);
 app.post('/api/chat', handleChatApi);
+app.post('/api/migrate-channels', handleMigrateChannels);
 
 // MCP server
 app.on(['GET', 'POST', 'DELETE'], ['/mcp', '/mcp/*'], async (c) => {

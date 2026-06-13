@@ -7,19 +7,20 @@ import type { ChannelSource } from '../types/telegram';
 import type { FetchResult } from '../types/feed';
 import type { DbFeed } from '../db/d1';
 import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format';
-import { sendMediaToChannel } from '../services/telegram-bot/handlers/send-media';
 import { enrichFeedItems } from '../utils/media-enrichment';
 import { summarizeItem } from '../services/ai-summarizer';
 import {
 	getFeeds, getFeedById, getFeedByUrl, insertFeed, removeFeed, setFeedEnabled,
 	updateLastFetched, upsertItems, listNewItems, searchItems, getItemById,
 	markItemsRead, getConfig, setConfig, dbItemToFeedItem,
-	getChats, getChatByName, getDefaultChat, upsertChat, removeChat, setDefaultChat,
+	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
 	insertNote, listNotes, searchNotes, deleteNote,
 	insertPostLog, listPostLog, recall, updateItemSummary,
 	getChannels, listCategories, getFeedsInCategory,
 } from '../db/d1';
-import type { TelegramMediaMessage } from '../types/telegram';
+import { resolveTarget, logAndSend } from '../services/post-service';
+import { getChannelsList, getChannelConfig } from '../services/telegram-bot/storage/kv-operations';
+import type { TelegramMediaMessage, SourceType } from '../types/telegram';
 
 type HonoEnv = { Bindings: Env };
 
@@ -466,6 +467,123 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 		console.error(`[API] Error executing action "${action}":`, e);
 		return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
 	}
+}
+
+// ── Channel backfill (Phase 2 — copy KV → D1 core feeds, run once) ────────────
+
+/**
+ * POST /api/migrate-channels
+ *
+ * One-shot admin-only endpoint. Reads every KV channel and its sources, writes:
+ *   1. `channels` row (upsert by numeric id).
+ *   2. For each source: `upsertFeedBySource` (INSERT OR IGNORE; existing feed
+ *      from another channel or MCP is reused) + `addTelegramSubscription`.
+ *   3. For every existing D1 `feeds` row (MCP-registered): `addMcpSubscription`
+ *      (idempotent via ON CONFLICT DO NOTHING on feed_id).
+ *
+ * KV is left untouched — this is copy-on-write so the KV path stays intact as
+ * a rollback path until Phase 3 cuts over.
+ *
+ * Response: { channelsMigrated, feedsCreated, subsCreated, mcpSubsMigrated }
+ * Call it again safely — all writes are idempotent.
+ */
+export async function handleMigrateChannels(c: Context<HonoEnv>): Promise<Response> {
+	const auth = c.req.header('Authorization');
+	const mcpToken = c.env.MCP_AUTH_TOKEN;
+	if (mcpToken && auth !== `Bearer ${mcpToken}`) {
+		return c.json({ error: 'Unauthorized' }, 401);
+	}
+
+	const db = c.env.DB;
+	const kv = c.env.CACHE;
+
+	let channelsMigrated = 0;
+	let feedsCreated = 0;
+	let subsCreated = 0;
+	const errors: string[] = [];
+
+	// 1. Telegram channels from KV → channels + telegram_subscriptions
+	const channelIds = await getChannelsList(kv);
+	for (const channelId of channelIds) {
+		try {
+			const config = await getChannelConfig(kv, channelId);
+			if (!config) continue;
+
+			await upsertChannel(db, {
+				id: channelId,
+				name: config.channelTitle,
+				enabled: config.enabled,
+				checkIntervalMinutes: config.checkIntervalMinutes,
+				defaultFormat: config.defaultFormat ?? null,
+				lastCheckTimestamp: config.lastCheckTimestamp,
+			});
+			channelsMigrated++;
+
+			for (const source of config.sources ?? []) {
+				try {
+					const feed = await upsertFeedBySource(db, {
+						sourceType: source.type as SourceType,
+						sourceValue: source.value,
+						title: '',
+						checkIntervalMinutes: config.checkIntervalMinutes,
+					});
+					// upsertFeedBySource does INSERT OR IGNORE — count new insertions
+					if (!feed.last_fetched_at) feedsCreated++;
+
+					await addTelegramSubscription(db, {
+						channelId,
+						feedId: feed.id,
+						mediaFilter: source.mediaFilter,
+						format: source.format ?? null,
+					});
+					subsCreated++;
+				} catch (e) {
+					errors.push(`channel ${channelId} source ${source.value}: ${e instanceof Error ? e.message : String(e)}`);
+				}
+			}
+		} catch (e) {
+			errors.push(`channel ${channelId}: ${e instanceof Error ? e.message : String(e)}`);
+		}
+	}
+
+	// 2. Existing D1 feeds (MCP-registered) → mcp_subscriptions
+	let mcpSubsMigrated = 0;
+	try {
+		const feeds = await getFeeds(db);
+		for (const feed of feeds) {
+			try {
+				await addMcpSubscription(db, feed.id, feed.title || undefined);
+				mcpSubsMigrated++;
+			} catch (e) {
+				errors.push(`mcp feed ${feed.id}: ${e instanceof Error ? e.message : String(e)}`);
+			}
+		}
+	} catch (e) {
+		errors.push(`reading feeds: ${e instanceof Error ? e.message : String(e)}`);
+	}
+
+	// 3. Verification counts
+	const [channels, tgSubs, mcpSubs] = await Promise.all([
+		getChannels(db),
+		getTelegramSubscriptions(db),
+		getMcpSubscriptions(db),
+	]);
+
+	return c.json({
+		data: {
+			channelsMigrated,
+			feedsCreated,
+			subsCreated,
+			mcpSubsMigrated,
+			verification: {
+				channelsInD1: channels.length,
+				telegramSubsInD1: tgSubs.length,
+				mcpSubsInD1: mcpSubs.length,
+				kvChannelCount: channelIds.length,
+			},
+			errors: errors.length ? errors : undefined,
+		},
+	});
 }
 
 export async function handleChatApi(c: Context<HonoEnv>): Promise<Response> {
