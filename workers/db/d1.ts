@@ -13,12 +13,19 @@ export interface DbFeed {
 	last_fetched_at: number | null;
 	created_at: number;
 	ai_summary: string;   // 'inherit' | 'enable' | 'disable'
-	url: string;          // back-compat alias of source_value (SELECT-aliased)
+	source_type?: string | null; // 'rsshub' | 'rss_bridge' | 'rss_url' | null (null = legacy rss_url)
 }
 
 export interface DbFeedWithCounts extends DbFeed {
 	total_count: number;
 	unread_count: number;
+	telegram_channel_ids: string | null; // comma-separated channel IDs from GROUP_CONCAT, null if none
+}
+
+export interface DbChannel {
+	id: string;
+	name: string;
+	enabled: number;
 }
 
 export interface DbItem {
@@ -85,12 +92,20 @@ export async function getFeeds(db: D1Database): Promise<DbFeedWithCounts[]> {
 	const result = await db.prepare(`
 		SELECT f.*, f.source_value AS url,
 			COUNT(i.id) as total_count,
-			SUM(CASE WHEN i.read = 0 THEN 1 ELSE 0 END) as unread_count
+			SUM(CASE WHEN i.read = 0 THEN 1 ELSE 0 END) as unread_count,
+			(SELECT GROUP_CONCAT(ts.channel_id) FROM telegram_subscriptions ts WHERE ts.feed_id = f.id) as telegram_channel_ids
 		FROM feeds f
 		LEFT JOIN items i ON i.feed_id = f.id
 		GROUP BY f.id
 		ORDER BY f.created_at ASC
 	`).all<DbFeedWithCounts>();
+	return result.results;
+}
+
+export async function getChannels(db: D1Database): Promise<DbChannel[]> {
+	const result = await db.prepare(
+		'SELECT id, name, enabled FROM channels ORDER BY name ASC'
+	).all<DbChannel>();
 	return result.results;
 }
 
@@ -113,36 +128,14 @@ export async function getFeedByUrl(db: D1Database, url: string): Promise<DbFeed 
 	return getFeedBySource(db, 'rss_url', url);
 }
 
-/**
- * Insert a core feed identified by (source_type, source_value). When a feed
- * with the same identity already exists, the existing row is reused
- * (INSERT OR IGNORE) and returned — this is the de-duplication guarantee.
- */
-export async function upsertFeedBySource(
-	db: D1Database,
-	opts: { sourceType: SourceType; sourceValue: string; title?: string; checkIntervalMinutes?: number },
-): Promise<DbFeed> {
-	const existing = await getFeedBySource(db, opts.sourceType, opts.sourceValue);
-	if (existing) return existing;
+export async function insertFeed(db: D1Database, url: string, title: string, sourceType?: string): Promise<DbFeed> {
 	const id = genId();
 	const now = Math.floor(Date.now() / 1000);
 	const interval = opts.checkIntervalMinutes ?? 60;
 	await db.prepare(
-		`INSERT OR IGNORE INTO feeds (id, source_type, source_value, title, enabled, check_interval_minutes, created_at)
-		 VALUES (?, ?, ?, ?, 1, ?, ?)`
-	).bind(id, opts.sourceType, opts.sourceValue, opts.title ?? '', interval, now).run();
-	// Re-read to resolve the winning row (handles concurrent inserts).
-	const row = await getFeedBySource(db, opts.sourceType, opts.sourceValue);
-	return row ?? {
-		id, source_type: opts.sourceType, source_value: opts.sourceValue, title: opts.title ?? '',
-		enabled: 1, check_interval_minutes: interval, last_fetched_at: null, created_at: now,
-		ai_summary: 'inherit', url: opts.sourceValue,
-	};
-}
-
-/** Back-compat: insert an `rss_url` feed from a URL. */
-export async function insertFeed(db: D1Database, url: string, title: string): Promise<DbFeed> {
-	return upsertFeedBySource(db, { sourceType: 'rss_url', sourceValue: url, title });
+		'INSERT INTO feeds (id, url, title, enabled, created_at, source_type) VALUES (?, ?, ?, 1, ?, ?)'
+	).bind(id, url, title, now, sourceType ?? null).run();
+	return { id, url, title, enabled: 1, last_fetched_at: null, created_at: now, ai_summary: 'inherit', source_type: sourceType ?? null };
 }
 
 export async function removeFeed(db: D1Database, feedId: string): Promise<void> {
@@ -712,302 +705,100 @@ export async function recall(db: D1Database, limit = 50, since?: number): Promis
 	}));
 }
 
-// ── Core consumers: channels + subscriptions (migration 0005) ─────────────────
-// One core `feeds` table feeds two typed consumers. Each consumer owns its own
-// subscription table; they share the content pipe, never each other's view.
-//   Telegram consumer : channels + telegram_subscriptions; dedup via post_log
-//   MCP consumer       : mcp_subscriptions; dedup via items.read (global cursor)
+// ── Feed categories ───────────────────────────────────────────────────────────
 
-export interface DbChannel {
-	id: string;                      // numeric Telegram chat id, as text
+export interface DbFeedCategory {
+	id: string;
 	name: string;
-	enabled: number;
-	check_interval_minutes: number;
-	default_format: string | null;  // JSON Partial<FormatSettings>
-	last_check_timestamp: number;
 	created_at: number;
+	feed_count: number;
 }
 
-export interface DbTelegramSubscription {
-	id: string;
-	feed_id: string;
-	channel_id: string;
-	media_filter: string;
-	format: string | null;          // JSON Partial<FormatSettings>
-	enabled: number;
-	created_at: number;
-}
-
-export interface DbMcpSubscription {
-	id: string;
-	feed_id: string;
-	label: string | null;
-	enabled: number;
-	created_at: number;
-}
-
-// ── Channels ──────────────────────────────────────────────────────────────────
-
-export async function getChannels(db: D1Database): Promise<DbChannel[]> {
-	const result = await db.prepare('SELECT * FROM channels ORDER BY created_at ASC').all<DbChannel>();
+export async function listCategories(db: D1Database): Promise<DbFeedCategory[]> {
+	const result = await db.prepare(`
+		SELECT c.id, c.name, c.created_at,
+		       COUNT(m.feed_id) as feed_count
+		FROM feed_categories c
+		LEFT JOIN feed_category_members m ON m.category_id = c.id
+		GROUP BY c.id
+		ORDER BY c.name ASC
+	`).all<DbFeedCategory>();
 	return result.results;
 }
 
-export async function getChannelById(db: D1Database, id: string): Promise<DbChannel | null> {
-	return db.prepare('SELECT * FROM channels WHERE id = ?').bind(id).first<DbChannel>();
+export async function getCategoryByName(db: D1Database, name: string): Promise<DbFeedCategory | null> {
+	return db.prepare(`
+		SELECT c.id, c.name, c.created_at, COUNT(m.feed_id) as feed_count
+		FROM feed_categories c
+		LEFT JOIN feed_category_members m ON m.category_id = c.id
+		WHERE c.name = ?
+		GROUP BY c.id
+	`).bind(name).first<DbFeedCategory>();
 }
 
-/** Insert or update a channel by its (numeric) Telegram id. */
-export async function upsertChannel(
-	db: D1Database,
-	opts: {
-		id: string;
-		name?: string;
-		enabled?: boolean;
-		checkIntervalMinutes?: number;
-		defaultFormat?: Partial<FormatSettings> | null;
-		lastCheckTimestamp?: number;
-	},
-): Promise<void> {
-	const now = Math.floor(Date.now() / 1000);
-	const format = opts.defaultFormat === undefined || opts.defaultFormat === null
-		? null
-		: JSON.stringify(opts.defaultFormat);
-	await db.prepare(
-		`INSERT INTO channels (id, name, enabled, check_interval_minutes, default_format, last_check_timestamp, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET
-			name = excluded.name,
-			enabled = excluded.enabled,
-			check_interval_minutes = excluded.check_interval_minutes,
-			default_format = excluded.default_format,
-			last_check_timestamp = excluded.last_check_timestamp`,
-	).bind(
-		opts.id,
-		opts.name ?? '',
-		opts.enabled === false ? 0 : 1,
-		opts.checkIntervalMinutes ?? 60,
-		format,
-		opts.lastCheckTimestamp ?? 0,
-		now,
-	).run();
+export async function getCategoryById(db: D1Database, id: string): Promise<DbFeedCategory | null> {
+	return db.prepare(`
+		SELECT c.id, c.name, c.created_at, COUNT(m.feed_id) as feed_count
+		FROM feed_categories c
+		LEFT JOIN feed_category_members m ON m.category_id = c.id
+		WHERE c.id = ?
+		GROUP BY c.id
+	`).bind(id).first<DbFeedCategory>();
 }
 
-export async function removeChannel(db: D1Database, id: string): Promise<void> {
-	await db.prepare('DELETE FROM channels WHERE id = ?').bind(id).run();
-}
-
-export async function setChannelEnabled(db: D1Database, id: string, enabled: boolean): Promise<void> {
-	await db.prepare('UPDATE channels SET enabled = ? WHERE id = ?').bind(enabled ? 1 : 0, id).run();
-}
-
-export async function updateChannelLastCheck(db: D1Database, id: string, timestamp: number): Promise<void> {
-	await db.prepare('UPDATE channels SET last_check_timestamp = ? WHERE id = ?').bind(timestamp, id).run();
-}
-
-// ── Telegram subscriptions ────────────────────────────────────────────────────
-
-export async function getTelegramSubscriptions(db: D1Database, channelId?: string): Promise<DbTelegramSubscription[]> {
-	if (channelId) {
-		const result = await db.prepare('SELECT * FROM telegram_subscriptions WHERE channel_id = ? ORDER BY created_at ASC')
-			.bind(channelId).all<DbTelegramSubscription>();
-		return result.results;
-	}
-	const result = await db.prepare('SELECT * FROM telegram_subscriptions ORDER BY created_at ASC')
-		.all<DbTelegramSubscription>();
-	return result.results;
-}
-
-export async function getTelegramSubscriptionsByFeed(db: D1Database, feedId: string): Promise<DbTelegramSubscription[]> {
-	const result = await db.prepare('SELECT * FROM telegram_subscriptions WHERE feed_id = ? AND enabled = 1')
-		.bind(feedId).all<DbTelegramSubscription>();
-	return result.results;
-}
-
-/** Subscribe a Telegram channel to a core feed (idempotent on channel_id+feed_id). */
-export async function addTelegramSubscription(
-	db: D1Database,
-	opts: { channelId: string; feedId: string; mediaFilter?: FeedMediaFilter; format?: Partial<FormatSettings> | null },
-): Promise<void> {
+export async function createCategory(db: D1Database, name: string): Promise<DbFeedCategory> {
 	const id = genId();
 	const now = Math.floor(Date.now() / 1000);
-	const format = opts.format === undefined || opts.format === null ? null : JSON.stringify(opts.format);
+	await db.prepare('INSERT INTO feed_categories (id, name, created_at) VALUES (?, ?, ?)')
+		.bind(id, name, now).run();
+	return { id, name, created_at: now, feed_count: 0 };
+}
+
+export async function deleteCategory(db: D1Database, id: string): Promise<void> {
+	await db.prepare('DELETE FROM feed_categories WHERE id = ?').bind(id).run();
+}
+
+export async function addFeedToCategory(db: D1Database, categoryId: string, feedId: string): Promise<void> {
 	await db.prepare(
-		`INSERT INTO telegram_subscriptions (id, feed_id, channel_id, media_filter, format, enabled, created_at)
-		 VALUES (?, ?, ?, ?, ?, 1, ?)
-		 ON CONFLICT(channel_id, feed_id) DO UPDATE SET
-			media_filter = excluded.media_filter,
-			format = excluded.format`,
-	).bind(id, opts.feedId, opts.channelId, opts.mediaFilter ?? 'all', format, now).run();
+		'INSERT OR IGNORE INTO feed_category_members (category_id, feed_id) VALUES (?, ?)'
+	).bind(categoryId, feedId).run();
 }
 
-export async function removeTelegramSubscription(db: D1Database, channelId: string, feedId: string): Promise<void> {
-	await db.prepare('DELETE FROM telegram_subscriptions WHERE channel_id = ? AND feed_id = ?')
-		.bind(channelId, feedId).run();
+export async function removeFeedFromCategory(db: D1Database, categoryId: string, feedId: string): Promise<void> {
+	await db.prepare(
+		'DELETE FROM feed_category_members WHERE category_id = ? AND feed_id = ?'
+	).bind(categoryId, feedId).run();
 }
 
-export async function setTelegramSubscriptionEnabled(
-	db: D1Database,
-	channelId: string,
-	feedId: string,
-	enabled: boolean,
-): Promise<void> {
-	await db.prepare('UPDATE telegram_subscriptions SET enabled = ? WHERE channel_id = ? AND feed_id = ?')
-		.bind(enabled ? 1 : 0, channelId, feedId).run();
-}
-
-// ── MCP subscriptions ─────────────────────────────────────────────────────────
-
-export async function getMcpSubscriptions(db: D1Database): Promise<DbMcpSubscription[]> {
-	const result = await db.prepare('SELECT * FROM mcp_subscriptions WHERE enabled = 1 ORDER BY created_at ASC')
-		.all<DbMcpSubscription>();
+export async function getFeedsInCategory(db: D1Database, categoryId: string): Promise<DbFeedWithCounts[]> {
+	const result = await db.prepare(`
+		SELECT f.*,
+			COUNT(i.id) as total_count,
+			SUM(CASE WHEN i.read = 0 THEN 1 ELSE 0 END) as unread_count,
+			(SELECT GROUP_CONCAT(ts.channel_id) FROM telegram_subscriptions ts WHERE ts.feed_id = f.id) as telegram_channel_ids
+		FROM feeds f
+		JOIN feed_category_members m ON m.feed_id = f.id
+		LEFT JOIN items i ON i.feed_id = f.id
+		WHERE m.category_id = ?
+		GROUP BY f.id
+		ORDER BY f.title ASC
+	`).bind(categoryId).all<DbFeedWithCounts>();
 	return result.results;
 }
 
-/** Feed ids the MCP workspace is subscribed to (enabled only). */
-export async function getMcpSubscribedFeedIds(db: D1Database): Promise<string[]> {
-	const result = await db.prepare('SELECT feed_id FROM mcp_subscriptions WHERE enabled = 1')
-		.all<{ feed_id: string }>();
+export async function getFeedIdsInCategory(db: D1Database, categoryId: string): Promise<string[]> {
+	const result = await db.prepare(
+		'SELECT feed_id FROM feed_category_members WHERE category_id = ?'
+	).bind(categoryId).all<{ feed_id: string }>();
 	return result.results.map(r => r.feed_id);
 }
 
-/** Subscribe the MCP workspace to a core feed (idempotent on feed_id). */
-export async function addMcpSubscription(db: D1Database, feedId: string, label?: string): Promise<void> {
-	const id = genId();
-	const now = Math.floor(Date.now() / 1000);
-	await db.prepare(
-		`INSERT INTO mcp_subscriptions (id, feed_id, label, enabled, created_at)
-		 VALUES (?, ?, ?, 1, ?)
-		 ON CONFLICT(feed_id) DO UPDATE SET label = excluded.label, enabled = 1`,
-	).bind(id, feedId, label ?? null, now).run();
-}
-
-export async function removeMcpSubscription(db: D1Database, feedId: string): Promise<void> {
-	await db.prepare('DELETE FROM mcp_subscriptions WHERE feed_id = ?').bind(feedId).run();
-}
-
-// ── Telegram dedup (post_log) ─────────────────────────────────────────────────
-
-/**
- * Has this item already been successfully posted to this chat? Backed by the
- * idx_postlog_chat_item index. Only `status = 'ok'` rows count, so a failed
- * send is retried on the next cycle.
- */
-export async function wasPostedToChannel(db: D1Database, chatId: string, itemId: string): Promise<boolean> {
-	const row = await db.prepare(
-		`SELECT 1 FROM post_log WHERE chat_id = ? AND item_id = ? AND status = 'ok' LIMIT 1`,
-	).bind(chatId, itemId).first();
-	return row !== null;
-}
-
-// ── D1 ChannelConfig facade ───────────────────────────────────────────────────
-// Bridges the KV-era ChannelConfig shape to D1 so the ~16 bot command/callback
-// files can be migrated with minimal churn. The source `id` is always the feed
-// UUID (stable, unique per core feed) when read back from D1.
-
-/** Reconstruct a KV-era ChannelConfig from D1 (channels + telegram_subscriptions + feeds). */
-export async function getChannelConfigFromD1(db: D1Database, channelId: string): Promise<ChannelConfig | null> {
-	const channel = await getChannelById(db, channelId);
-	if (!channel) return null;
-
-	const subs = await getTelegramSubscriptions(db, channelId);
-	const sources: ChannelSource[] = [];
-	for (const sub of subs) {
-		const feed = await getFeedById(db, sub.feed_id);
-		if (feed) sources.push(dbTelegramSubToChannelSource(sub, feed));
-	}
-
-	return {
-		channelTitle: channel.name,
-		enabled: channel.enabled === 1,
-		checkIntervalMinutes: channel.check_interval_minutes,
-		lastCheckTimestamp: channel.last_check_timestamp,
-		sources,
-		defaultFormat: channel.default_format
-			? parseJsonSafe<Partial<FormatSettings>>(channel.default_format, {})
-			: undefined,
-	};
-}
-
-/**
- * Write a KV-era ChannelConfig back to D1.
- * Syncs the channels row and telegram_subscriptions (upserts new, removes deleted).
- * Sources are always resolved by (source_type, source_value) → canonical feed.id,
- * so shortHash-based ids from bot flows are transparently replaced by feed UUIDs.
- */
-export async function saveChannelConfigToD1(
-	db: D1Database,
-	channelId: string,
-	config: ChannelConfig,
-): Promise<void> {
-	await upsertChannel(db, {
-		id: channelId,
-		name: config.channelTitle,
-		enabled: config.enabled,
-		checkIntervalMinutes: config.checkIntervalMinutes,
-		defaultFormat: config.defaultFormat ?? null,
-		lastCheckTimestamp: config.lastCheckTimestamp,
-	});
-
-	const existingSubs = await getTelegramSubscriptions(db, channelId);
-	const newFeedIds = new Set<string>();
-
-	for (const source of config.sources) {
-		const feed = await upsertFeedBySource(db, {
-			sourceType: source.type as SourceType,
-			sourceValue: source.value,
-		});
-		newFeedIds.add(feed.id);
-		await addTelegramSubscription(db, {
-			channelId,
-			feedId: feed.id,
-			mediaFilter: source.mediaFilter,
-			format: source.format ?? null,
-		});
-		if (!source.enabled) {
-			await setTelegramSubscriptionEnabled(db, channelId, feed.id, false);
-		} else {
-			await setTelegramSubscriptionEnabled(db, channelId, feed.id, true);
-		}
-	}
-
-	for (const sub of existingSubs) {
-		if (!newFeedIds.has(sub.feed_id)) {
-			await removeTelegramSubscription(db, channelId, sub.feed_id);
-		}
-	}
-}
-
-/** Return all D1 channel IDs — replaces getChannelsList(kv). */
-export async function getChannelsListD1(db: D1Database): Promise<string[]> {
-	const channels = await getChannels(db);
-	return channels.map(c => c.id);
-}
-
-/** Find a channel ID by its stored name (case-insensitive) — replaces findChannelByName(kv, name). */
-export async function findChannelByNameD1(db: D1Database, name: string): Promise<string | null> {
-	const clean = name.replace(/^@/, '').toLowerCase();
-	const channels = await getChannels(db);
-	const found = channels.find(
-		c => c.name.toLowerCase() === clean || c.name.toLowerCase() === `@${clean}`,
-	);
-	return found?.id ?? null;
-}
-
-// ── Mapper: telegram_subscription (+ feed) → ChannelSource ────────────────────
-// Bridges the D1 core-feeds world back to the KV-era `ChannelSource` shape so
-// the existing Telegram formatting/fetch code can stay unchanged. The source id
-// is the feed id (stable, unique per core feed).
-export function dbTelegramSubToChannelSource(
-	sub: DbTelegramSubscription,
-	feed: Pick<DbFeed, 'source_type' | 'source_value'>,
-): ChannelSource {
-	return {
-		id: sub.feed_id,
-		type: feed.source_type as SourceType,
-		value: feed.source_value,
-		mediaFilter: sub.media_filter as FeedMediaFilter,
-		enabled: sub.enabled === 1,
-		format: sub.format ? parseJsonSafe<Partial<FormatSettings>>(sub.format, {}) : undefined,
-	};
+export async function getCategoriesForFeed(db: D1Database, feedId: string): Promise<Array<{ id: string; name: string }>> {
+	const result = await db.prepare(`
+		SELECT c.id, c.name FROM feed_categories c
+		JOIN feed_category_members m ON m.category_id = c.id
+		WHERE m.feed_id = ?
+		ORDER BY c.name ASC
+	`).bind(feedId).all<{ id: string; name: string }>();
+	return result.results;
 }

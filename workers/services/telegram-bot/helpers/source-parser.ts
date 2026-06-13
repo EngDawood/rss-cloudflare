@@ -6,9 +6,9 @@ const RSSHUB_APP = 'https://rsshub.app';
 
 /**
  * Detect if a URL is from rsshub.app or a known RSSHub instance.
- * Returns the path+search string (e.g. "/anthropic/news") or null.
+ * Recognises picnob.info paths as native Instagram sources; everything else becomes rsshub_url.
  */
-function detectRSSHubPath(url: string): string | null {
+export function detectRSSHubSource(url: string): { type: SourceType; value: string; id: string } | null {
 	try {
 		const parsed = new URL(url);
 		const origin = parsed.origin;
@@ -16,7 +16,24 @@ function detectRSSHubPath(url: string): string | null {
 			origin === RSSHUB_APP ||
 			RSSHUB_INSTANCES.some((inst) => origin === inst || url.startsWith(inst));
 		if (!isRSSHub) return null;
-		return parsed.pathname + (parsed.search || '');
+
+		// picnob.info/user/<username>/posts → instagram_user
+		const postsMatch = parsed.pathname.match(/^\/picnob\.info\/user\/([\w.-]+)\/posts/i);
+		if (postsMatch) {
+			const username = postsMatch[1];
+			return { type: 'instagram_user', value: username, id: `usr_${shortHash(username)}` };
+		}
+
+		// picnob.info/user/<username>/stories → instagram_story
+		const storiesMatch = parsed.pathname.match(/^\/picnob\.info\/user\/([\w.-]+)\/stories/i);
+		if (storiesMatch) {
+			const username = storiesMatch[1];
+			return { type: 'instagram_story', value: username, id: `igst_${shortHash(username)}` };
+		}
+
+		// Generic RSSHub path
+		const path = parsed.pathname + (parsed.search || '');
+		return { type: 'rsshub_url', value: path, id: `rsshub_${shortHash(path)}` };
 	} catch {
 		return null;
 	}
@@ -90,10 +107,16 @@ export function parseSourceRef(ref: string): { type: SourceType; value: string; 
 			}
 		}
 
-		// RSSHub URL (rsshub.app or known instance) → extract path for instance failover
-		const rsshubPath = detectRSSHubPath(trimmed);
-		if (rsshubPath) {
-			return { type: 'rsshub_url', value: rsshubPath, id: `rsshub_${shortHash(rsshubPath)}` };
+		// RSS-Bridge URL (known instance) → extract native source for failover support
+		const rssBridgeSource = detectRSSBridgeSource(trimmed);
+		if (rssBridgeSource) {
+			return rssBridgeSource;
+		}
+
+		// RSSHub URL (rsshub.app or known instance) → detect native type or fall back to rsshub_url
+		const rsshubSource = detectRSSHubSource(trimmed);
+		if (rsshubSource) {
+			return rsshubSource;
 		}
 
 		// Generic RSS/Atom URL
@@ -129,7 +152,10 @@ export function sourceTypeIcon(type: string): string {
 		case 'tiktok_user':
 			return '🎵';
 		case 'rsshub_url':
+		case 'rsshub':
 			return '📡';
+		case 'rss_bridge':
+			return '🌉';
 		case 'rss_url':
 			return '🌐';
 		default:
@@ -153,7 +179,10 @@ export function sourceTypeLabel(type: string): string {
 		case 'tiktok_user':
 			return 'TikTok';
 		case 'rsshub_url':
+		case 'rsshub':
 			return 'RSSHub';
+		case 'rss_bridge':
+			return 'RSS-Bridge';
 		case 'rss_url':
 			return 'RSS';
 		default:

@@ -2,6 +2,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { Bot } from 'grammy';
 import { fetchFeed } from '../services/feed-fetcher';
+import { fetchForSource, detectAndPromoteSource } from '../services/source-fetcher';
+import type { ChannelSource } from '../types/telegram';
+import type { DbFeed } from '../db/d1';
+import type { FetchResult } from '../types/feed';
 import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format';
 import { enrichFeedItems } from '../utils/media-enrichment';
 import {
@@ -10,7 +14,9 @@ import {
 	markItemsRead, getConfig, setConfig, dbItemToFeedItem,
 	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
 	insertNote, listNotes, searchNotes, deleteNote,
-	listPostLog, recall,
+	insertPostLog, listPostLog, recall,
+	listCategories, getCategoryById, getCategoryByName, createCategory, deleteCategory,
+	addFeedToCategory, removeFeedFromCategory, getFeedsInCategory, getFeedIdsInCategory, getCategoriesForFeed,
 } from '../db/d1';
 import { resolveTarget, logAndSend } from '../services/post-service';
 import type { TelegramMediaMessage } from '../types/telegram';
@@ -26,23 +32,38 @@ function err(message: string) {
 export function registerTools(server: McpServer, env: Env): void {
 	const db = env.DB;
 
+	const fetchDbFeed = (feed: DbFeed): Promise<FetchResult> => {
+		if (feed.source_type === 'rsshub' || feed.source_type === 'rss_bridge') {
+			const src: ChannelSource = { id: '', type: feed.source_type as ChannelSource['type'], value: feed.url, mediaFilter: 'all', enabled: true };
+			return fetchForSource(src, env);
+		}
+		return fetchFeed(feed.url, feed.title || undefined);
+	};
+
 	// ── Feed management ──────────────────────────────────────────────────────
 
 	server.tool(
 		'add_feed',
-		'Add an RSS/Atom feed URL to the saved list and fetch its initial items.',
-		{ url: z.string().url(), title: z.string().optional() },
+		'Add an RSS/Atom feed URL to the saved list and fetch its initial items. Automatically detects RSSHub and RSS-Bridge URLs and stores them instance-independently.',
+		{ url: z.string(), title: z.string().optional() },
 		async ({ url, title }) => {
 			try {
-				const existing = await getFeedByUrl(db, url);
-				if (existing) return ok({ message: 'Feed already exists', feed: existing });
+				const detected = await detectAndPromoteSource(url, env.CACHE);
+				const canonicalUrl = detected ? detected.value : url;
+				const sourceType = detected ? detected.type : 'rss_url';
 
-				const result = await fetchFeed(url, title);
+				const existing = await getFeedByUrl(db, canonicalUrl);
+				if (existing) return ok({ message: 'Feed already exists', feed: existing, detected });
+
+				const result = detected
+					? await fetchForSource({ id: '', type: detected.type as ChannelSource['type'], value: detected.value, mediaFilter: 'all', enabled: true }, env)
+					: await fetchFeed(url, title);
+
 				const feedTitle = title || result.feedTitle || url;
-				const feed = await insertFeed(db, url, feedTitle);
+				const feed = await insertFeed(db, canonicalUrl, feedTitle, sourceType);
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
-				return ok({ feed, itemsInserted: inserted, errors: result.errors });
+				return ok({ feed, itemsInserted: inserted, errors: result.errors, detected });
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));
 			}
@@ -105,7 +126,7 @@ export function registerTools(server: McpServer, env: Env): void {
 			try {
 				const feed = await getFeedById(db, feedId);
 				if (!feed) return err(`Feed ${feedId} not found`);
-				const result = await fetchFeed(feed.url, feed.title || undefined);
+				const result = await fetchDbFeed(feed);
 				const inserted = await upsertItems(db, feedId, result.items);
 				await updateLastFetched(db, feedId);
 				return ok({ feedId, itemsFetched: result.items.length, itemsInserted: inserted, errors: result.errors });
@@ -126,7 +147,7 @@ export function registerTools(server: McpServer, env: Env): void {
 				const results: Array<{ feedId: string; title: string; inserted: number; errors: number }> = [];
 				for (const feed of enabled) {
 					try {
-						const result = await fetchFeed(feed.url, feed.title || undefined);
+						const result = await fetchDbFeed(feed);
 						const inserted = await upsertItems(db, feed.id, result.items);
 						await updateLastFetched(db, feed.id);
 						results.push({ feedId: feed.id, title: feed.title, inserted, errors: result.errors.length });
@@ -169,16 +190,23 @@ export function registerTools(server: McpServer, env: Env): void {
 
 	server.tool(
 		'list_new_items',
-		'List unread items (compact). Filter by feedId, keyword query (title/text/author), or since (Unix timestamp).',
+		'List unread items (compact). Filter by feedId, categoryId, keyword query (title/text/author), or since (Unix timestamp).',
 		{
 			feedId: z.string().optional(),
+			categoryId: z.string().optional(),
 			query: z.string().optional(),
 			since: z.number().int().optional(),
 			limit: z.number().int().min(1).max(200).optional().default(50),
 		},
-		async ({ feedId, query, since, limit }) => {
+		async ({ feedId, categoryId, query, since, limit }) => {
 			try {
-				const items = await listNewItems(db, { feedId, query, since, limit });
+				let resolvedFeedId: string | string[] | undefined = feedId;
+				if (categoryId && !feedId) {
+					const ids = await getFeedIdsInCategory(db, categoryId);
+					if (ids.length === 0) return ok([]);
+					resolvedFeedId = ids;
+				}
+				const items = await listNewItems(db, { feedId: resolvedFeedId, query, since, limit });
 				return ok(items);
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));
@@ -188,17 +216,24 @@ export function registerTools(server: McpServer, env: Env): void {
 
 	server.tool(
 		'search_items',
-		'Search all stored items (read + unread) by keyword across title, text, and author. Filter further by feedId, since (Unix timestamp), or unreadOnly.',
+		'Search all stored items (read + unread) by keyword across title, text, and author. Filter further by feedId, categoryId, since (Unix timestamp), or unreadOnly.',
 		{
 			query: z.string().min(1),
 			feedId: z.string().optional(),
+			categoryId: z.string().optional(),
 			since: z.number().int().optional(),
 			unreadOnly: z.boolean().optional().default(false),
 			limit: z.number().int().min(1).max(200).optional().default(50),
 		},
-		async ({ query, feedId, since, unreadOnly, limit }) => {
+		async ({ query, feedId, categoryId, since, unreadOnly, limit }) => {
 			try {
-				const items = await searchItems(db, { query, feedId, since, unreadOnly, limit });
+				let resolvedFeedId: string | string[] | undefined = feedId;
+				if (categoryId && !feedId) {
+					const ids = await getFeedIdsInCategory(db, categoryId);
+					if (ids.length === 0) return ok([]);
+					resolvedFeedId = ids;
+				}
+				const items = await searchItems(db, { query, feedId: resolvedFeedId, since, unreadOnly, limit });
 				return ok(items);
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));
@@ -553,6 +588,113 @@ export function registerTools(server: McpServer, env: Env): void {
 
 				await logAndSend(db, bot, chatId, chatName, message, itemId);
 				return ok({ ok: true, chatId, chatName, type: message.type });
+			} catch (e) {
+				return err(e instanceof Error ? e.message : String(e));
+			}
+		},
+	);
+
+	// ── Feed categories ────────────────────────────────────────────────────────
+
+	server.tool(
+		'list_categories',
+		'List all feed categories with their feed count.',
+		{},
+		async () => {
+			try {
+				return ok(await listCategories(db));
+			} catch (e) {
+				return err(e instanceof Error ? e.message : String(e));
+			}
+		},
+	);
+
+	server.tool(
+		'create_category',
+		'Create a new feed category.',
+		{ name: z.string().min(1) },
+		async ({ name }) => {
+			try {
+				const existing = await getCategoryByName(db, name);
+				if (existing) return ok({ message: 'Category already exists', category: existing });
+				return ok({ created: true, category: await createCategory(db, name) });
+			} catch (e) {
+				return err(e instanceof Error ? e.message : String(e));
+			}
+		},
+	);
+
+	server.tool(
+		'delete_category',
+		'Delete a category. Feeds are not deleted, just unlinked.',
+		{ categoryId: z.string() },
+		async ({ categoryId }) => {
+			try {
+				const cat = await getCategoryById(db, categoryId);
+				if (!cat) return err(`Category ${categoryId} not found`);
+				await deleteCategory(db, categoryId);
+				return ok({ deleted: categoryId, name: cat.name });
+			} catch (e) {
+				return err(e instanceof Error ? e.message : String(e));
+			}
+		},
+	);
+
+	server.tool(
+		'add_feed_to_category',
+		'Add a feed to a category.',
+		{ categoryId: z.string(), feedId: z.string() },
+		async ({ categoryId, feedId }) => {
+			try {
+				const [cat, feed] = await Promise.all([getCategoryById(db, categoryId), getFeedById(db, feedId)]);
+				if (!cat) return err(`Category ${categoryId} not found`);
+				if (!feed) return err(`Feed ${feedId} not found`);
+				await addFeedToCategory(db, categoryId, feedId);
+				return ok({ categoryId, categoryName: cat.name, feedId, feedTitle: feed.title });
+			} catch (e) {
+				return err(e instanceof Error ? e.message : String(e));
+			}
+		},
+	);
+
+	server.tool(
+		'remove_feed_from_category',
+		'Remove a feed from a category.',
+		{ categoryId: z.string(), feedId: z.string() },
+		async ({ categoryId, feedId }) => {
+			try {
+				await removeFeedFromCategory(db, categoryId, feedId);
+				return ok({ removed: true, categoryId, feedId });
+			} catch (e) {
+				return err(e instanceof Error ? e.message : String(e));
+			}
+		},
+	);
+
+	server.tool(
+		'get_category_feeds',
+		'List all feeds in a category with their item counts.',
+		{ categoryId: z.string() },
+		async ({ categoryId }) => {
+			try {
+				const cat = await getCategoryById(db, categoryId);
+				if (!cat) return err(`Category ${categoryId} not found`);
+				return ok({ category: cat, feeds: await getFeedsInCategory(db, categoryId) });
+			} catch (e) {
+				return err(e instanceof Error ? e.message : String(e));
+			}
+		},
+	);
+
+	server.tool(
+		'get_feed_categories',
+		'List all categories a feed belongs to.',
+		{ feedId: z.string() },
+		async ({ feedId }) => {
+			try {
+				const feed = await getFeedById(db, feedId);
+				if (!feed) return err(`Feed ${feedId} not found`);
+				return ok({ feedId, feedTitle: feed.title, categories: await getCategoriesForFeed(db, feedId) });
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));
 			}
