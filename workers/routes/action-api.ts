@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 import { Bot } from 'grammy';
 import { fetchFeed } from '../services/feed-fetcher';
 import { RSS_BRIDGE_INSTANCES, RSS_BRIDGE_TIKTOK_INSTANCES, RSSHUB_INSTANCES, fetchForSource, detectAndPromoteSource } from '../services/source-fetcher';
-import { runInstanceBenchmark } from '../cron/benchmark-instances';
+import { runInstanceBenchmark, benchmarkInstance } from '../cron/benchmark-instances';
 import type { ChannelSource } from '../types/telegram';
 import type { FetchResult } from '../types/feed';
 import type { DbFeed } from '../db/d1';
@@ -424,10 +424,23 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				await c.env.CACHE.put(`instances:sorted:${type}`, JSON.stringify(instances));
 				return c.json({ data: { type, count: instances.length } });
 			}
+			case 'test_instance': {
+				const { url: testUrl, type: testType } = params ?? {};
+				if (!testUrl) return c.json({ error: 'url is required' }, 400);
+				const probePath = testType === 'rsshub'
+					? '/hackernews/best'
+					: '/?action=display&bridge=HackerNewsBridge&format=Atom';
+				const testResult = await benchmarkInstance(testUrl, probePath);
+				return c.json({ data: testResult });
+			}
 			case 'run_benchmark': {
 				if (!c.env.CACHE) return c.json({ error: 'KV CACHE binding not available' }, 500);
-				await runInstanceBenchmark(c.env);
-				return c.json({ data: { ok: true } });
+				const benchType = params?.type as 'rssbridge' | 'tiktok' | 'rsshub' | undefined;
+				if (benchType && !['rssbridge', 'tiktok', 'rsshub'].includes(benchType)) {
+					return c.json({ error: 'type must be rssbridge, tiktok, or rsshub' }, 400);
+				}
+				await runInstanceBenchmark(c.env, benchType);
+				return c.json({ data: { ok: true, type: benchType ?? 'all' } });
 			}
 
 			default:
