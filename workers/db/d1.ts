@@ -1013,12 +1013,53 @@ export function dbTelegramSubToChannelSource(
 	};
 }
 
-// ── Category stubs (tables not yet migrated) ──────────────────────────────────
+// ── Categories (migration 0007) ───────────────────────────────────────────────
 
-export async function listCategories(_db: D1Database): Promise<{ id: string; name: string }[]> {
-	return [];
+export interface DbCategory {
+	id: string;
+	name: string;
+	created_at: number;
 }
 
-export async function getFeedsInCategory(_db: D1Database, _categoryId: string): Promise<DbFeedWithCounts[]> {
-	return [];
+export async function listCategories(db: D1Database): Promise<DbCategory[]> {
+	const result = await db.prepare('SELECT * FROM feed_categories ORDER BY name ASC').all<DbCategory>();
+	return result.results;
+}
+
+export async function getFeedsInCategory(db: D1Database, categoryId: string): Promise<DbFeedWithCounts[]> {
+	const result = await db.prepare(`
+		SELECT f.*, f.source_value AS url,
+			COUNT(i.id) as total_count,
+			SUM(CASE WHEN i.read = 0 THEN 1 ELSE 0 END) as unread_count,
+			(SELECT GROUP_CONCAT(ts.channel_id) FROM telegram_subscriptions ts WHERE ts.feed_id = f.id) as telegram_channel_ids
+		FROM feeds f
+		JOIN feed_category_members fcm ON fcm.feed_id = f.id
+		LEFT JOIN items i ON i.feed_id = f.id
+		WHERE fcm.category_id = ?
+		GROUP BY f.id
+		ORDER BY f.created_at ASC
+	`).bind(categoryId).all<DbFeedWithCounts>();
+	return result.results;
+}
+
+export async function addFeedToCategory(db: D1Database, categoryId: string, feedId: string): Promise<void> {
+	await db.prepare('INSERT OR IGNORE INTO feed_category_members (category_id, feed_id) VALUES (?, ?)')
+		.bind(categoryId, feedId).run();
+}
+
+export async function removeFeedFromCategory(db: D1Database, categoryId: string, feedId: string): Promise<void> {
+	await db.prepare('DELETE FROM feed_category_members WHERE category_id = ? AND feed_id = ?')
+		.bind(categoryId, feedId).run();
+}
+
+export async function createCategory(db: D1Database, name: string): Promise<DbCategory> {
+	const id = genId();
+	const now = Math.floor(Date.now() / 1000);
+	await db.prepare('INSERT INTO feed_categories (id, name, created_at) VALUES (?, ?, ?)')
+		.bind(id, name, now).run();
+	return { id, name, created_at: now };
+}
+
+export async function deleteCategory(db: D1Database, categoryId: string): Promise<void> {
+	await db.prepare('DELETE FROM feed_categories WHERE id = ?').bind(categoryId).run();
 }
