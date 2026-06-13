@@ -2,16 +2,14 @@ import { Hono } from 'hono';
 import { handleInstagramFeed } from './routes/instagram';
 import { handleTelegramWebhook } from './routes/telegram';
 import { handleSetup } from './routes/setup';
-import { handleFoloWebhook } from './routes/folo';
+import { handleTestBridges } from './routes/test-bridges';
 import { checkAllFeeds } from './cron/check-feeds';
 import { refreshSavedFeeds } from './cron/refresh-feeds';
-import { maybeRunInstanceBenchmark } from './cron/benchmark-instances';
 import { handleQueue } from './queue-handler';
 import { RSSReaderMCP } from './mcp/index';
 import { QueueTask } from './types/queue';
 import { MessageBatch } from '@cloudflare/workers-types';
-import { handleActionApi, handleChatApi } from './routes/action-api';
-import { handleTest } from '../test/test';
+import { handleActionApi, handleChatApi, handleMigrateChannels } from './routes/action-api';
 
 type HonoEnv = { Bindings: Env };
 
@@ -20,10 +18,12 @@ const app = new Hono<HonoEnv>();
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 app.get('/instagram', handleInstagramFeed);
-app.get('/test', handleTest);
-app.get('/test/:u', handleTest);
-app.get('/test-bridges', handleTest);
-app.get('/test-bridges/:u', handleTest);
+app.get('/test-bridges', handleTestBridges);
+app.get('/test-bridges/:u', handleTestBridges);
+app.get('/test-rssbridge', handleTestBridges);
+app.get('/test-rssbridge/:u', handleTestBridges);
+app.get('/test-rsshub', handleTestBridges);
+app.get('/test-rsshub/:u', handleTestBridges);
 
 app.post('/telegram/webhook', handleTelegramWebhook);
 app.get('/telegram/setup', handleSetup);
@@ -79,7 +79,6 @@ export default {
 	scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
 		ctx.waitUntil(checkAllFeeds(env));
 		ctx.waitUntil(refreshSavedFeeds(env));
-		ctx.waitUntil(maybeRunInstanceBenchmark(env));
 	},
 	queue: async (batch: MessageBatch<QueueTask>, env: Env): Promise<void> => {
 		await handleQueue(batch, env);

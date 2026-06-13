@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Rss, BookOpen, TelegramLogo, PaperPlaneTilt,
-  Clock, Terminal, ChatCircleText, Plus,
-  Trash, Gear, GlobeSimple,
+import { 
+  Rss, BookOpen, TelegramLogo, PaperPlaneTilt, 
+  Clock, Terminal, ChatCircleText, Plus, 
+  Trash, Gear, 
   ArrowsClockwise, Sparkle, Note, MagnifyingGlass,
   ArrowRight, ShieldCheck, ShieldWarning, CaretLeft, CaretRight, X, Sun, Moon,
-  Eye, Funnel, ArrowUp, ArrowDown
+  Eye, Funnel
 } from '@phosphor-icons/react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -72,52 +72,8 @@ export default function App() {
   // Skeletons / Loading states
   const [isLoading, setIsLoading] = useState(true);
 
-  // Feed filter (persisted across navigation)
-  const [feedViewFilter, setFeedViewFilterState] = useState<'all' | 'mcp' | 'telegram' | 'category'>(
-    () => (localStorage.getItem('rss_feed_filter') as 'all' | 'mcp' | 'telegram' | 'category') || 'all'
-  );
-  const [selectedChannelId, setSelectedChannelIdState] = useState<string | null>(
-    () => localStorage.getItem('rss_channel_filter') || null
-  );
-  const [selectedFeedCategoryId, setSelectedFeedCategoryIdState] = useState<string | null>(
-    () => localStorage.getItem('rss_category_filter') || null
-  );
-  const [categoryFeedIds, setCategoryFeedIds] = useState<Record<string, string[]>>({});
-  const setFeedViewFilter = (v: 'all' | 'mcp' | 'telegram' | 'category') => {
-    setFeedViewFilterState(v);
-    localStorage.setItem('rss_feed_filter', v);
-    if (v !== 'telegram') {
-      setSelectedChannelIdState(null);
-      localStorage.removeItem('rss_channel_filter');
-    }
-    if (v !== 'mcp' && v !== 'category') {
-      setSelectedFeedCategoryIdState(null);
-      localStorage.removeItem('rss_category_filter');
-    }
-  };
-  const setSelectedFeedCategoryId = async (id: string | null) => {
-    setSelectedFeedCategoryIdState(id);
-    if (id) {
-      localStorage.setItem('rss_category_filter', id);
-      if (!categoryFeedIds[id]) {
-        const res = await callApi('get_category_feeds', { categoryId: id });
-        if (!res.error) setCategoryFeedIds(prev => ({ ...prev, [id]: (res.data || []).map((f: any) => f.id) }));
-      }
-    } else {
-      localStorage.removeItem('rss_category_filter');
-    }
-  };
-  const setSelectedChannelId = (id: string | null) => {
-    setSelectedChannelIdState(id);
-    if (id) localStorage.setItem('rss_channel_filter', id);
-    else localStorage.removeItem('rss_channel_filter');
-  };
-
   // Data states
   const [feeds, setFeeds] = useState<any[]>([]);
-  const [channels, setChannels] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [readerCategoryId, setReaderCategoryIdState] = useState<string>('');
   const [chats, setChats] = useState<any[]>([]);
   const [unreadItems, setUnreadItems] = useState<any[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
@@ -160,13 +116,6 @@ export default function App() {
   const [toolArgs, setToolArgs] = useState(JSON.stringify(MCP_TOOLS[0].template, null, 2));
   const [toolResult, setToolResult] = useState('');
   const [isExecutingTool, setIsExecutingTool] = useState(false);
-
-  // Instances management state
-  const [instances, setInstances] = useState<{ rssbridge: string[]; tiktok: string[]; rsshub: string[] }>({ rssbridge: [], tiktok: [], rsshub: [] });
-  const [isBenchmarking, setIsBenchmarking] = useState<{ rssbridge: boolean; tiktok: boolean; rsshub: boolean }>({ rssbridge: false, tiktok: false, rsshub: false });
-  const [isTesting, setIsTesting] = useState<{ rssbridge: boolean; tiktok: boolean; rsshub: boolean }>({ rssbridge: false, tiktok: false, rsshub: false });
-  const [testResults, setTestResults] = useState<{ rssbridge: null | { url: string; success: boolean; durationMs: number; itemCount: number }; tiktok: null | { url: string; success: boolean; durationMs: number; itemCount: number }; rsshub: null | { url: string; success: boolean; durationMs: number; itemCount: number } }>({ rssbridge: null, tiktok: null, rsshub: null });
-  const [newInstanceInputs, setNewInstanceInputs] = useState({ rssbridge: '', tiktok: '', rsshub: '' });
 
   // Chat Agent state
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; toolsCalled?: string[] }>>([
@@ -280,77 +229,20 @@ export default function App() {
       if (activeTab === 'feeds') loadFeeds();
       else if (activeTab === 'reader') {
         loadReaderItems();
-        if (feeds.length === 0) loadFeeds(true); // populate category filter + dropdown
+        loadFeeds(true); // Load silently to populate filters dropdown
       }
       else if (activeTab === 'telegram') loadChats();
       else if (activeTab === 'sandbox') loadSandboxOptions();
       else if (activeTab === 'logs') loadLogsAndConfig();
-      else if (activeTab === 'instances') loadInstances();
     }
   }, [activeTab, isAuthenticated]);
 
   // ── Feeds Tab ─────────────────────────────────────────────────────────────
   const loadFeeds = async (silent = false) => {
     if (!silent) setIsLoading(true);
-    const [feedsRes, channelsRes, catsRes] = await Promise.all([
-      callApi('list_feeds'),
-      callApi('list_channels'),
-      callApi('list_categories'),
-    ]);
-    if (!feedsRes.error) setFeeds(feedsRes.data || []);
-    if (!channelsRes.error) setChannels(channelsRes.data || []);
-    if (!catsRes.error) setCategories(catsRes.data || []);
+    const res = await callApi('list_feeds');
+    if (!res.error) setFeeds(res.data || []);
     if (!silent) setIsLoading(false);
-  };
-
-  const loadInstances = async () => {
-    const res = await callApi('get_instances');
-    if (!res.error) setInstances(res.data);
-  };
-
-  const handleSaveInstances = async (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
-    const res = await callApi('set_instances', { type, instances: instances[type] });
-    if (res.error) showToast(`Failed to save: ${res.error}`, 'error');
-    else showToast(`${type} instances saved (${instances[type].length} entries)`, 'success');
-  };
-
-  const handleRunBenchmark = async (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
-    setIsBenchmarking(prev => ({ ...prev, [type]: true }));
-    showToast(`Benchmarking ${type} instances…`, 'info');
-    const res = await callApi('run_benchmark', { type });
-    if (res.error) showToast(`Benchmark failed: ${res.error}`, 'error');
-    else { showToast(`${type} instances re-ranked by items found + speed`, 'success'); await loadInstances(); }
-    setIsBenchmarking(prev => ({ ...prev, [type]: false }));
-  };
-
-  const handleTestInstance = async (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
-    const url = newInstanceInputs[type].trim();
-    if (!url) return;
-    setIsTesting(prev => ({ ...prev, [type]: true }));
-    setTestResults(prev => ({ ...prev, [type]: null }));
-    const res = await callApi('test_instance', { url, type });
-    if (!res.error) setTestResults(prev => ({ ...prev, [type]: { ...res.data, url } }));
-    else showToast(`Test failed: ${res.error}`, 'error');
-    setIsTesting(prev => ({ ...prev, [type]: false }));
-  };
-
-  const moveInstance = (type: 'rssbridge' | 'tiktok' | 'rsshub', index: number, dir: -1 | 1) => {
-    const list = [...instances[type]];
-    const target = index + dir;
-    if (target < 0 || target >= list.length) return;
-    [list[index], list[target]] = [list[target], list[index]];
-    setInstances(prev => ({ ...prev, [type]: list }));
-  };
-
-  const removeInstance = (type: 'rssbridge' | 'tiktok' | 'rsshub', index: number) => {
-    setInstances(prev => ({ ...prev, [type]: prev[type].filter((_, i) => i !== index) }));
-  };
-
-  const addInstance = (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
-    const url = newInstanceInputs[type].trim().replace(/\/$/, '');
-    if (!url || instances[type].includes(url)) return;
-    setInstances(prev => ({ ...prev, [type]: [...prev[type], url] }));
-    setNewInstanceInputs(prev => ({ ...prev, [type]: '' }));
   };
 
   const handleAddFeed = async (e: React.FormEvent) => {
@@ -432,27 +324,22 @@ export default function App() {
     let res;
     const unreadOnly = readerStatusFilter === 'unread';
     const readOnly = readerStatusFilter === 'read';
-
-    // Resolve feed IDs: explicit selection wins; otherwise use category filter (MCP mode only)
-    let activeFeeds: string[] | undefined = readerFeedFilter.length > 0 ? readerFeedFilter : undefined;
-    if (!activeFeeds && (feedViewFilter === 'mcp' || feedViewFilter === 'category') && readerCategoryId) {
-      activeFeeds = categoryFeedIds[readerCategoryId];
-    }
+    const activeFeeds = readerFeedFilter.length > 0 ? readerFeedFilter : undefined;
 
     if (readerSearch.trim()) {
-      res = await callApi('search_items', {
-        query: readerSearch,
-        feedId: activeFeeds,
-        unreadOnly,
-        readOnly,
-        limit: 30
+      res = await callApi('search_items', { 
+        query: readerSearch, 
+        feedId: activeFeeds, 
+        unreadOnly, 
+        readOnly, 
+        limit: 30 
       });
     } else {
-      res = await callApi('list_new_items', {
-        feedId: activeFeeds,
-        unreadOnly,
-        readOnly,
-        limit: 30
+      res = await callApi('list_new_items', { 
+        feedId: activeFeeds, 
+        unreadOnly, 
+        readOnly, 
+        limit: 30 
       });
     }
     if (!res.error) {
@@ -477,7 +364,7 @@ export default function App() {
       return () => clearTimeout(delayDebounce);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readerSearch, readerFeedFilterStr, readerStatusFilter, readerCategoryId]);
+  }, [readerSearch, readerFeedFilterStr, readerStatusFilter]);
 
   const handleMarkRead = async (id: string) => {
     const res = await callApi('mark_read', { ids: [id] });
@@ -829,25 +716,6 @@ export default function App() {
     }
   };
 
-  // Derived: feeds filtered by MCP/Telegram/channel/category selection
-  const filteredFeeds = feeds.filter(feed => {
-    const channelIds: string[] = feed.telegram_channel_ids || [];
-    if (feedViewFilter === 'mcp' || feedViewFilter === 'category') {
-      if (channelIds.length !== 0) return false; // must be MCP-only
-      if (selectedFeedCategoryId) {
-        const ids = categoryFeedIds[selectedFeedCategoryId];
-        return ids ? ids.includes(feed.id) : true;
-      }
-      return true;
-    }
-    if (feedViewFilter === 'telegram') {
-      if (channelIds.length === 0) return false;
-      if (selectedChannelId) return channelIds.includes(selectedChannelId);
-      return true;
-    }
-    return true; // 'all'
-  });
-
   const springTransition = { type: 'spring', stiffness: 100, damping: 20 } as const;
 
   return (
@@ -948,9 +816,7 @@ export default function App() {
                   { id: 'sandbox', label: 'Post Sandbox', icon: PaperPlaneTilt },
                   { id: 'logs', label: 'Recall & Logs', icon: Clock },
                   { id: 'playground', label: 'MCP Playground', icon: Terminal },
-                  { id: 'chat', label: 'Agent Chat', icon: ChatCircleText },
-                  { id: 'instances', label: 'Instances', icon: GlobeSimple },
-                  { id: 'test', label: 'Test Parser', icon: MagnifyingGlass }
+                  { id: 'chat', label: 'Agent Chat', icon: ChatCircleText }
                 ].map(tab => {
                   const Icon = tab.icon;
                   const active = activeTab === tab.id;
@@ -1048,75 +914,14 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Feed Filter Bar */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex bg-bg-input border border-border-base rounded-xl p-1 gap-0.5">
-                    {([
-                      { id: 'all', label: 'All Feeds' },
-                      { id: 'mcp', label: 'MCP Only' },
-                      { id: 'telegram', label: 'Telegram' },
-                    ] as const).map(opt => (
-                      <button
-                        key={opt.id}
-                        onClick={() => setFeedViewFilter(opt.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-200 cursor-pointer ${
-                          (feedViewFilter === opt.id || (opt.id === 'mcp' && feedViewFilter === 'category'))
-                            ? 'bg-accent-primary text-white shadow-sm'
-                            : 'text-text-muted hover:text-text-base'
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {feedViewFilter === 'telegram' && channels.length > 0 && (
-                    <select
-                      value={selectedChannelId || ''}
-                      onChange={e => setSelectedChannelId(e.target.value || null)}
-                      className="bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
-                    >
-                      <option value="">All Channels</option>
-                      {channels.map(ch => (
-                        <option key={ch.id} value={ch.id}>{ch.name || ch.id}</option>
-                      ))}
-                    </select>
-                  )}
-
-                  {(feedViewFilter === 'mcp' || feedViewFilter === 'category') && categories.length > 0 && (
-                    <select
-                      value={selectedFeedCategoryId || ''}
-                      onChange={e => {
-                        const id = e.target.value || null;
-                        setFeedViewFilterState(id ? 'category' : 'mcp');
-                        if (id) localStorage.setItem('rss_feed_filter', 'category');
-                        else localStorage.setItem('rss_feed_filter', 'mcp');
-                        setSelectedFeedCategoryId(id);
-                      }}
-                      className="bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
-                    >
-                      <option value="">All Categories</option>
-                      {categories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name} ({cat.feed_count})</option>
-                      ))}
-                    </select>
-                  )}
-
-                  <span className="text-[11px] text-text-muted font-mono">
-                    {filteredFeeds.length} / {feeds.length} feeds
-                  </span>
-                </div>
-
                 {/* Feeds Card Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {filteredFeeds.length === 0 ? (
+                  {feeds.length === 0 ? (
                     <div className="lg:col-span-2 p-12 text-center border border-dashed border-border-base rounded-2xl bg-bg-card/25 text-sm text-text-muted">
-                      {feeds.length === 0
-                        ? 'No feeds registered. Click "Add Feed" to start importing content.'
-                        : `No ${feedViewFilter === 'mcp' ? 'MCP-only' : feedViewFilter === 'telegram' ? 'Telegram' : ''} feeds found.`}
+                      No feeds registered. Click "Add Feed" to start importing content.
                     </div>
                   ) : (
-                    filteredFeeds.map(feed => (
+                    feeds.map(feed => (
                       <motion.div 
                         key={feed.id}
                         whileHover={{ y: -4 }}
@@ -1187,6 +992,46 @@ export default function App() {
                   )}
                 </div>
 
+                {/* Test Parser Sandbox */}
+                <div className="mt-8 border-t border-border-base pt-8">
+                  <h3 className="font-bold text-lg text-text-base">Test Feed Parser</h3>
+                  <p className="text-xs text-text-muted mt-1">Download and preview items from any external feed before registering it</p>
+                  
+                  <div className="liquid-glass mt-4 p-6 rounded-2xl flex flex-col gap-4">
+                    <div className="flex gap-3 flex-wrap">
+                      <input 
+                        type="url" 
+                        value={testFeedUrl} 
+                        onChange={e => setTestFeedUrl(e.target.value)} 
+                        placeholder="Enter external RSS/Atom URL..." 
+                        className="flex-grow bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono"
+                      />
+                      <motion.button 
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleTestFeed}
+                        disabled={isTestingFeed}
+                        className="px-6 py-3 text-sm font-bold rounded-xl bg-accent-primary text-white hover:bg-accent-primary-hover transition duration-200 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isTestingFeed ? 'Parsing...' : 'Test Fetch'}
+                      </motion.button>
+                    </div>
+
+                    {testFeedItems.length > 0 && (
+                      <div className="mt-4 border-t border-border-base pt-4">
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-text-muted mb-3">Feed preview outcomes</h4>
+                        <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-2">
+                          {testFeedItems.map((item, idx) => (
+                            <div key={idx} className="p-4 rounded-xl bg-bg-input border border-border-base">
+                              <span className="font-bold text-sm text-text-base block">{item.title}</span>
+                              <span className="text-xs text-text-muted block mt-1 font-mono">By {item.author || 'unknown'} | {formatDate(item.timestamp)}</span>
+                              <p className="text-xs text-text-muted mt-2 line-clamp-2 max-w-[80ch]">{item.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </motion.div>
             )}
 
@@ -1207,68 +1052,6 @@ export default function App() {
                     </p>
                   </div>
                   <div className="flex gap-3 items-center flex-wrap">
-                    {/* View Filter */}
-                    <div className="flex bg-bg-input border border-border-base rounded-xl p-1 gap-0.5">
-                      {([
-                        { id: 'all', label: 'All' },
-                        { id: 'mcp', label: 'MCP' },
-                        { id: 'telegram', label: 'Telegram' },
-                      ] as const).map(opt => (
-                        <button
-                          key={opt.id}
-                          onClick={() => {
-                            setFeedViewFilter(opt.id);
-                            setReaderFeedFilter([]);
-                            setReaderCategoryIdState('');
-                          }}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition duration-200 cursor-pointer ${
-                            (feedViewFilter === opt.id || (opt.id === 'mcp' && feedViewFilter === 'category'))
-                              ? 'bg-accent-primary text-white shadow-sm'
-                              : 'text-text-muted hover:text-text-base'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {feedViewFilter === 'telegram' && channels.length > 0 && (
-                      <select
-                        value={selectedChannelId || ''}
-                        onChange={e => { setSelectedChannelId(e.target.value || null); setReaderFeedFilter([]); }}
-                        className="bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
-                      >
-                        <option value="">All Channels</option>
-                        {channels.map(ch => (
-                          <option key={ch.id} value={ch.id}>{ch.name || ch.id}</option>
-                        ))}
-                      </select>
-                    )}
-
-                    {(feedViewFilter === 'mcp' || feedViewFilter === 'category') && categories.length > 0 && (
-                      <select
-                        value={readerCategoryId}
-                        onChange={async e => {
-                          const catId = e.target.value;
-                          setReaderCategoryIdState(catId);
-                          setReaderFeedFilter([]);
-                          if (catId && !categoryFeedIds[catId]) {
-                            const res = await callApi('get_category_feeds', { categoryId: catId });
-                            if (!res.error) {
-                              const ids = (res.data || []).map((f: any) => f.id);
-                              setCategoryFeedIds(prev => ({ ...prev, [catId]: ids }));
-                            }
-                          }
-                        }}
-                        className="bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
-                      >
-                        <option value="">All Categories</option>
-                        {categories.map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.name} ({cat.feed_count})</option>
-                        ))}
-                      </select>
-                    )}
-
                     {/* Feed Dropdown Multi-Selector */}
                     <div className="relative flex items-center" ref={feedDropdownRef}>
                       <button
@@ -1279,7 +1062,7 @@ export default function App() {
                           {readerFeedFilter.length === 0
                             ? 'All Feeds'
                             : readerFeedFilter.length === 1
-                              ? filteredFeeds.find(f => f.id === readerFeedFilter[0])?.title || '1 Feed Selected'
+                              ? feeds.find(f => f.id === readerFeedFilter[0])?.title || '1 Feed Selected'
                               : `${readerFeedFilter.length} Feeds`}
                         </span>
                         <Funnel size={12} className="absolute right-3 text-text-muted pointer-events-none" />
@@ -1311,8 +1094,8 @@ export default function App() {
                             <div className="flex justify-between items-center px-1.5 py-1 border-b border-border-base mb-1">
                               <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Filter Feeds</span>
                               <div className="flex gap-2">
-                                <button
-                                  onClick={() => setReaderFeedFilter(filteredFeeds.map(f => f.id))}
+                                <button 
+                                  onClick={() => setReaderFeedFilter(feeds.map(f => f.id))}
                                   className="text-[9px] font-bold text-accent-primary hover:underline cursor-pointer"
                                 >
                                   Select All
@@ -1325,10 +1108,10 @@ export default function App() {
                                 </button>
                               </div>
                             </div>
-                            {filteredFeeds.length === 0 ? (
-                              <div className="p-4 text-center text-xs text-text-muted">No feeds in this category</div>
+                            {feeds.length === 0 ? (
+                              <div className="p-4 text-center text-xs text-text-muted">No feeds available</div>
                             ) : (
-                              filteredFeeds.map(f => {
+                              feeds.map(f => {
                                 const isChecked = readerFeedFilter.includes(f.id);
                                 return (
                                   <label 
@@ -2148,169 +1931,6 @@ export default function App() {
                       <ArrowRight size={14} />
                     </motion.button>
                   </form>
-                </div>
-              </motion.div>
-            )}
-
-            {!isLoading && activeTab === 'instances' && (
-              <motion.div
-                key="instances"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                className="flex flex-col gap-6"
-              >
-                <div>
-                  <h2 className="font-bold text-2xl tracking-tight text-text-base">Instance Management</h2>
-                  <p className="text-xs text-text-muted mt-1">Reorder, add, or remove instances. Top 3 are tried on each fetch — benchmark ranks by items returned, then speed.</p>
-                </div>
-
-                <div className="flex flex-col gap-4">
-                  {([
-                    { key: 'rssbridge' as const, label: 'RSS-Bridge', color: 'blue' },
-                    { key: 'tiktok' as const, label: 'TikTok-Specific', color: 'rose' },
-                    { key: 'rsshub' as const, label: 'RSSHub', color: 'emerald' },
-                  ]).map(({ key, label, color }) => (
-                    <div key={key} className="liquid-glass p-5 rounded-2xl flex flex-col gap-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted">{label}</h3>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            color === 'blue' ? 'bg-blue-500/10 text-blue-400' :
-                            color === 'rose' ? 'bg-rose-500/10 text-rose-400' :
-                            'bg-emerald-500/10 text-emerald-400'
-                          }`}>{instances[key].length}</span>
-                        </div>
-                        <motion.button
-                          whileTap={{ scale: 0.97 }}
-                          onClick={() => handleRunBenchmark(key)}
-                          disabled={isBenchmarking[key]}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-text-muted bg-bg-input border border-border-base rounded-lg hover:text-text-base transition duration-200 cursor-pointer disabled:opacity-50 flex-shrink-0"
-                        >
-                          <ArrowsClockwise size={11} className={isBenchmarking[key] ? 'animate-spin' : ''} />
-                          <span>{isBenchmarking[key] ? 'Testing…' : 'Benchmark'}</span>
-                        </motion.button>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        {instances[key].map((url, idx) => (
-                          <div key={url} className="flex items-center gap-2 bg-bg-input border border-border-base rounded-xl px-3 py-2">
-                            <span className="text-[10px] font-mono text-text-muted w-4 text-right flex-shrink-0">{idx + 1}</span>
-                            <span className="text-xs font-mono text-text-base truncate flex-1 min-w-0">{url}</span>
-                            <div className="flex items-center gap-1 flex-shrink-0">
-                              <button
-                                onClick={() => moveInstance(key, idx, -1)}
-                                disabled={idx === 0}
-                                className="p-1 rounded-lg text-text-muted hover:text-text-base hover:bg-white/5 disabled:opacity-20 cursor-pointer transition"
-                              ><ArrowUp size={11} /></button>
-                              <button
-                                onClick={() => moveInstance(key, idx, 1)}
-                                disabled={idx === instances[key].length - 1}
-                                className="p-1 rounded-lg text-text-muted hover:text-text-base hover:bg-white/5 disabled:opacity-20 cursor-pointer transition"
-                              ><ArrowDown size={11} /></button>
-                              <button
-                                onClick={() => removeInstance(key, idx)}
-                                className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/10 cursor-pointer transition"
-                              ><Trash size={11} /></button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="flex gap-2 border-t border-border-base pt-3">
-                        <input
-                          type="url"
-                          placeholder="https://new-instance.example.com"
-                          value={newInstanceInputs[key]}
-                          onChange={e => setNewInstanceInputs(prev => ({ ...prev, [key]: e.target.value }))}
-                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addInstance(key); } }}
-                          className="flex-1 bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary font-mono min-w-0"
-                        />
-                        <button
-                          onClick={() => addInstance(key)}
-                          className="px-3 py-2 rounded-xl bg-bg-input border border-border-base text-text-muted hover:text-text-base transition cursor-pointer flex-shrink-0"
-                        ><Plus size={13} /></button>
-                      </div>
-
-                      <motion.button
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handleSaveInstances(key)}
-                        className="w-full py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary-hover text-white font-bold text-xs transition duration-200 cursor-pointer"
-                      >
-                        Save Order
-                      </motion.button>
-
-                      <div className="flex flex-col gap-2 border-t border-border-base pt-3">
-                        <motion.button
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => handleTestInstance(key)}
-                          disabled={isTesting[key] || !newInstanceInputs[key].trim()}
-                          className="w-full py-2 rounded-xl bg-bg-input border border-border-base text-text-muted hover:text-text-base font-bold text-xs transition duration-200 cursor-pointer disabled:opacity-40 flex items-center justify-center gap-2"
-                        >
-                          <ArrowsClockwise size={12} className={isTesting[key] ? 'animate-spin' : ''} />
-                          <span>{isTesting[key] ? 'Testing…' : 'Test URL above'}</span>
-                        </motion.button>
-                        {testResults[key] && (
-                          <div className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs border ${testResults[key]!.itemCount > 0 ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' : testResults[key]!.success ? 'bg-yellow-500/5 border-yellow-500/20 text-yellow-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-400'}`}>
-                            <span className="font-bold">{testResults[key]!.itemCount > 0 ? '✓' : testResults[key]!.success ? '!' : '✗'}</span>
-                            <span className="font-mono truncate flex-1 min-w-0 text-[10px]">{testResults[key]!.url}</span>
-                            <span className="flex-shrink-0 font-mono">{testResults[key]!.itemCount} items · {testResults[key]!.durationMs}ms</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-              </motion.div>
-            )}
-
-            {!isLoading && activeTab === 'test' && (
-              <motion.div
-                key="test"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                className="flex flex-col gap-6"
-              >
-                <div>
-                  <h2 className="font-bold text-2xl tracking-tight text-text-base">Test Feed Parser</h2>
-                  <p className="text-xs text-text-muted mt-1">Download and preview items from any external feed before registering it</p>
-                </div>
-
-                <div className="liquid-glass p-6 rounded-2xl flex flex-col gap-4">
-                  <div className="flex gap-3 flex-wrap">
-                    <input
-                      type="url"
-                      value={testFeedUrl}
-                      onChange={e => setTestFeedUrl(e.target.value)}
-                      placeholder="Enter external RSS/Atom URL..."
-                      className="flex-grow bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono"
-                    />
-                    <motion.button
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleTestFeed}
-                      disabled={isTestingFeed}
-                      className="px-6 py-3 text-sm font-bold rounded-xl bg-accent-primary text-white hover:bg-accent-primary-hover transition duration-200 disabled:opacity-50 cursor-pointer"
-                    >
-                      {isTestingFeed ? 'Parsing...' : 'Test Fetch'}
-                    </motion.button>
-                  </div>
-
-                  {testFeedItems.length > 0 && (
-                    <div className="mt-4 border-t border-border-base pt-4">
-                      <h4 className="text-xs font-bold uppercase tracking-widest text-text-muted mb-3">Feed preview outcomes</h4>
-                      <div className="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-2">
-                        {testFeedItems.map((item, idx) => (
-                          <div key={idx} className="p-4 rounded-xl bg-bg-input border border-border-base">
-                            <span className="font-bold text-sm text-text-base block">{item.title}</span>
-                            <span className="text-xs text-text-muted block mt-1 font-mono">By {item.author || 'unknown'} | {formatDate(item.timestamp)}</span>
-                            <p className="text-xs text-text-muted mt-2 line-clamp-2 max-w-[80ch]">{item.text}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </motion.div>
             )}

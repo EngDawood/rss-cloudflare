@@ -1,11 +1,6 @@
 import type { Context } from 'hono';
 import { Bot } from 'grammy';
 import { fetchFeed } from '../services/feed-fetcher';
-import { RSS_BRIDGE_INSTANCES, RSS_BRIDGE_TIKTOK_INSTANCES, RSSHUB_INSTANCES, fetchForSource, detectAndPromoteSource } from '../services/source-fetcher';
-import { runInstanceBenchmark, benchmarkInstance } from '../cron/benchmark-instances';
-import type { ChannelSource } from '../types/telegram';
-import type { FetchResult } from '../types/feed';
-import type { DbFeed } from '../db/d1';
 import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format';
 import { enrichFeedItems } from '../utils/media-enrichment';
 import { summarizeItem } from '../services/ai-summarizer';
@@ -15,71 +10,15 @@ import {
 	markItemsRead, getConfig, setConfig, dbItemToFeedItem,
 	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
 	insertNote, listNotes, searchNotes, deleteNote,
-	insertPostLog, listPostLog, recall, updateItemSummary,
-	getChannels, listCategories, getFeedsInCategory,
+	listPostLog, recall, updateItemSummary,
+	upsertFeedBySource, upsertChannel, addTelegramSubscription, addMcpSubscription,
+	getChannels, getTelegramSubscriptions, getMcpSubscriptions,
 } from '../db/d1';
 import { resolveTarget, logAndSend } from '../services/post-service';
 import { getChannelsList, getChannelConfig } from '../services/telegram-bot/storage/kv-operations';
 import type { TelegramMediaMessage, SourceType } from '../types/telegram';
 
 type HonoEnv = { Bindings: Env };
-
-async function resolveTarget(
-	db: D1Database,
-	target?: string,
-): Promise<{ chatId: number; chatName?: string }> {
-	if (!target) {
-		const def = await getDefaultChat(db);
-		if (!def) throw new Error('No target specified and no default chat configured. Register a chat first.');
-		return { chatId: parseInt(def.chat_id, 10), chatName: def.name };
-	}
-	const byName = await getChatByName(db, target);
-	if (byName) return { chatId: parseInt(byName.chat_id, 10), chatName: byName.name };
-	const numId = parseInt(target, 10);
-	if (!isNaN(numId)) return { chatId: numId };
-	throw new Error(`Unknown chat target: "${target}". Use a registered chat name or a numeric chat id.`);
-}
-
-async function logAndSend(
-	db: D1Database,
-	bot: Bot,
-	chatId: number,
-	chatName: string | undefined,
-	message: TelegramMediaMessage,
-	itemId?: string,
-): Promise<void> {
-	const captionPreview = message.caption.slice(0, 200);
-	try {
-		await sendMediaToChannel(bot, chatId, message);
-		await insertPostLog(db, {
-			itemId,
-			chatName,
-			chatId: String(chatId),
-			messageType: message.type,
-			captionPreview,
-			status: 'ok',
-		});
-	} catch (e) {
-		await insertPostLog(db, {
-			itemId,
-			chatName,
-			chatId: String(chatId),
-			messageType: message.type,
-			captionPreview,
-			status: 'error',
-			error: e instanceof Error ? e.message : String(e),
-		});
-		throw e;
-	}
-}
-
-function fetchDbFeed(feed: DbFeed, env: Env): Promise<FetchResult> {
-	if (feed.source_type === 'rsshub' || feed.source_type === 'rss_bridge') {
-		const src: ChannelSource = { id: '', type: feed.source_type as ChannelSource['type'], value: feed.url, mediaFilter: 'all', enabled: true };
-		return fetchForSource(src, env);
-	}
-	return fetchFeed(feed.url, feed.title || undefined);
-}
 
 export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 	// 1. Authenticate if MCP_AUTH_TOKEN is configured
@@ -105,54 +44,20 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 			// ── Feed management ──────────────────────────────────────────────────────
 			case 'list_feeds': {
 				const feeds = await getFeeds(db);
-				const normalized = feeds.map(f => ({
-					...f,
-					telegram_channel_ids: f.telegram_channel_ids
-						? f.telegram_channel_ids.split(',').filter(Boolean)
-						: [],
-				}));
-				return c.json({ data: normalized });
-			}
-			case 'list_channels': {
-				const channels = await getChannels(db);
-				return c.json({ data: channels });
-			}
-			case 'list_categories': {
-				const categories = await listCategories(db);
-				return c.json({ data: categories });
-			}
-			case 'get_category_feeds': {
-				const { categoryId } = params;
-				if (!categoryId) return c.json({ error: 'categoryId is required' }, 400);
-				const categoryFeeds = await getFeedsInCategory(db, categoryId);
-				const normalized = categoryFeeds.map(f => ({
-					...f,
-					telegram_channel_ids: f.telegram_channel_ids
-						? f.telegram_channel_ids.split(',').filter(Boolean)
-						: [],
-				}));
-				return c.json({ data: normalized });
+				return c.json({ data: feeds });
 			}
 			case 'add_feed': {
 				const { url, title } = params;
 				if (!url) return c.json({ error: 'url parameter is required' }, 400);
+				const existing = await getFeedByUrl(db, url);
+				if (existing) return c.json({ data: { message: 'Feed already exists', feed: existing } });
 
-				const detected = await detectAndPromoteSource(url, c.env.CACHE);
-				const canonicalUrl = detected ? detected.value : url;
-				const sourceType = detected ? detected.type : 'rss_url';
-
-				const existing = await getFeedByUrl(db, canonicalUrl);
-				if (existing) return c.json({ data: { message: 'Feed already exists', feed: existing, detected } });
-
-				const result = detected
-					? await fetchForSource({ id: '', type: detected.type as ChannelSource['type'], value: detected.value, mediaFilter: 'all', enabled: true }, c.env)
-					: await fetchFeed(url, title);
-
+				const result = await fetchFeed(url, title);
 				const feedTitle = title || result.feedTitle || url;
-				const feed = await insertFeed(db, canonicalUrl, feedTitle, sourceType);
+				const feed = await insertFeed(db, url, feedTitle);
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
-				return c.json({ data: { feed, itemsInserted: inserted, errors: result.errors, detected } });
+				return c.json({ data: { feed, itemsInserted: inserted, errors: result.errors } });
 			}
 			case 'remove_feed': {
 				const { feedId } = params;
@@ -175,7 +80,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				if (!feedId) return c.json({ error: 'feedId is required' }, 400);
 				const feed = await getFeedById(db, feedId);
 				if (!feed) return c.json({ error: `Feed ${feedId} not found` }, 404);
-				const result = await fetchDbFeed(feed, c.env);
+				const result = await fetchFeed(feed.url, feed.title || undefined);
 				const inserted = await upsertItems(db, feedId, result.items);
 				await updateLastFetched(db, feedId);
 				return c.json({ data: { feedId, itemsFetched: result.items.length, itemsInserted: inserted, errors: result.errors } });
@@ -186,7 +91,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				const results: Array<{ feedId: string; title: string; inserted: number; errors: number }> = [];
 				for (const feed of enabled) {
 					try {
-						const result = await fetchDbFeed(feed, c.env);
+						const result = await fetchFeed(feed.url, feed.title || undefined);
 						const inserted = await upsertItems(db, feed.id, result.items);
 						await updateLastFetched(db, feed.id);
 						results.push({ feedId: feed.id, title: feed.title, inserted, errors: result.errors.length });
@@ -415,49 +320,6 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 					return c.json({ data: { summary } });
 				}
 				return c.json({ error: 'AI summarization failed. Check that your AI_GATEWAY_TOKEN secret is configured and you have active internet connection.' }, 500);
-			}
-
-			// ── Instance management ───────────────────────────────────────────────────
-			case 'get_instances': {
-				const cache = c.env.CACHE;
-				const [bridgeRaw, tiktokRaw, rsshubRaw] = await Promise.all([
-					cache?.get('instances:sorted:rssbridge'),
-					cache?.get('instances:sorted:tiktok'),
-					cache?.get('instances:sorted:rsshub'),
-				]);
-				return c.json({
-					data: {
-						rssbridge: bridgeRaw ? JSON.parse(bridgeRaw) : RSS_BRIDGE_INSTANCES,
-						tiktok: tiktokRaw ? JSON.parse(tiktokRaw) : RSS_BRIDGE_TIKTOK_INSTANCES,
-						rsshub: rsshubRaw ? JSON.parse(rsshubRaw) : RSSHUB_INSTANCES,
-					}
-				});
-			}
-			case 'set_instances': {
-				const { type, instances } = params;
-				if (!type || !Array.isArray(instances)) return c.json({ error: 'type and instances[] are required' }, 400);
-				if (!['rssbridge', 'tiktok', 'rsshub'].includes(type)) return c.json({ error: 'type must be rssbridge, tiktok, or rsshub' }, 400);
-				if (!c.env.CACHE) return c.json({ error: 'KV CACHE binding not available' }, 500);
-				await c.env.CACHE.put(`instances:sorted:${type}`, JSON.stringify(instances));
-				return c.json({ data: { type, count: instances.length } });
-			}
-			case 'test_instance': {
-				const { url: testUrl, type: testType } = params ?? {};
-				if (!testUrl) return c.json({ error: 'url is required' }, 400);
-				const probePath = testType === 'rsshub'
-					? '/hackernews/best'
-					: '/?action=display&bridge=HackerNewsBridge&format=Atom';
-				const testResult = await benchmarkInstance(testUrl, probePath);
-				return c.json({ data: testResult });
-			}
-			case 'run_benchmark': {
-				if (!c.env.CACHE) return c.json({ error: 'KV CACHE binding not available' }, 500);
-				const benchType = params?.type as 'rssbridge' | 'tiktok' | 'rsshub' | undefined;
-				if (benchType && !['rssbridge', 'tiktok', 'rsshub'].includes(benchType)) {
-					return c.json({ error: 'type must be rssbridge, tiktok, or rsshub' }, 400);
-				}
-				await runInstanceBenchmark(c.env, benchType);
-				return c.json({ data: { ok: true, type: benchType ?? 'all' } });
 			}
 
 			default:
