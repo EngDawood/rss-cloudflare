@@ -1020,3 +1020,12 @@ export function dbTelegramSubToChannelSource(
 	};
 }
 
+// ── Category stubs (tables not yet migrated) ──────────────────────────────────
+
+export async function listCategories(_db: D1Database): Promise<{ id: string; name: string }[]> {
+	return [];
+}
+
+export async function getFeedsInCategory(_db: D1Database, _categoryId: string): Promise<DbFeedWithCounts[]> {
+	return [];
+}
