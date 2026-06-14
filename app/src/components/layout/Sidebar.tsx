@@ -1,9 +1,9 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Rss, BookOpen, TelegramLogo, PaperPlaneTilt, 
+import {
+  Rss, BookOpen, TelegramLogo, PaperPlaneTilt,
   Clock, Terminal, ChatCircleText, CaretLeft, CaretRight,
-  GlobeSimple, MagnifyingGlass
+  GlobeSimple, MagnifyingGlass, Robot
 } from '@phosphor-icons/react';
 import { useApp } from '../../context/AppContext';
 
@@ -23,6 +23,7 @@ export const Sidebar: React.FC = () => {
     { id: 'telegram', label: 'Telegram Targets', icon: TelegramLogo },
     { id: 'sandbox', label: 'Post Sandbox', icon: PaperPlaneTilt },
     { id: 'logs', label: 'Recall & Logs', icon: Clock },
+    { id: 'mcp', label: 'MCP Settings', icon: Robot },
     { id: 'playground', label: 'MCP Playground', icon: Terminal },
     { id: 'chat', label: 'Agent Chat', icon: ChatCircleText },
     { id: 'instances', label: 'Instances', icon: GlobeSimple },

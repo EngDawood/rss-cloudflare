@@ -3,7 +3,7 @@ import { CACHE_PREFIX_FEED } from '../constants';
 
 type HonoEnv = { Bindings: Env };
 
-const FULL_RSS_BRIDGE_INSTANCES = [
+export const FULL_RSS_BRIDGE_INSTANCES = [
 	'https://rss-bridge.org/bridge01',
 	'https://rssbridge.flossboxin.org.in',
 	'https://rss-bridge.cheredeprince.net',
@@ -27,7 +27,7 @@ const FULL_RSS_BRIDGE_INSTANCES = [
 	'https://rssbridge.prenghy.org'
 ];
 
-const RSSHUB_INSTANCES = [
+export const RSSHUB_INSTANCES = [
 	'https://rsshub.rssforever.com',
 	'https://hub.slarker.me',
 	'https://rsshub.pseudoyu.com',
@@ -41,131 +41,209 @@ const RSSHUB_INSTANCES = [
 	'https://rss.4040940.xyz'
 ];
 
-const RSS_BRIDGE_TIKTOK_INSTANCES = [
+export const RSS_BRIDGE_TIKTOK_INSTANCES = [
 	'https://rss-bridge.org/bridge01',
 	...FULL_RSS_BRIDGE_INSTANCES
 ];
 
 const timeoutMs = 15000; // 15 seconds
 
+export interface BridgeBenchmarkParams {
+	username: string;
+	platform: string; // 'instagram' | 'tiktok' | 'instagram_story' | 'custom_rsshub' | 'custom_rssbridge'
+	instancesType: string; // 'all' | 'rssbridge' | 'rsshub'
+	useCache: boolean;
+	customRoute?: string; // path/action suffix for custom_rsshub / custom_rssbridge platforms
+	overrideInstances?: string[]; // when provided, skip instance-set resolution and use this list directly
+}
+
+export interface BridgeBenchmarkResult {
+	instance: string;
+	url: string;
+	status: string;
+	durationMs: number;
+	items: number;
+	cacheStatus: string;
+}
+
+export async function runBridgeBenchmark(
+	env: Env,
+	params: BridgeBenchmarkParams
+): Promise<{ results: BridgeBenchmarkResult[]; engine: string }> {
+	const { username, platform, instancesType, useCache, customRoute, overrideInstances } = params;
+	let instancesToTest: string[] = [];
+	let engine = '';
+
+	if (overrideInstances) {
+		instancesToTest = overrideInstances;
+		if (platform === 'custom_rsshub') engine = 'RSSHub (custom route)';
+		else if (platform === 'custom_rssbridge') engine = 'RSS-Bridge (custom action)';
+		else if (instancesType === 'rsshub') engine = 'RSSHub';
+		else if (instancesType === 'rssbridge') engine = 'RSS-Bridge';
+		else engine = 'RSS-Bridge vs RSSHub';
+	} else if (platform === 'custom_rsshub') {
+		instancesToTest = RSSHUB_INSTANCES;
+		engine = 'RSSHub (custom route)';
+	} else if (platform === 'custom_rssbridge') {
+		instancesToTest = FULL_RSS_BRIDGE_INSTANCES;
+		engine = 'RSS-Bridge (custom action)';
+	} else {
+		const bridgeList = platform === 'tiktok' ? RSS_BRIDGE_TIKTOK_INSTANCES : FULL_RSS_BRIDGE_INSTANCES;
+		if (instancesType === 'rsshub') {
+			instancesToTest = RSSHUB_INSTANCES;
+			engine = 'RSSHub';
+		} else if (instancesType === 'rssbridge') {
+			instancesToTest = bridgeList;
+			engine = 'RSS-Bridge';
+		} else {
+			instancesToTest = [...bridgeList, ...RSSHUB_INSTANCES];
+			engine = 'RSS-Bridge vs RSSHub';
+		}
+	}
+
+	async function testInstance(instance: string): Promise<BridgeBenchmarkResult> {
+		let url = '';
+		const isRSSHub = RSSHUB_INSTANCES.includes(instance);
+
+		if (platform === 'custom_rsshub' || platform === 'custom_rssbridge') {
+			const suffix = (customRoute || '').trim();
+			const sep = suffix.startsWith('/') || suffix.startsWith('?') ? '' : '/';
+			url = `${instance}${sep}${suffix}`;
+		} else if (platform === 'tiktok') {
+			if (isRSSHub) {
+				url = `${instance}/tiktok/user/${encodeURIComponent(username)}?limit=10`;
+			} else {
+				url = `${instance}/?action=display&bridge=TikTokBridge&context=By+user&username=${encodeURIComponent(username)}&format=Atom`;
+			}
+		} else if (platform === 'instagram') {
+			if (isRSSHub) {
+				url = `${instance}/picnob.info/user/${encodeURIComponent(username)}/posts?limit=10`;
+			} else {
+				url = `${instance}/?action=display&bridge=InstagramBridge&format=Atom&direct_links=on&context=Username&u=${encodeURIComponent(username)}&media_type=all`;
+			}
+		} else if (platform === 'instagram_story') {
+			if (isRSSHub) {
+				url = `${instance}/picnob.info/user/${encodeURIComponent(username)}/stories?limit=10`;
+			} else {
+				url = `${instance}/?action=display&bridge=InstagramBridge&format=Atom&direct_links=on&context=Username&u=${encodeURIComponent(username)}&media_type=all`;
+			}
+		}
+
+		let cacheStatus = 'Bypassed';
+		if (useCache && env.CACHE) {
+			try {
+				const cached = await env.CACHE.get(`${CACHE_PREFIX_FEED}${url}`);
+				if (cached) {
+					return {
+						instance,
+						url,
+						status: 'Success',
+						durationMs: 0,
+						items: (cached.match(/<entry>|<item>/g) || []).length,
+						cacheStatus: 'Hit'
+					};
+				}
+				cacheStatus = 'Miss';
+			} catch (e) {
+				cacheStatus = 'Error';
+			}
+		}
+
+		const start = Date.now();
+
+		try {
+			const controller = new AbortController();
+			const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+			const response = await fetch(url, {
+				signal: controller.signal,
+				headers: {
+					'User-Agent': 'Mozilla/5.0 (compatible; RSSBot/1.0)',
+					Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
+				},
+			});
+
+			clearTimeout(timeout);
+			const end = Date.now();
+			const duration = end - start;
+
+			if (response.ok) {
+				const text = await response.text();
+				const isAtom = text.includes('<entry>');
+				const itemCount = (text.match(isAtom ? /<entry>/g : /<item>/g) || []).length;
+				return { instance, url, status: 'Success', durationMs: duration, items: itemCount, cacheStatus };
+			} else {
+				return { instance, url, status: `HTTP ${response.status}`, durationMs: duration, items: 0, cacheStatus };
+			}
+		} catch (error: any) {
+			const end = Date.now();
+			const duration = end - start;
+			return {
+				instance,
+				url,
+				status: `Error: ${error.name === 'AbortError' ? 'Timeout' : error.message}`,
+				durationMs: duration,
+				items: 0,
+				cacheStatus
+			};
+		}
+	}
+
+	const promises = instancesToTest.map(instance => testInstance(instance));
+	const results = await Promise.all(promises);
+
+	results.sort((a, b) => {
+		if (a.status === 'Success' && b.status !== 'Success') return -1;
+		if (a.status !== 'Success' && b.status === 'Success') return 1;
+		return a.durationMs - b.durationMs;
+	});
+
+	return { results, engine };
+}
+
 export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> {
-    const username = c.req.param('u') || c.req.query('u') || 'baharadawna';
-    const path = c.req.path;
-    
-    let defaultPlatform = 'instagram';
-    let defaultInstances = 'rssbridge';
+	const username = c.req.param('u') || c.req.query('u') || 'baharadawna';
+	const path = c.req.path;
 
-    if (path.includes('rsshub')) {
-        defaultPlatform = 'instagram_story';
-        defaultInstances = 'rsshub';
-    } else if (path.includes('tiktok')) {
-        defaultPlatform = 'tiktok';
-    }
+	let defaultPlatform = 'instagram';
+	let defaultInstances = 'rssbridge';
 
-    const platform = c.req.query('platform') || defaultPlatform; // 'instagram', 'tiktok', or 'instagram_story'
-    const instancesType = c.req.query('instances') || defaultInstances; // 'all', 'rssbridge', 'rsshub'
-    const shouldRun = c.req.query('run') === 'true';
-    const useCache = c.req.query('cache') === 'true';
+	if (path.includes('rsshub')) {
+		defaultPlatform = 'instagram_story';
+		defaultInstances = 'rsshub';
+	} else if (path.includes('tiktok')) {
+		defaultPlatform = 'tiktok';
+	}
 
-    let instancesToTest: string[] = [];
-    let engine = '';
+	const platform = c.req.query('platform') || defaultPlatform; // 'instagram', 'tiktok', or 'instagram_story'
+	const instancesType = c.req.query('instances') || defaultInstances; // 'all', 'rssbridge', 'rsshub'
+	const shouldRun = c.req.query('run') === 'true';
+	const useCache = c.req.query('cache') === 'true';
 
-    const bridgeList = platform === 'tiktok' ? RSS_BRIDGE_TIKTOK_INSTANCES : FULL_RSS_BRIDGE_INSTANCES;
+	let results: BridgeBenchmarkResult[] = [];
+	let engine = '';
 
-    if (instancesType === 'rsshub') {
-        instancesToTest = RSSHUB_INSTANCES;
-        engine = 'RSSHub';
-    } else if (instancesType === 'rssbridge') {
-        instancesToTest = bridgeList;
-        engine = 'RSS-Bridge';
-    } else {
-        instancesToTest = [...bridgeList, ...RSSHUB_INSTANCES];
-        engine = 'RSS-Bridge vs RSSHub';
-    }
+	if (shouldRun) {
+		const benchmark = await runBridgeBenchmark(c.env, {
+			username,
+			platform,
+			instancesType,
+			useCache
+		});
+		results = benchmark.results;
+		engine = benchmark.engine;
+	} else {
+		const bridgeList = platform === 'tiktok' ? RSS_BRIDGE_TIKTOK_INSTANCES : FULL_RSS_BRIDGE_INSTANCES;
+		if (instancesType === 'rsshub') {
+			engine = 'RSSHub';
+		} else if (instancesType === 'rssbridge') {
+			engine = 'RSS-Bridge';
+		} else {
+			engine = 'RSS-Bridge vs RSSHub';
+		}
+	}
 
-    async function testInstance(instance: string) {
-        let url = '';
-        let isRSSHub = RSSHUB_INSTANCES.includes(instance);
-        
-        if (platform === 'tiktok') {
-            if (isRSSHub) {
-                url = `${instance}/tiktok/user/${encodeURIComponent(username)}?limit=10`;
-            } else {
-                url = `${instance}/?action=display&bridge=TikTokBridge&context=By+user&username=${encodeURIComponent(username)}&format=Atom`;
-            }
-        } else if (platform === 'instagram') {
-            if (isRSSHub) {
-                url = `${instance}/picnob.info/user/${encodeURIComponent(username)}/posts?limit=10`;
-            } else {
-                url = `${instance}/?action=display&bridge=InstagramBridge&format=Atom&direct_links=on&context=Username&u=${encodeURIComponent(username)}&media_type=all`;
-            }
-        } else if (platform === 'instagram_story') {
-            if (isRSSHub) {
-                url = `${instance}/picnob.info/user/${encodeURIComponent(username)}/stories?limit=10`;
-            } else {
-                url = `${instance}/?action=display&bridge=InstagramBridge&format=Atom&direct_links=on&context=Username&u=${encodeURIComponent(username)}&media_type=all`;
-            }
-        }
-        
-        let cacheStatus = 'Bypassed';
-        if (useCache && c.env.CACHE) {
-            try {
-                const cached = await c.env.CACHE.get(`${CACHE_PREFIX_FEED}${url}`);
-                if (cached) {
-                    return { instance, url, status: 'Success', durationMs: 0, items: (cached.match(/<entry>|<item>/g) || []).length, cacheStatus: 'Hit' };
-                }
-                cacheStatus = 'Miss';
-            } catch (e) {
-                cacheStatus = 'Error';
-            }
-        }
-
-        const start = Date.now();
-        
-        try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), timeoutMs);
-            
-            const response = await fetch(url, {
-                signal: controller.signal,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (compatible; RSSBot/1.0)',
-                    Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
-                },
-            });
-            
-            clearTimeout(timeout);
-            const end = Date.now();
-            const duration = end - start;
-            
-            if (response.ok) {
-                const text = await response.text();
-                const isAtom = text.includes('<entry>');
-                const itemCount = (text.match(isAtom ? /<entry>/g : /<item>/g) || []).length;
-                return { instance, url, status: 'Success', durationMs: duration, items: itemCount, cacheStatus };
-            } else {
-                return { instance, url, status: `HTTP ${response.status}`, durationMs: duration, items: 0, cacheStatus };
-            }
-        } catch (error: any) {
-            const end = Date.now();
-            const duration = end - start;
-            return { instance, url, status: `Error: ${error.name === 'AbortError' ? 'Timeout' : error.message}`, durationMs: duration, items: 0, cacheStatus };
-        }
-    }
-
-    let results: any[] = [];
-    if (shouldRun) {
-        const promises = instancesToTest.map(instance => testInstance(instance));
-        results = await Promise.all(promises);
-        
-        results.sort((a, b) => {
-            if (a.status === 'Success' && b.status !== 'Success') return -1;
-            if (a.status !== 'Success' && b.status === 'Success') return 1;
-            return a.durationMs - b.durationMs;
-        });
-    }
-
-    const html = `
+	const html = `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -294,5 +372,5 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
     </html>
     `;
 
-    return c.html(html);
+	return c.html(html);
 }

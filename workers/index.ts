@@ -39,19 +39,29 @@ app.on(['GET', 'POST', 'DELETE'], ['/mcp', '/mcp/*'], async (c) => {
 });
 
 app.notFound(async (c) => {
-	// 1. Try to serve from static assets
 	if (c.env.ASSETS) {
 		try {
+			// 1. Try exact path first
 			const res = await c.env.ASSETS.fetch(c.req.raw);
-			if (res.status !== 404) {
-				return res;
+			if (res.status !== 404) return res;
+
+			// 2. SPA fallback — serve index.html for browser navigation paths
+			const path = new URL(c.req.url).pathname;
+			const isApiPath = path.startsWith('/api') || path.startsWith('/instagram') ||
+				path.startsWith('/telegram') || path.startsWith('/mcp') ||
+				path.startsWith('/health') || path.startsWith('/test-bridge');
+			if (!isApiPath) {
+				const spaUrl = new URL(c.req.url);
+				spaUrl.pathname = '/';
+				const spaRes = await c.env.ASSETS.fetch(new Request(spaUrl.toString(), c.req.raw));
+				if (spaRes.status !== 404) return spaRes;
 			}
 		} catch (e) {
 			console.error('Error serving from ASSETS:', e);
 		}
 	}
 
-	// 2. Fallback to API 404 JSON response
+	// 3. Fallback to API 404 JSON response
 	return c.json(
 		{
 			error: 'Not found',

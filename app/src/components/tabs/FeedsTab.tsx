@@ -28,6 +28,8 @@ export const FeedsTab: React.FC = () => {
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
   const [addFeedUrl, setAddFeedUrl] = useState('');
   const [addFeedTitle, setAddFeedTitle] = useState('');
+  const [addFeedDestination, setAddFeedDestination] = useState<'mcp' | 'telegram' | 'both'>('mcp');
+  const [addFeedCategoryId, setAddFeedCategoryId] = useState('');
 
   const springTransition = { type: 'spring', stiffness: 100, damping: 20 } as const;
 
@@ -41,7 +43,13 @@ export const FeedsTab: React.FC = () => {
     e.preventDefault();
     setIsAddFeedOpen(false);
     showToast('Registering feed and importing articles...', 'info');
-    const res = await callApi('add_feed', { url: addFeedUrl, title: addFeedTitle });
+    const subscribeToMcp = addFeedDestination === 'mcp' || addFeedDestination === 'both';
+    const res = await callApi('add_feed', {
+      url: addFeedUrl,
+      title: addFeedTitle,
+      subscribeToMcp,
+      categoryId: addFeedCategoryId || undefined,
+    });
     if (res.error) {
       showToast(res.error, 'error');
     } else {
@@ -50,6 +58,8 @@ export const FeedsTab: React.FC = () => {
     }
     setAddFeedUrl('');
     setAddFeedTitle('');
+    setAddFeedDestination('mcp');
+    setAddFeedCategoryId('');
   };
 
   const handleToggleFeed = async (feedId: string, currentStatus: number) => {
@@ -258,17 +268,22 @@ export const FeedsTab: React.FC = () => {
                   >
                     <ArrowsClockwise size={14} />
                   </motion.button>
-                  <motion.button 
+                  <motion.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => {
                       setReaderFeedFilter([feed.id]);
                       setActiveTab('reader');
                     }}
-                    className="px-3 py-1.5 text-xs font-bold rounded-xl bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer flex items-center gap-1"
+                    className="px-3 py-1.5 text-xs font-bold rounded-xl bg-bg-input border border-border-base text-text-base hover:text-text-base transition duration-200 cursor-pointer flex items-center gap-1.5"
                     title="View Items"
                   >
                     <Eye size={13} />
                     <span>View</span>
+                    {feed.unread_count > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-accent-primary text-white text-[9px] font-bold leading-none">
+                        {feed.unread_count > 99 ? '99+' : feed.unread_count}
+                      </span>
+                    )}
                   </motion.button>
                   <motion.button 
                     whileTap={{ scale: 0.95 }}
@@ -299,15 +314,15 @@ export const FeedsTab: React.FC = () => {
         title="Register RSS Feed"
         footer={
           <>
-            <button 
-              type="button" 
-              onClick={() => setIsAddFeedOpen(false)} 
+            <button
+              type="button"
+              onClick={() => setIsAddFeedOpen(false)}
               className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer transition"
             >
               Cancel
             </button>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               onClick={handleAddFeed}
               className="px-4 py-2 rounded-xl text-xs font-bold bg-accent-primary text-white hover:bg-accent-primary-hover cursor-pointer transition"
             >
@@ -318,25 +333,68 @@ export const FeedsTab: React.FC = () => {
       >
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Feed Source URL</label>
-          <input 
-            type="url" 
-            value={addFeedUrl} 
-            onChange={e => setAddFeedUrl(e.target.value)} 
-            placeholder="https://example.com/rss.xml" 
+          <input
+            type="url"
+            value={addFeedUrl}
+            onChange={e => setAddFeedUrl(e.target.value)}
+            placeholder="https://example.com/rss.xml"
             className="bg-bg-input border border-border-base rounded-xl px-4 py-3.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono mt-1"
             required
           />
         </div>
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Friendly Title (Optional)</label>
-          <input 
-            type="text" 
-            value={addFeedTitle} 
-            onChange={e => setAddFeedTitle(e.target.value)} 
-            placeholder="e.g. Technology News" 
+          <input
+            type="text"
+            value={addFeedTitle}
+            onChange={e => setAddFeedTitle(e.target.value)}
+            placeholder="e.g. Technology News"
             className="bg-bg-input border border-border-base rounded-xl px-4 py-3.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-semibold mt-1"
           />
         </div>
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Destination</label>
+          <div className="flex bg-bg-input border border-border-base rounded-xl p-1 gap-0.5">
+            {([
+              { id: 'mcp', label: 'MCP Agent' },
+              { id: 'telegram', label: 'Telegram' },
+              { id: 'both', label: 'Both' },
+            ] as const).map(opt => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setAddFeedDestination(opt.id)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition duration-200 cursor-pointer ${
+                  addFeedDestination === opt.id
+                    ? 'bg-accent-primary text-white shadow-sm'
+                    : 'text-text-muted hover:text-text-base'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-text-muted leading-relaxed">
+            {addFeedDestination === 'mcp' && 'Feed will be added to the MCP workspace for agent browsing.'}
+            {addFeedDestination === 'telegram' && 'Feed will be registered for Telegram auto-posting (configure channel subscriptions in Telegram tab).'}
+            {addFeedDestination === 'both' && 'Feed will be available for both MCP agent browsing and Telegram posting.'}
+          </p>
+        </div>
+        {(addFeedDestination === 'mcp' || addFeedDestination === 'both') && categories.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Category (Optional)</label>
+            <select
+              value={addFeedCategoryId}
+              onChange={e => setAddFeedCategoryId(e.target.value)}
+              className="bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary mt-1"
+            >
+              <option value="">No category</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </Modal>
     </motion.div>
   );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 export interface ApiResponse<T = any> {
   data?: T;
@@ -9,7 +9,11 @@ export interface ApiResponse<T = any> {
 export function useApi(token: string, onUnauthorized: (message: string) => void) {
   const [isApiLoading, setIsApiLoading] = useState(false);
 
-  const callApi = async <T = any>(action: string, params: any = {}): Promise<ApiResponse<T>> => {
+  // Keep onUnauthorized stable via ref so callApi doesn't need it as a dep
+  const onUnauthorizedRef = useRef(onUnauthorized);
+  onUnauthorizedRef.current = onUnauthorized;
+
+  const callApi = useCallback(async <T = any>(action: string, params: any = {}): Promise<ApiResponse<T>> => {
     setIsApiLoading(true);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -22,7 +26,7 @@ export function useApi(token: string, onUnauthorized: (message: string) => void)
       });
 
       if (response.status === 401) {
-        onUnauthorized('Unauthorized: Please set a valid access token.');
+        onUnauthorizedRef.current('Unauthorized: Please set a valid access token.');
         return { error: 'Unauthorized', status: 401 };
       }
 
@@ -36,7 +40,7 @@ export function useApi(token: string, onUnauthorized: (message: string) => void)
     } finally {
       setIsApiLoading(false);
     }
-  };
+  }, [token]); // only re-creates when token changes
 
   return { callApi, isApiLoading };
 }
