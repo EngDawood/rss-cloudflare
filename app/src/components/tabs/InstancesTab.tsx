@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowsClockwise, ArrowUp, ArrowDown, Plus, Trash } from '@phosphor-icons/react';
 import { useApp } from '../../context/AppContext';
@@ -18,16 +18,17 @@ export const InstancesTab: React.FC = () => {
   const [testResults, setTestResults] = useState<Record<string, TestResult | null>>({ rssbridge: null, tiktok: null, rsshub: null });
   const [newInstanceInputs, setNewInstanceInputs] = useState<Record<string, string>>({ rssbridge: '', tiktok: '', rsshub: '' });
 
+  const callApiRef = useRef(callApi);
+  callApiRef.current = callApi;
+
   const loadInstances = useCallback(async () => {
-    const res = await callApi('get_instances');
+    const res = await callApiRef.current('get_instances');
     if (!res.error && res.data) setInstances(res.data);
-  }, [callApi]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadInstances();
-    }, 0);
-    return () => clearTimeout(timer);
+    loadInstances();
   }, [loadInstances]);
 
   const handleSaveInstances = async (type: 'rssbridge' | 'tiktok' | 'rsshub') => {

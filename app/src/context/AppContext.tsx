@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useApi } from '../hooks/useApi';
 import type { ApiResponse } from '../hooks/useApi';
 
@@ -92,7 +92,11 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activeTab, setActiveTab] = useState('feeds');
+  const validTabs = ['feeds', 'reader', 'telegram', 'sandbox', 'logs', 'mcp', 'playground', 'chat', 'instances', 'test'];
+  const [activeTab, setActiveTab] = useState(() => {
+    const path = window.location.pathname.replace(/^\//, '').split('/')[0];
+    return validTabs.includes(path) ? path : 'feeds';
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
   const [isLoading, setIsLoading] = useState(true);
@@ -292,13 +296,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsLoading(false);
   };
 
-  // Token sync effect
+  // Keep latest verifyToken in a ref so the effect below never needs it as a dep
+  const verifyTokenRef = useRef(verifyToken);
+  verifyTokenRef.current = verifyToken;
+
+  // Token sync effect — only re-runs when token changes, not on every render
   useEffect(() => {
     const timer = setTimeout(() => {
-      verifyToken();
+      verifyTokenRef.current();
     }, 0);
     return () => clearTimeout(timer);
-  }, [token, verifyToken]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   // Theme Sync Effect
   useEffect(() => {
@@ -313,18 +322,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  const contextValue = useMemo(() => ({
+    activeTab, setActiveTab, sidebarCollapsed, setSidebarCollapsed, theme, setTheme, isLoading, setIsLoading,
+    token, setToken, isAuthenticated, setIsAuthenticated, isTokenModalOpen, setIsTokenModalOpen, tempToken, setTempToken, verifyToken,
+    toasts, showToast, removeToast,
+    callApi, isApiLoading,
+    feeds, setFeeds, channels, setChannels, categories, setCategories, chats, setChats, unreadItems, setUnreadItems, timeline, setTimeline, postLogs, setPostLogs, config, setConfigState,
+    loadFeeds, loadChats, loadReaderItems, loadLogsAndConfig,
+    readerFeedFilter, setReaderFeedFilter, readerStatusFilter, setReaderStatusFilter, readerSearch, setReaderSearch, readerCategoryId, setReaderCategoryId,
+    feedViewFilter, setFeedViewFilterState, selectedChannelId, setSelectedChannelIdState, selectedFeedCategoryId, setSelectedFeedCategoryIdState, categoryFeedIds, setCategoryFeedIds,
+    setFeedViewFilter, setSelectedFeedCategoryId, setSelectedChannelId
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [
+    activeTab, sidebarCollapsed, theme, isLoading,
+    token, isAuthenticated, isTokenModalOpen, tempToken, verifyToken,
+    toasts, callApi, isApiLoading,
+    feeds, channels, categories, chats, unreadItems, timeline, postLogs, config,
+    readerFeedFilter, readerStatusFilter, readerSearch, readerCategoryId,
+    feedViewFilter, selectedChannelId, selectedFeedCategoryId, categoryFeedIds,
+  ]);
+
   return (
-    <AppContext.Provider value={{
-      activeTab, setActiveTab, sidebarCollapsed, setSidebarCollapsed, theme, setTheme, isLoading, setIsLoading,
-      token, setToken, isAuthenticated, setIsAuthenticated, isTokenModalOpen, setIsTokenModalOpen, tempToken, setTempToken, verifyToken,
-      toasts, showToast, removeToast,
-      callApi, isApiLoading,
-      feeds, setFeeds, channels, setChannels, categories, setCategories, chats, setChats, unreadItems, setUnreadItems, timeline, setTimeline, postLogs, setPostLogs, config, setConfigState,
-      loadFeeds, loadChats, loadReaderItems, loadLogsAndConfig,
-      readerFeedFilter, setReaderFeedFilter, readerStatusFilter, setReaderStatusFilter, readerSearch, setReaderSearch, readerCategoryId, setReaderCategoryId,
-      feedViewFilter, setFeedViewFilterState, selectedChannelId, setSelectedChannelIdState, selectedFeedCategoryId, setSelectedFeedCategoryIdState, categoryFeedIds, setCategoryFeedIds,
-      setFeedViewFilter, setSelectedFeedCategoryId, setSelectedChannelId
-    }}>
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

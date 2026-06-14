@@ -11,9 +11,9 @@ import {
 	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
 	insertNote, listNotes, searchNotes, deleteNote,
 	listPostLog, recall, updateItemSummary,
-	upsertFeedBySource, upsertChannel, addTelegramSubscription, addMcpSubscription,
+	upsertFeedBySource, upsertChannel, addTelegramSubscription, addMcpSubscription, removeMcpSubscription,
 	getChannels, getTelegramSubscriptions, getMcpSubscriptions,
-	listCategories, getFeedsInCategory,
+	listCategories, getFeedsInCategory, createCategory, deleteCategory, addFeedToCategory, removeFeedFromCategory,
 } from '../db/d1';
 import { resolveTarget, logAndSend } from '../services/post-service';
 import { getChannelsList, getChannelConfig } from '../services/telegram-bot/storage/kv-operations';
@@ -74,7 +74,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				return c.json({ data: normalized });
 			}
 			case 'add_feed': {
-				const { url, title } = params;
+				const { url, title, categoryId, subscribeToMcp = false } = params;
 				if (!url) return c.json({ error: 'url parameter is required' }, 400);
 				const existing = await getFeedByUrl(db, url);
 				if (existing) return c.json({ data: { message: 'Feed already exists', feed: existing } });
@@ -84,6 +84,14 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				const feed = await upsertFeedBySource(db, { sourceType: 'rss_url', sourceValue: url, title: feedTitle });
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
+
+				if (subscribeToMcp) {
+					await addMcpSubscription(db, feed.id, feedTitle);
+				}
+				if (categoryId) {
+					await addFeedToCategory(db, categoryId, feed.id);
+				}
+
 				return c.json({ data: { feed, itemsInserted: inserted, errors: result.errors } });
 			}
 			case 'remove_feed': {
@@ -329,6 +337,52 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				return c.json({ data: { [key]: value } });
 			}
 
+			// ── Category management ───────────────────────────────────────────────────
+			case 'create_category': {
+				const { name } = params;
+				if (!name) return c.json({ error: 'name is required' }, 400);
+				const category = await createCategory(db, name);
+				return c.json({ data: category });
+			}
+			case 'delete_category': {
+				const { categoryId } = params;
+				if (!categoryId) return c.json({ error: 'categoryId is required' }, 400);
+				await deleteCategory(db, categoryId);
+				return c.json({ data: { deleted: categoryId } });
+			}
+			case 'add_feed_to_category': {
+				const { categoryId, feedId } = params;
+				if (!categoryId || !feedId) return c.json({ error: 'categoryId and feedId are required' }, 400);
+				await addFeedToCategory(db, categoryId, feedId);
+				return c.json({ data: { ok: true } });
+			}
+			case 'remove_feed_from_category': {
+				const { categoryId, feedId } = params;
+				if (!categoryId || !feedId) return c.json({ error: 'categoryId and feedId are required' }, 400);
+				await removeFeedFromCategory(db, categoryId, feedId);
+				return c.json({ data: { ok: true } });
+			}
+
+			// ── MCP subscription management ───────────────────────────────────────────
+			case 'list_mcp_subscriptions': {
+				const subs = await getMcpSubscriptions(db);
+				return c.json({ data: subs });
+			}
+			case 'add_mcp_subscription': {
+				const { feedId } = params;
+				if (!feedId) return c.json({ error: 'feedId is required' }, 400);
+				const feed = await getFeedById(db, feedId);
+				if (!feed) return c.json({ error: `Feed ${feedId} not found` }, 404);
+				await addMcpSubscription(db, feedId, feed.title ?? undefined);
+				return c.json({ data: { ok: true, feedId } });
+			}
+			case 'remove_mcp_subscription': {
+				const { feedId } = params;
+				if (!feedId) return c.json({ error: 'feedId is required' }, 400);
+				await removeMcpSubscription(db, feedId);
+				return c.json({ data: { ok: true, feedId } });
+			}
+
 			// ── AI On-Demand Summary (Added for Dashboard UI) ────────────────────────
 			case 'summarize_item': {
 				const { itemId } = params;
@@ -347,6 +401,122 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 					return c.json({ data: { summary } });
 				}
 				return c.json({ error: 'AI summarization failed. Check that your AI_GATEWAY_TOKEN secret is configured and you have active internet connection.' }, 500);
+			}
+
+			case 'get_instances': {
+				const [rb, tiktok, rsshub] = await Promise.all([
+					getConfig(db, 'instances_rssbridge'),
+					getConfig(db, 'instances_tiktok'),
+					getConfig(db, 'instances_rsshub'),
+				]);
+				const { FULL_RSS_BRIDGE_INSTANCES, RSS_BRIDGE_TIKTOK_INSTANCES, RSSHUB_INSTANCES } = await import('./test-bridges');
+				return c.json({ data: {
+					rssbridge: rb ? JSON.parse(rb) : FULL_RSS_BRIDGE_INSTANCES,
+					tiktok: tiktok ? JSON.parse(tiktok) : RSS_BRIDGE_TIKTOK_INSTANCES,
+					rsshub: rsshub ? JSON.parse(rsshub) : RSSHUB_INSTANCES,
+				}});
+			}
+
+			case 'set_instances': {
+				const { type, instances: list } = params;
+				if (!type || !Array.isArray(list)) return c.json({ error: 'type and instances[] are required' }, 400);
+				if (!['rssbridge', 'tiktok', 'rsshub'].includes(type)) return c.json({ error: 'type must be rssbridge | tiktok | rsshub' }, 400);
+				await setConfig(db, `instances_${type}`, JSON.stringify(list));
+				return c.json({ data: { saved: list.length } });
+			}
+
+			case 'run_benchmark': {
+				const { type } = params;
+				if (!type || !['rssbridge', 'tiktok', 'rsshub'].includes(type)) return c.json({ error: 'type must be rssbridge | tiktok | rsshub' }, 400);
+				const { runBridgeBenchmark, FULL_RSS_BRIDGE_INSTANCES, RSS_BRIDGE_TIKTOK_INSTANCES, RSSHUB_INSTANCES } = await import('./test-bridges');
+				const savedRaw = await getConfig(db, `instances_${type}`);
+				const instanceList: string[] = savedRaw ? JSON.parse(savedRaw) :
+					type === 'rsshub' ? RSSHUB_INSTANCES :
+					type === 'tiktok' ? RSS_BRIDGE_TIKTOK_INSTANCES :
+					FULL_RSS_BRIDGE_INSTANCES;
+				const platform = type === 'rsshub' ? 'instagram' : type === 'tiktok' ? 'tiktok' : 'instagram';
+				const { results } = await runBridgeBenchmark(c.env, {
+					username: 'baharadawna',
+					platform,
+					instancesType: type === 'rsshub' ? 'rsshub' : 'rssbridge',
+					useCache: false,
+					overrideInstances: instanceList,
+				});
+				// Re-rank: successful first, then by items desc, then speed asc
+				results.sort((a, b) => {
+					if (a.status === 'Success' && b.status !== 'Success') return -1;
+					if (a.status !== 'Success' && b.status === 'Success') return 1;
+					if (b.items !== a.items) return b.items - a.items;
+					return a.durationMs - b.durationMs;
+				});
+				const ranked = results.map(r => r.instance);
+				await setConfig(db, `instances_${type}`, JSON.stringify(ranked));
+				return c.json({ data: { ranked } });
+			}
+
+			case 'test_instance': {
+				const { url, type } = params;
+				if (!url) return c.json({ error: 'url is required' }, 400);
+				const start = Date.now();
+				try {
+					const controller = new AbortController();
+					const timeout = setTimeout(() => controller.abort(), 15000);
+					const res = await fetch(url, {
+						signal: controller.signal,
+						headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RSSBot/1.0)', Accept: 'application/rss+xml, application/atom+xml, */*' },
+					});
+					clearTimeout(timeout);
+					const durationMs = Date.now() - start;
+					if (!res.ok) return c.json({ data: { success: false, itemCount: 0, durationMs, url } });
+					const text = await res.text();
+					const isAtom = text.includes('<entry>');
+					const itemCount = (text.match(isAtom ? /<entry>/g : /<item>/g) || []).length;
+					return c.json({ data: { success: true, itemCount, durationMs, url } });
+				} catch (e: any) {
+					return c.json({ data: { success: false, itemCount: 0, durationMs: Date.now() - start, url } });
+				}
+			}
+
+			case 'test_bridges': {
+				const { username, platform, instancesType, useCache, customRoute } = params;
+				const isCustom = platform === 'custom_rsshub' || platform === 'custom_rssbridge';
+				if (!isCustom && !username) return c.json({ error: 'Username or URL is required' }, 400);
+				if (isCustom && !customRoute) return c.json({ error: 'customRoute is required for custom platform modes' }, 400);
+
+				const { runBridgeBenchmark, FULL_RSS_BRIDGE_INSTANCES, RSS_BRIDGE_TIKTOK_INSTANCES, RSSHUB_INSTANCES } = await import('./test-bridges');
+
+				// Load saved instances from D1 (fall back to hardcoded defaults)
+				const [savedRb, savedTiktok, savedRsshub] = await Promise.all([
+					getConfig(db, 'instances_rssbridge'),
+					getConfig(db, 'instances_tiktok'),
+					getConfig(db, 'instances_rsshub'),
+				]);
+				const rssbridgeInstances: string[] = savedRb ? JSON.parse(savedRb) : FULL_RSS_BRIDGE_INSTANCES;
+				const tiktokInstances: string[] = savedTiktok ? JSON.parse(savedTiktok) : RSS_BRIDGE_TIKTOK_INSTANCES;
+				const rsshubInstances: string[] = savedRsshub ? JSON.parse(savedRsshub) : RSSHUB_INSTANCES;
+
+				let overrideInstances: string[] | undefined;
+				if (platform === 'custom_rsshub') {
+					overrideInstances = rsshubInstances;
+				} else if (platform === 'custom_rssbridge') {
+					overrideInstances = rssbridgeInstances;
+				} else if (instancesType === 'rsshub') {
+					overrideInstances = rsshubInstances;
+				} else if (instancesType === 'rssbridge') {
+					overrideInstances = platform === 'tiktok' ? tiktokInstances : rssbridgeInstances;
+				} else {
+					overrideInstances = [...(platform === 'tiktok' ? tiktokInstances : rssbridgeInstances), ...rsshubInstances];
+				}
+
+				const result = await runBridgeBenchmark(c.env, {
+					username: username || '',
+					platform: platform || 'instagram',
+					instancesType: instancesType || 'all',
+					useCache: !!useCache,
+					customRoute,
+					overrideInstances,
+				});
+				return c.json({ data: result });
 			}
 
 			default:
