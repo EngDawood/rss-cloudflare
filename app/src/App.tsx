@@ -25,6 +25,7 @@ export default function App() {
   const {
     activeTab,
     isLoading,
+    isAuthenticated,
     isTokenModalOpen,
     setIsTokenModalOpen,
     tempToken,
@@ -89,10 +90,10 @@ export default function App() {
             
             {/* SKELETON LOADER */}
             {isLoading && (
-              <motion.div 
+              <motion.div
                 key="skeleton"
-                initial={{ opacity: 0 }} 
-                animate={{ opacity: 1 }} 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="flex flex-col gap-6"
               >
@@ -105,8 +106,28 @@ export default function App() {
               </motion.div>
             )}
 
+            {/* Unauthenticated gate */}
+            {!isLoading && isAuthenticated === false && (
+              <motion.div
+                key="locked"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col items-center justify-center gap-4 py-24 text-center"
+              >
+                <div className="text-4xl">🔒</div>
+                <p className="text-text-muted text-sm">Access restricted. Enter your token to continue.</p>
+                <button
+                  onClick={() => setIsTokenModalOpen(true)}
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-accent-primary text-white hover:bg-accent-primary-hover transition cursor-pointer"
+                >
+                  Enter Token
+                </button>
+              </motion.div>
+            )}
+
             {/* Render selected panel */}
-            {!isLoading && renderActiveTab()}
+            {!isLoading && isAuthenticated === true && renderActiveTab()}
 
           </AnimatePresence>
         </main>
