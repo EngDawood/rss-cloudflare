@@ -68,6 +68,22 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 	const result = await fetchForSource(source, env);
 	if (result.items.length === 0) return;
 
+	// Determine which items are truly new before upserting them
+	let trulyNewItems: typeof result.items = [];
+	if (result.items.length > 0) {
+		try {
+			const ids = result.items.map(item => item.id);
+			const placeholders = ids.map(() => '?').join(',');
+			const existingRows = await env.DB.prepare(
+				`SELECT id FROM items WHERE id IN (${placeholders})`
+			).bind(...ids).all<{ id: string }>();
+			const existingIds = new Set(existingRows.results.map(r => r.id));
+			trulyNewItems = result.items.filter(item => !existingIds.has(item.id));
+		} catch (err) {
+			console.error('[Queue Fetch] Failed to check for existing items:', err);
+		}
+	}
+
 	// Persist ALL fetched items to D1 (INSERT OR IGNORE — cheap, idempotent).
 	await upsertItems(env.DB, feedId, result.items);
 	await updateLastFetched(env.DB, feedId);
@@ -132,6 +148,36 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 				item,
 				settings,
 			});
+		}
+	}
+
+	// Trigger any matching Workflows for this feed
+	if (trulyNewItems.length > 0) {
+		try {
+			const workflows = await env.DB.prepare(
+				'SELECT id, batch_size FROM agent_workflows WHERE feed_id = ? AND trigger_type = "rss_batch"'
+			).bind(feedId).all<{ id: string; batch_size: number }>();
+
+			for (const workflow of workflows.results) {
+				const batchSize = workflow.batch_size || 1;
+				if (trulyNewItems.length >= batchSize) {
+					const itemsToProcess = trulyNewItems.slice(0, batchSize).map(item => ({
+						id: item.id,
+						title: item.title,
+						link: item.link,
+						text: item.text
+					}));
+					await env.AGENT_WORKFLOW.create({
+						params: {
+							workflowId: workflow.id,
+							items: itemsToProcess
+						}
+					});
+					console.log(`[Queue Fetch] Triggered Workflow ${workflow.id} with ${itemsToProcess.length} items.`);
+				}
+			}
+		} catch (wfErr) {
+			console.error('[Queue Fetch] Failed to trigger workflows:', wfErr);
 		}
 	}
 }

@@ -16,6 +16,7 @@ import { ChatTab } from './components/tabs/ChatTab';
 import { InstancesTab } from './components/tabs/InstancesTab';
 import { TestTab } from './components/tabs/TestTab';
 import { McpTab } from './components/tabs/McpTab';
+import { WorkflowsTab } from './components/tabs/WorkflowsTab';
 
 // Common Components
 import { Modal } from './components/common/Modal';
@@ -60,6 +61,8 @@ export default function App() {
         return <InstancesTab />;
       case 'mcp':
         return <McpTab />;
+      case 'workflows':
+        return <WorkflowsTab />;
       case 'test':
         return <TestTab />;
       default:

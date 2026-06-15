@@ -10,6 +10,8 @@ import { RSSReaderMCP } from './mcp/index';
 import { QueueTask } from './types/queue';
 import { MessageBatch } from '@cloudflare/workers-types';
 import { handleActionApi, handleChatApi, handleMigrateChannels } from './routes/action-api';
+import { AgentWorkflow } from './workflows/agent-workflow';
+
 
 type HonoEnv = { Bindings: Env };
 
@@ -82,7 +84,7 @@ app.onError((err, c) => {
 	return c.json({ error: 'Internal Server Error' }, 500);
 });
 
-export { RSSReaderMCP };
+export { RSSReaderMCP, AgentWorkflow };
 
 export default {
 	fetch: app.fetch,

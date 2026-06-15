@@ -121,7 +121,7 @@ const AGENT_TOOLS = [
 	}
 ];
 
-function normalizeGatewayModel(model: string): string {
+export function normalizeGatewayModel(model: string): string {
 	if (
 		model.startsWith('workers-ai/') ||
 		model.startsWith('openai/') ||

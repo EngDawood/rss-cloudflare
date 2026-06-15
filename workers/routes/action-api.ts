@@ -322,6 +322,91 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				return c.json({ data: logs });
 			}
 
+			// ── Workflow management ──────────────────────────────────────────────────
+			case 'create_agent_workflow': {
+				const { id, name, feedId, aiModel, systemPrompt, enabledTools, triggerType, batchSize } = params;
+				if (!id || !name || !aiModel || !systemPrompt || !enabledTools || !triggerType) {
+					return c.json({ error: 'Missing required parameters: id, name, aiModel, systemPrompt, enabledTools, triggerType' }, 400);
+				}
+				await db.prepare(
+					`INSERT INTO agent_workflows (id, name, feed_id, ai_model, system_prompt, enabled_tools, trigger_type, batch_size)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+				).bind(
+					id,
+					name,
+					feedId || null,
+					aiModel,
+					systemPrompt,
+					JSON.stringify(enabledTools),
+					triggerType,
+					batchSize || 1
+				).run();
+				return c.json({ data: { id, name, ok: true } });
+			}
+			case 'update_agent_workflow': {
+				const { id, name, feedId, aiModel, systemPrompt, enabledTools, triggerType, batchSize } = params;
+				if (!id || !name || !aiModel || !systemPrompt || !enabledTools || !triggerType) {
+					return c.json({ error: 'Missing required parameters: id, name, aiModel, systemPrompt, enabledTools, triggerType' }, 400);
+				}
+				await db.prepare(
+					`UPDATE agent_workflows
+					 SET name = ?, feed_id = ?, ai_model = ?, system_prompt = ?, enabled_tools = ?, trigger_type = ?, batch_size = ?
+					 WHERE id = ?`
+				).bind(
+					name,
+					feedId || null,
+					aiModel,
+					systemPrompt,
+					JSON.stringify(enabledTools),
+					triggerType,
+					batchSize || 1,
+					id
+				).run();
+				return c.json({ data: { id, name, ok: true } });
+			}
+			case 'list_agent_workflows': {
+				const rows = await db.prepare('SELECT * FROM agent_workflows').all();
+				const normalized = rows.results.map((r: any) => ({
+					...r,
+					enabled_tools: JSON.parse(r.enabled_tools)
+				}));
+				return c.json({ data: normalized });
+			}
+			case 'trigger_agent_workflow': {
+				const { workflowId, items } = params;
+				if (!workflowId) return c.json({ error: 'workflowId is required' }, 400);
+
+				// Fetch the latest 5 unread items for trigger mode if none passed
+				let itemsToProcess = items || [];
+				if (itemsToProcess.length === 0) {
+					const config = await db.prepare('SELECT feed_id FROM agent_workflows WHERE id = ?').bind(workflowId).first<{ feed_id: string }>();
+					if (config && config.feed_id) {
+						const feedItems = await listNewItems(db, { feedId: config.feed_id, limit: 5 });
+						itemsToProcess = feedItems.map(item => ({
+							id: item.id,
+							title: item.title,
+							link: item.link,
+							text: item.text
+						}));
+					}
+				}
+
+				// Create workflow instance
+				await c.env.AGENT_WORKFLOW.create({
+					params: {
+						workflowId,
+						items: itemsToProcess
+					}
+				});
+				return c.json({ data: { ok: true, workflowId, itemsCount: itemsToProcess.length } });
+			}
+			case 'delete_agent_workflow': {
+				const { workflowId } = params;
+				if (!workflowId) return c.json({ error: 'workflowId is required' }, 400);
+				await db.prepare('DELETE FROM agent_workflows WHERE id = ?').bind(workflowId).run();
+				return c.json({ data: { ok: true, workflowId } });
+			}
+
 			// ── Config ────────────────────────────────────────────────────────────────
 			case 'get_config': {
 				const telegramChatId = await getConfig(db, 'telegram_chat_id');

@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   Rss, BookOpen, TelegramLogo, PaperPlaneTilt,
   Clock, Terminal, ChatCircleText, CaretLeft, CaretRight,
-  GlobeSimple, MagnifyingGlass, Robot
+  GlobeSimple, MagnifyingGlass, Robot, Cpu
 } from '@phosphor-icons/react';
 import { useApp } from '../../context/AppContext';
 
@@ -20,6 +20,7 @@ export const Sidebar: React.FC = () => {
   const menuItems = [
     { id: 'feeds', label: 'RSS Feeds', icon: Rss },
     { id: 'reader', label: 'Feed Reader', icon: BookOpen },
+    { id: 'workflows', label: 'Agent Workflows', icon: Cpu },
     { id: 'telegram', label: 'Telegram Targets', icon: TelegramLogo },
     { id: 'sandbox', label: 'Post Sandbox', icon: PaperPlaneTilt },
     { id: 'logs', label: 'Recall & Logs', icon: Clock },
