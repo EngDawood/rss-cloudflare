@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../context/AppContext';
 
 type SubTab = 'parser' | 'benchmark';
@@ -46,6 +46,18 @@ interface BenchmarkResult {
   cacheStatus: string;
 }
 
+interface BenchmarkRun {
+  id: string;
+  ts: number;
+  platform: string;
+  query: string;
+  engine: string;
+  results: BenchmarkResult[];
+}
+
+const BENCH_HISTORY_KEY = 'rss_bench_history';
+const BENCH_HISTORY_MAX = 15;
+
 export const TestTab: React.FC = () => {
   const { callApi, showToast } = useApp();
   const [subTab, setSubTab] = useState<SubTab>('parser');
@@ -71,6 +83,11 @@ export const TestTab: React.FC = () => {
   const [isBenchmarking, setIsBenchmarking] = useState(false);
   const [benchResults, setBenchResults] = useState<BenchmarkResult[]>([]);
   const [benchEngine, setBenchEngine] = useState('');
+  const [benchHistory, setBenchHistory] = useState<BenchmarkRun[]>(() => {
+    try { return JSON.parse(localStorage.getItem(BENCH_HISTORY_KEY) || '[]'); } catch { return []; }
+  });
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const [feedMeta, setFeedMeta] = useState<{ title: string; link: string } | null>(null);
 
@@ -160,9 +177,24 @@ export const TestTab: React.FC = () => {
     if (res.error) {
       showToast(res.error, 'error');
     } else {
-      setBenchResults(res.data.results || []);
-      setBenchEngine(res.data.engine || '');
-      showToast(`Benchmark complete — ${res.data.results?.length ?? 0} instances tested`, 'success');
+      const results: BenchmarkResult[] = res.data.results || [];
+      const engine: string = res.data.engine || '';
+      setBenchResults(results);
+      setBenchEngine(engine);
+      const run: BenchmarkRun = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        ts: Date.now(),
+        platform: benchPlatform,
+        query: isCustomBenchPlatform ? benchCustomRoute.trim() : benchUsername.trim(),
+        engine,
+        results,
+      };
+      setBenchHistory(prev => {
+        const next = [run, ...prev].slice(0, BENCH_HISTORY_MAX);
+        try { localStorage.setItem(BENCH_HISTORY_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+        return next;
+      });
+      showToast(`Benchmark complete — ${results.length} instances tested`, 'success');
     }
   };
 
@@ -585,6 +617,150 @@ export const TestTab: React.FC = () => {
               </p>
             )}
           </div>
+
+          {/* Run History */}
+          {benchHistory.length > 0 && (
+            <div className="liquid-glass rounded-2xl overflow-hidden">
+              <button
+                onClick={() => setShowHistory(v => !v)}
+                className="w-full flex items-center justify-between px-6 py-4 text-sm font-semibold text-text-base hover:bg-bg-input transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="text-base">🕐</span>
+                  Run History
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-bg-input border border-border-base text-text-muted">
+                    {benchHistory.length}
+                  </span>
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      setBenchHistory([]);
+                      setExpandedRunId(null);
+                      try { localStorage.removeItem(BENCH_HISTORY_KEY); } catch { /* ignore */ }
+                    }}
+                    className="text-xs text-text-muted hover:text-red-400 transition-colors"
+                  >
+                    Clear
+                  </button>
+                  <span className="text-text-muted">{showHistory ? '▲' : '▼'}</span>
+                </div>
+              </button>
+
+              <AnimatePresence>
+                {showHistory && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="overflow-hidden border-t border-border-base"
+                  >
+                    <div className="flex flex-col divide-y divide-border-base">
+                      {benchHistory.map(run => {
+                        const successes = run.results.filter(r => r.status === 'Success').length;
+                        const best = run.results
+                          .filter(r => r.status === 'Success' && r.durationMs > 0)
+                          .sort((a, b) => a.durationMs - b.durationMs)[0];
+                        const isExpanded = expandedRunId === run.id;
+                        const ts = new Date(run.ts);
+                        const timeLabel = ts.toLocaleDateString() + ' ' + ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                        return (
+                          <div key={run.id}>
+                            <button
+                              onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
+                              className="w-full flex items-center gap-3 px-6 py-3 hover:bg-bg-input transition-colors text-left"
+                            >
+                              <span className="text-xs text-text-muted font-mono w-32 shrink-0">{timeLabel}</span>
+                              <span className="flex-1 min-w-0">
+                                <span className="text-xs font-semibold text-text-base">{run.query || '—'}</span>
+                                <span className="text-[10px] text-text-muted ml-2">{run.platform}</span>
+                              </span>
+                              <span className="text-xs text-text-muted shrink-0">
+                                {successes}/{run.results.length} ok
+                              </span>
+                              {best && (
+                                <span className="text-xs font-mono text-green-500 shrink-0 w-20 text-right">
+                                  best {best.durationMs} ms
+                                </span>
+                              )}
+                              <span className="text-text-muted ml-2 shrink-0">{isExpanded ? '▲' : '▼'}</span>
+                            </button>
+
+                            <AnimatePresence>
+                              {isExpanded && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: 'auto', opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.15 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="px-6 pb-4 overflow-x-auto">
+                                    <table className="w-full text-sm border-collapse border border-border-base rounded-xl overflow-hidden">
+                                      <thead>
+                                        <tr className="bg-bg-input border-b border-border-base">
+                                          <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-text-muted">Instance</th>
+                                          <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-text-muted">Status</th>
+                                          <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-text-muted">Time</th>
+                                          <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-text-muted">Items</th>
+                                          <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-text-muted">Cache</th>
+                                          <th className="text-left px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-text-muted">Feed URL</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {run.results.map((r, idx) => (
+                                          <tr key={idx} className="border-b border-border-base last:border-0 hover:bg-bg-input/50 transition-colors">
+                                            <td className="px-4 py-2 font-mono text-xs text-text-base">{r.instance.replace(/^https?:\/\//, '')}</td>
+                                            <td className="px-4 py-2">
+                                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                                r.status === 'Success'
+                                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                                  : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                              }`}>
+                                                {r.status}
+                                              </span>
+                                            </td>
+                                            <td className="px-4 py-2">
+                                              {r.durationMs === 0 && r.cacheStatus === 'Hit' ? (
+                                                <span className="text-blue-500 font-bold text-xs">cached</span>
+                                              ) : (
+                                                <span className={`font-mono text-xs font-bold ${r.durationMs < 3000 ? 'text-green-500' : 'text-orange-500'}`}>
+                                                  {r.durationMs} ms
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-2 text-xs text-text-base">{r.items}</td>
+                                            <td className="px-4 py-2 text-xs text-text-muted">{r.cacheStatus}</td>
+                                            <td className="px-4 py-2 max-w-[240px]">
+                                              <a
+                                                href={r.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs font-mono text-accent-primary hover:underline break-all line-clamp-2"
+                                              >
+                                                {r.url}
+                                              </a>
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
         </>
       )}
     </motion.div>
