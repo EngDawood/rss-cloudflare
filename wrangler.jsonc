@@ -63,10 +63,20 @@
 		"ADMIN_TELEGRAM_ID": "801062947",
 		"WORKER_URL": "https://rss-bridge.engdawood.workers.dev",
 		"DEFAULT_AI_MODEL": "nvidia/llama-3.1-nemotron-70b-instruct",
-		"CHAT_AI_MODEL": "google/gemini-2.0-flash"
+		"CHAT_AI_MODEL": "google/gemini-2.0-flash",
+		"EMDASH_URL": "https://engdawood.com"
 		// Placeholder — override with: npx wrangler secret put MCP_AUTH_TOKEN
 		// "MCP_AUTH_TOKEN": ""
+		// EMDASH_TOKEN is a secret — set with: npx wrangler secret put EMDASH_TOKEN
 	},
+	// Durable agent workflows (migration 0009)
+	"workflows": [
+		{
+			"name": "agent-processor",
+			"binding": "AGENT_WORKFLOW",
+			"class_name": "AgentWorkflow"
+		}
+	],
 	
 	"routes": [
 		

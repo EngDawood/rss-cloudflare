@@ -15,7 +15,10 @@ import {
 	wasPostedToChannel,
 	insertPostLog,
 	resolveAiSummaryEnabled,
+	getWorkflowsForFeed,
+	listNewItems,
 } from './db/d1';
+import { launchWorkflowRun } from './workflows/trigger';
 import { maybeEnrichSummary } from './services/ai-summarizer';
 import { sendFallbackMessage } from './services/telegram-bot/helpers/fallback-sender';
 import { FileTooLargeError } from './services/telegram-bot/handlers/send-media';
@@ -69,8 +72,13 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 	if (result.items.length === 0) return;
 
 	// Persist ALL fetched items to D1 (INSERT OR IGNORE — cheap, idempotent).
-	await upsertItems(env.DB, feedId, result.items);
+	const insertedCount = await upsertItems(env.DB, feedId, result.items);
 	await updateLastFetched(env.DB, feedId);
+
+	// Fire any rss_batch agent workflows watching this feed (independent of Telegram subs).
+	if (insertedCount > 0) {
+		await triggerRssBatchWorkflows(env, feedId, insertedCount);
+	}
 
 	// Find all enabled Telegram subscriptions for this feed.
 	const subs = await getTelegramSubscriptionsByFeed(env.DB, feedId);
@@ -132,6 +140,31 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 				item,
 				settings,
 			});
+		}
+	}
+}
+
+/**
+ * Launch every enabled rss_batch agent workflow watching this feed whose
+ * batch_size threshold is met by the newly-inserted items. Items are gathered
+ * from D1 (newest first, capped at batch_size) and passed to the workflow.
+ */
+async function triggerRssBatchWorkflows(env: Env, feedId: string, insertedCount: number): Promise<void> {
+	let workflows;
+	try {
+		workflows = await getWorkflowsForFeed(env.DB, feedId);
+	} catch (err) {
+		console.error(`[Queue] Failed to load workflows for feed ${feedId}:`, err);
+		return;
+	}
+	for (const wf of workflows) {
+		const batchSize = wf.batch_size || 1;
+		if (insertedCount < batchSize) continue;
+		try {
+			const items = await listNewItems(env.DB, { feedId, limit: batchSize, unreadOnly: false });
+			await launchWorkflowRun(env, wf, items, 'rss_batch');
+		} catch (err) {
+			console.error(`[Queue] Failed to launch workflow ${wf.id} for feed ${feedId}:`, err);
 		}
 	}
 }

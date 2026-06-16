@@ -10,6 +10,8 @@ import { RSSReaderMCP } from './mcp/index';
 import { QueueTask } from './types/queue';
 import { MessageBatch } from '@cloudflare/workers-types';
 import { handleActionApi, handleChatApi, handleMigrateChannels } from './routes/action-api';
+import { checkCronWorkflows } from './workflows/trigger';
+import { AgentWorkflow } from './workflows/agent-workflow';
 
 type HonoEnv = { Bindings: Env };
 
@@ -83,12 +85,14 @@ app.onError((err, c) => {
 });
 
 export { RSSReaderMCP };
+export { AgentWorkflow };
 
 export default {
 	fetch: app.fetch,
 	scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
 		ctx.waitUntil(checkAllFeeds(env));
 		ctx.waitUntil(refreshSavedFeeds(env));
+		ctx.waitUntil(checkCronWorkflows(env));
 	},
 	queue: async (batch: MessageBatch<QueueTask>, env: Env): Promise<void> => {
 		await handleQueue(batch, env);
