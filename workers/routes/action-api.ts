@@ -14,12 +14,43 @@ import {
 	upsertFeedBySource, upsertChannel, addTelegramSubscription, addMcpSubscription, removeMcpSubscription,
 	getChannels, getTelegramSubscriptions, getMcpSubscriptions,
 	listCategories, getFeedsInCategory, createCategory, deleteCategory, addFeedToCategory, removeFeedFromCategory,
+	createWorkflow, updateWorkflow, listWorkflows, getWorkflow, deleteWorkflow, setWorkflowFeeds,
+	setRunStatus, listRuns, getRun, getRunEvents,
 } from '../db/d1';
+import { launchWorkflowRun } from '../workflows/trigger';
 import { resolveTarget, logAndSend } from '../services/post-service';
 import { getChannelsList, getChannelConfig } from '../services/telegram-bot/storage/kv-operations';
 import type { TelegramMediaMessage, SourceType } from '../types/telegram';
 
 type HonoEnv = { Bindings: Env };
+
+/** Curated free-text model suggestions for the workflow editor datalist (non-restrictive). */
+const MODEL_SUGGESTIONS = [
+	'google/gemini-2.0-flash',
+	'google/gemini-2.5-flash',
+	'openai/gpt-4o-mini',
+	'anthropic/claude-3-5-sonnet',
+	'groq/llama-3.3-70b-versatile',
+	'nvidia/llama-3.1-nemotron-70b-instruct',
+	'deepseek/deepseek-chat',
+	'@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+];
+
+/** Map a Cloudflare Workflows instance status to our workflow_runs status vocabulary. */
+function mapWorkflowStatus(status?: string): string | null {
+	switch (status) {
+		case 'queued': return 'queued';
+		case 'running':
+		case 'paused':
+		case 'waiting':
+		case 'waitingForPause': return 'running';
+		case 'complete': return 'complete';
+		case 'errored':
+		case 'unknown': return 'errored';
+		case 'terminated': return 'terminated';
+		default: return null;
+	}
+}
 
 export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 	// 1. Authenticate if MCP_AUTH_TOKEN is configured
@@ -517,6 +548,99 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 					overrideInstances,
 				});
 				return c.json({ data: result });
+			}
+
+			// ── Agent workflows ────────────────────────────────
+			case 'list_agent_workflows': {
+				const workflows = await listWorkflows(db);
+				const normalized = workflows.map(w => ({
+					...w,
+					enabled_tools: JSON.parse(w.enabled_tools || '[]'),
+				}));
+				return c.json({ data: normalized });
+			}
+			case 'create_agent_workflow': {
+				const {
+					name, aiModel, systemPrompt, temperature, maxTurns, enabledTools = [],
+					triggerType = 'manual', batchSize, targetChatId, targetChatName, feedIds = [], enabled,
+				} = params;
+				if (!name || !aiModel || !systemPrompt) {
+					return c.json({ error: 'name, aiModel, and systemPrompt are required' }, 400);
+				}
+				const wf = await createWorkflow(db, {
+					name, aiModel, systemPrompt, temperature, maxTurns,
+					enabledTools, triggerType, batchSize, targetChatId, targetChatName, enabled,
+				});
+				await setWorkflowFeeds(db, wf.id, feedIds);
+				return c.json({ data: { ...wf, feed_ids: feedIds } });
+			}
+			case 'update_agent_workflow': {
+				const {
+					id, name, aiModel, systemPrompt, temperature, maxTurns, enabledTools = [],
+					triggerType = 'manual', batchSize, targetChatId, targetChatName, feedIds = [], enabled,
+				} = params;
+				if (!id) return c.json({ error: 'id is required' }, 400);
+				if (!name || !aiModel || !systemPrompt) {
+					return c.json({ error: 'name, aiModel, and systemPrompt are required' }, 400);
+				}
+				await updateWorkflow(db, id, {
+					name, aiModel, systemPrompt, temperature, maxTurns,
+					enabledTools, triggerType, batchSize, targetChatId, targetChatName, enabled,
+				});
+				await setWorkflowFeeds(db, id, feedIds);
+				return c.json({ data: { id, feed_ids: feedIds } });
+			}
+			case 'delete_agent_workflow': {
+				const { id } = params;
+				if (!id) return c.json({ error: 'id is required' }, 400);
+				await deleteWorkflow(db, id);
+				return c.json({ data: { deleted: id } });
+			}
+			case 'trigger_agent_workflow': {
+				const { id } = params;
+				if (!id) return c.json({ error: 'id is required' }, 400);
+				const wf = await getWorkflow(db, id);
+				if (!wf) return c.json({ error: `Workflow ${id} not found` }, 404);
+				const items = wf.feed_ids.length
+					? await listNewItems(db, { feedId: wf.feed_ids, limit: wf.batch_size || 5, unreadOnly: false })
+					: [];
+				const runId = await launchWorkflowRun(c.env, wf, items, 'manual');
+				return c.json({ data: { runId, itemsCount: items.length } });
+			}
+			case 'list_workflow_runs': {
+				const { workflowId } = params;
+				if (!workflowId) return c.json({ error: 'workflowId is required' }, 400);
+				const runs = await listRuns(db, workflowId);
+				// Reconcile live state from the Workflows binding for non-terminal runs.
+				for (const run of runs) {
+					if (run.status === 'complete' || run.status === 'errored' || run.status === 'terminated') continue;
+					try {
+						const instance = await c.env.AGENT_WORKFLOW.get(run.id);
+						const live = await instance.status();
+						const mapped = mapWorkflowStatus((live as { status?: string }).status);
+						if (mapped && mapped !== run.status) {
+							await setRunStatus(db, run.id, mapped);
+							run.status = mapped;
+						}
+					} catch { /* instance may be gone; keep stored status */ }
+				}
+				return c.json({ data: runs });
+			}
+			case 'get_workflow_run': {
+				const { runId } = params;
+				if (!runId) return c.json({ error: 'runId is required' }, 400);
+				const run = await getRun(db, runId);
+				if (!run) return c.json({ error: `Run ${runId} not found` }, 404);
+				const events = await getRunEvents(db, runId);
+				return c.json({
+					data: {
+						run,
+						events: events.map(e => ({ ...e, detail: e.detail ? JSON.parse(e.detail) : null })),
+					},
+				});
+			}
+			case 'list_models': {
+				return c.json({ data: MODEL_SUGGESTIONS });
 			}
 
 			default:

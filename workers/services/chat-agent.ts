@@ -3,7 +3,7 @@ import {
 	listNotes, insertNote, recall, listPostLog, getConfig
 } from '../db/d1';
 
-const GATEWAY_URL =
+export const GATEWAY_URL =
 	'https://gateway.ai.cloudflare.com/v1/c53938b50ea00b247dcd72dd2e9eada3/rss-summarizer/compat/chat/completions';
 
 const DEFAULT_DYNAMIC_CHAT_ROUTE = 'dynamic/chat';
@@ -121,7 +121,7 @@ const AGENT_TOOLS = [
 	}
 ];
 
-function normalizeGatewayModel(model: string): string {
+export function normalizeGatewayModel(model: string): string {
 	if (
 		model.startsWith('workers-ai/') ||
 		model.startsWith('openai/') ||
