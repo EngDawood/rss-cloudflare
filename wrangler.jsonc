@@ -89,12 +89,26 @@
 		"directory": "./app/dist",
 		"binding": "ASSETS"
 	},
-	// Cron trigger: check feeds every 5 minutes
+	// Cron triggers: every 5 min (feed checks) + daily 03:00 UTC (data cleanup)
 	"triggers": {
 		"crons": [
-			"*/5 * * * *"
+			"*/5 * * * *",
+			"0 3 * * *"
 		]
 	},
+	// Workers AI — used for embeddings (@cf/baai/bge-m3, multilingual including Arabic)
+	// Run `npm run cf-typegen` after adding this to regenerate Env types.
+	"ai": {
+		"binding": "AI"
+	},
+	// Vectorize index for semantic search over items + notes.
+	// Create before deploying: npx wrangler vectorize create rss-items --dimensions=1024 --metric=cosine
+	"vectorize": [
+		{
+			"binding": "VECTORIZE_ITEMS",
+			"index_name": "rss-items"
+		}
+	],
 	"queues": {
 		"producers": [
 			{

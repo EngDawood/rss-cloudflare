@@ -5,6 +5,7 @@ import { handleSetup } from './routes/setup';
 import { handleTestBridges } from './routes/test-bridges';
 import { checkAllFeeds } from './cron/check-feeds';
 import { refreshSavedFeeds } from './cron/refresh-feeds';
+import { cleanupOldData } from './cron/cleanup';
 import { handleQueue } from './queue-handler';
 import { RSSReaderMCP } from './mcp/index';
 import { QueueTask } from './types/queue';
@@ -90,6 +91,11 @@ export { AgentWorkflow };
 export default {
 	fetch: app.fetch,
 	scheduled: async (event: ScheduledEvent, env: Env, ctx: ExecutionContext) => {
+		// Daily 03:00 UTC trigger runs the cleanup sweep only.
+		if (event.cron === '0 3 * * *') {
+			ctx.waitUntil(cleanupOldData(env));
+			return;
+		}
 		ctx.waitUntil(checkAllFeeds(env));
 		ctx.waitUntil(refreshSavedFeeds(env));
 		ctx.waitUntil(checkCronWorkflows(env));

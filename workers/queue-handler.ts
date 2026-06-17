@@ -11,13 +11,16 @@ import {
 	getChannelById,
 	getTelegramSubscriptionsByFeed,
 	upsertItems,
-	updateLastFetched,
 	wasPostedToChannel,
 	insertPostLog,
 	resolveAiSummaryEnabled,
 	getWorkflowsForFeed,
 	listNewItems,
+	recordFeedFetchSuccess,
+	recordFeedFetchFailure,
+	getFeedConsecutiveFailures,
 } from './db/d1';
+import { embedItems } from './services/embed';
 import { launchWorkflowRun } from './workflows/trigger';
 import { maybeEnrichSummary } from './services/ai-summarizer';
 import { sendFallbackMessage } from './services/telegram-bot/helpers/fallback-sender';
@@ -28,9 +31,12 @@ import type { FormatSettings } from './types/telegram';
 
 /**
  * Main entry point for Cloudflare Queue events.
+ * Collects task-level failures and sends one batched admin DM at the end instead of
+ * a separate message per error (avoids notification spam on transient outages).
  */
 export async function handleQueue(batch: MessageBatch<QueueTask>, env: Env): Promise<void> {
 	const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
+	const batchErrors: string[] = [];
 
 	for (const message of batch.messages) {
 		const task = message.body;
@@ -42,9 +48,27 @@ export async function handleQueue(batch: MessageBatch<QueueTask>, env: Env): Pro
 			}
 			message.ack();
 		} catch (err) {
+			const label = task.type === 'send' ? `send→${task.channelId}` : `fetch:${task.feedId}`;
+			batchErrors.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
 			console.error(`[Queue] Failed to process ${task.type} task:`, err);
 			// Do NOT ack — Cloudflare retries un-acked messages.
 		}
+	}
+
+	// Send one batched DM for all un-acked failures instead of per-message spam.
+	if (batchErrors.length > 0) {
+		try {
+			const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
+			if (!isNaN(adminId)) {
+				const preview = batchErrors.slice(0, 5).map(e => e.slice(0, 120)).join('\n');
+				const tail = batchErrors.length > 5 ? `\n…and ${batchErrors.length - 5} more` : '';
+				await bot.api.sendMessage(
+					adminId,
+					`⚠️ <b>Queue errors (${batchErrors.length})</b>\n<pre>${preview}${tail}</pre>`,
+					{ parse_mode: 'HTML' },
+				);
+			}
+		} catch { /* non-fatal */ }
 	}
 }
 
@@ -69,11 +93,26 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 	};
 
 	const result = await fetchForSource(source, env);
-	if (result.items.length === 0) return;
+
+	if (result.items.length === 0) {
+		const errMsg = result.errors.map(e => e.message).join('; ') || 'All instances returned empty results';
+		await recordFeedFetchFailure(env.DB, feedId, errMsg);
+		// Alert admin when failures cross multiples of 5 (5, 10, 15…)
+		const failures = await getFeedConsecutiveFailures(env.DB, feedId);
+		if (failures >= 5 && failures % 5 === 0) {
+			await sendDegradedFeedAlert(env, feed.title || feed.source_value, feedId, failures, errMsg);
+		}
+		return;
+	}
 
 	// Persist ALL fetched items to D1 (INSERT OR IGNORE — cheap, idempotent).
 	const insertedCount = await upsertItems(env.DB, feedId, result.items);
-	await updateLastFetched(env.DB, feedId);
+	await recordFeedFetchSuccess(env.DB, feedId);
+
+	// Embed newly fetched items to Vectorize (non-fatal — skipped if binding absent).
+	if (insertedCount > 0) {
+		await embedItems(env, feedId, result.items);
+	}
 
 	// Fire any rss_batch agent workflows watching this feed (independent of Telegram subs).
 	if (insertedCount > 0) {
@@ -141,6 +180,34 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 				settings,
 			});
 		}
+	}
+}
+
+/**
+ * Send a single admin Telegram DM when a feed is consistently failing.
+ * Fires at failures = 5, 10, 15… to avoid repeat spam while still being visible.
+ */
+async function sendDegradedFeedAlert(
+	env: Env,
+	feedName: string,
+	feedId: string,
+	failures: number,
+	lastError: string,
+): Promise<void> {
+	try {
+		const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
+		if (isNaN(adminId)) return;
+		const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
+		await bot.api.sendMessage(
+			adminId,
+			`⚠️ <b>Feed degraded</b>\n\n` +
+			`<b>${feedName}</b> (<code>${feedId}</code>)\n` +
+			`Failed <b>${failures}×</b> in a row.\n\n` +
+			`Last error:\n<code>${lastError.slice(0, 300)}</code>`,
+			{ parse_mode: 'HTML' },
+		);
+	} catch (err) {
+		console.error('[Queue] Failed to send degraded feed alert:', err);
 	}
 }
 
