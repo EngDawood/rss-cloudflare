@@ -19,6 +19,7 @@ import {
 } from '../db/d1';
 import { launchWorkflowRun } from '../workflows/trigger';
 import { resolveTarget, logAndSend } from '../services/post-service';
+import { requireApiAuth } from '../utils/auth';
 import { getChannelsList, getChannelConfig } from '../services/telegram-bot/storage/kv-operations';
 import type { TelegramMediaMessage, SourceType } from '../types/telegram';
 
@@ -53,12 +54,9 @@ function mapWorkflowStatus(status?: string): string | null {
 }
 
 export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
-	// 1. Authenticate if MCP_AUTH_TOKEN is configured
-	const auth = c.req.header('Authorization');
-	const mcpToken = c.env.MCP_AUTH_TOKEN;
-	if (mcpToken && auth !== `Bearer ${mcpToken}`) {
-		return c.json({ error: 'Unauthorized' }, 401);
-	}
+	// 1. Authenticate (fail-closed: requires MCP_AUTH_TOKEN to be configured)
+	const authFail = requireApiAuth(c);
+	if (authFail) return authFail;
 
 	// 2. Parse request
 	let body: { action: string; params?: any };
@@ -671,11 +669,8 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
  * Call it again safely — all writes are idempotent.
  */
 export async function handleMigrateChannels(c: Context<HonoEnv>): Promise<Response> {
-	const auth = c.req.header('Authorization');
-	const mcpToken = c.env.MCP_AUTH_TOKEN;
-	if (mcpToken && auth !== `Bearer ${mcpToken}`) {
-		return c.json({ error: 'Unauthorized' }, 401);
-	}
+	const authFail = requireApiAuth(c);
+	if (authFail) return authFail;
 
 	const db = c.env.DB;
 	const kv = c.env.CACHE;
@@ -770,11 +765,8 @@ export async function handleMigrateChannels(c: Context<HonoEnv>): Promise<Respon
 }
 
 export async function handleChatApi(c: Context<HonoEnv>): Promise<Response> {
-	const auth = c.req.header('Authorization');
-	const mcpToken = c.env.MCP_AUTH_TOKEN;
-	if (mcpToken && auth !== `Bearer ${mcpToken}`) {
-		return c.json({ error: 'Unauthorized' }, 401);
-	}
+	const authFail = requireApiAuth(c);
+	if (authFail) return authFail;
 
 	let body: { messages: Array<{ role: 'user' | 'assistant'; content: string }> };
 	try {
