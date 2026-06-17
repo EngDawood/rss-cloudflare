@@ -233,18 +233,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const loadChats = async () => {
-    setIsLoading(true);
     const res = await callApi('list_chats');
     if (!res.error) setChats(res.data || []);
-    setIsLoading(false);
   };
 
   const loadReaderItems = async () => {
-    setIsLoading(true);
     let res;
     const unreadOnly = readerStatusFilter === 'unread';
     const readOnly = readerStatusFilter === 'read';
-    
+
     // Resolve feed IDs: explicit selection wins; otherwise use category filter (MCP mode only)
     let activeFeeds: string[] | undefined = readerFeedFilter.length > 0 ? readerFeedFilter : undefined;
     if (!activeFeeds && (feedViewFilter === 'mcp' || feedViewFilter === 'category') && readerCategoryId) {
@@ -261,29 +258,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (readerSearch.trim()) {
-      res = await callApi('search_items', { 
-        query: readerSearch, 
-        feedId: activeFeeds, 
-        unreadOnly, 
-        readOnly, 
-        limit: 30 
+      res = await callApi('search_items', {
+        query: readerSearch,
+        feedId: activeFeeds,
+        unreadOnly,
+        readOnly,
+        limit: 30
       });
     } else {
-      res = await callApi('list_new_items', { 
-        feedId: activeFeeds, 
-        unreadOnly, 
-        readOnly, 
-        limit: 30 
+      res = await callApi('list_new_items', {
+        feedId: activeFeeds,
+        unreadOnly,
+        readOnly,
+        limit: 30
       });
     }
     if (!res.error) {
       setUnreadItems(res.data || []);
     }
-    setIsLoading(false);
   };
 
   const loadLogsAndConfig = async () => {
-    setIsLoading(true);
     const [recallRes, logsRes, configRes] = await Promise.all([
       callApi('recall', { limit: 20 }),
       callApi('list_post_log', { limit: 20 }),
@@ -293,7 +288,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!recallRes.error) setTimeline(recallRes.data || []);
     if (!logsRes.error) setPostLogs(logsRes.data || []);
     if (!configRes.error) setConfigState(configRes.data || {});
-    setIsLoading(false);
   };
 
   // Keep latest verifyToken in a ref so the effect below never needs it as a dep
