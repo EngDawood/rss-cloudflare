@@ -4,11 +4,9 @@
 	"main": "workers/index.ts",
 	"compatibility_date": "2026-02-10",
 	"workers_dev": true,
-
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
-	
 	"observability": {
 		"enabled": true,
 		"head_sampling_rate": 1,
@@ -24,7 +22,6 @@
 			"head_sampling_rate": 1
 		}
 	},
-	
 	// KV namespace for caching (create with: npx wrangler kv namespace create CACHE)
 	"kv_namespaces": [
 		{
@@ -77,9 +74,7 @@
 			"class_name": "AgentWorkflow"
 		}
 	],
-	
 	"routes": [
-		
 		{
 			"pattern": "rss.feed.engdawood.com",
 			"custom_domain": true
@@ -102,11 +97,11 @@
 		"binding": "AI"
 	},
 	// Vectorize index for semantic search over items + notes.
-	// Create before deploying: npx wrangler vectorize create rss-items --dimensions=1024 --metric=cosine
 	"vectorize": [
 		{
-			"binding": "VECTORIZE_ITEMS",
-			"index_name": "rss-items"
+			"binding": "VECTORIZE",
+			"index_name": "rss-items",
+			"remote": true
 		}
 	],
 	"queues": {
