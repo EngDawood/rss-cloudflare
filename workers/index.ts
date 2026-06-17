@@ -9,10 +9,10 @@ import { cleanupOldData } from './cron/cleanup';
 import { handleQueue } from './queue-handler';
 import { RSSReaderMCP } from './mcp/index';
 import { QueueTask } from './types/queue';
-import { MessageBatch } from '@cloudflare/workers-types';
 import { handleActionApi, handleChatApi, handleMigrateChannels } from './routes/action-api';
 import { checkCronWorkflows } from './workflows/trigger';
 import { AgentWorkflow } from './workflows/agent-workflow';
+import { mcpAuthRejected } from './utils/auth';
 
 type HonoEnv = { Bindings: Env };
 
@@ -38,6 +38,8 @@ app.post('/api/migrate-channels', handleMigrateChannels);
 
 // MCP server
 app.on(['GET', 'POST', 'DELETE'], ['/mcp', '/mcp/*'], async (c) => {
+	// Auth gate — enforced only when MCP_AUTH_TOKEN is configured (header or ?token=).
+	if (mcpAuthRejected(c)) return c.json({ error: 'Unauthorized' }, 401);
 	return RSSReaderMCP.serve('/mcp', { binding: 'RSSReaderMCP' }).fetch(c.req.raw, c.env, c.executionCtx as any);
 });
 

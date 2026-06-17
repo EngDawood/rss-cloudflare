@@ -345,6 +345,114 @@ export async function markItemsRead(db: D1Database, ids: string[], read: boolean
 	await db.batch(stmts);
 }
 
+// ── MCP browse: per-consumer read cursor + subscription scoping ──────────────────
+// The MCP workspace keeps its OWN read state in `mcp_read` (migration 0010) so an
+// agent marking an item read never affects the Telegram cron's global `items.read`
+// cursor, and vice-versa (issue #32). MCP browse/search/get are also scoped to the
+// feeds in `mcp_subscriptions` (issue #33).
+
+/** Mark items read/unread for the MCP workspace only (writes to `mcp_read`). */
+export async function markMcpItemsRead(db: D1Database, ids: string[], read: boolean): Promise<void> {
+	if (ids.length === 0) return;
+	const now = Math.floor(Date.now() / 1000);
+	const stmts = ids.map(id =>
+		read
+			? db.prepare('INSERT INTO mcp_read (item_id, read_at) VALUES (?, ?) ON CONFLICT(item_id) DO NOTHING').bind(id, now)
+			: db.prepare('DELETE FROM mcp_read WHERE item_id = ?').bind(id),
+	);
+	await db.batch(stmts);
+}
+
+/**
+ * Effective MCP feed scope: subscribed feeds, optionally intersected with a
+ * caller-requested feedId / feedId[]. Returns [] when nothing matches (which
+ * callers treat as "no accessible items").
+ */
+async function resolveMcpFeedScope(db: D1Database, feedId?: string | string[]): Promise<string[]> {
+	const subscribed = await getMcpSubscribedFeedIds(db);
+	if (subscribed.length === 0) return [];
+	if (!feedId) return subscribed;
+	const requested = Array.isArray(feedId) ? feedId : [feedId];
+	return subscribed.filter(id => requested.includes(id));
+}
+
+export async function listNewItemsMcp(
+	db: D1Database,
+	opts?: { feedId?: string | string[]; limit?: number; query?: string; since?: number; unreadOnly?: boolean },
+): Promise<DbItemCompact[]> {
+	type Raw = Omit<DbItemCompact, 'topics'> & { topics: string };
+	const { feedId, limit = 50, query, since, unreadOnly = true } = opts ?? {};
+
+	const feedIds = await resolveMcpFeedScope(db, feedId);
+	if (feedIds.length === 0) return [];
+
+	const placeholders = feedIds.map(() => '?').join(',');
+	const where: string[] = [`i.feed_id IN (${placeholders})`];
+	const params: unknown[] = [...feedIds];
+	if (unreadOnly) where.push('mr.item_id IS NULL');
+	if (query) {
+		const like = `%${query}%`;
+		where.push('(i.title LIKE ? OR i.text LIKE ? OR i.author LIKE ?)');
+		params.push(like, like, like);
+	}
+	if (since) { where.push('i.timestamp >= ?'); params.push(since); }
+	params.push(limit);
+
+	const sql = `
+		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp,
+		       (CASE WHEN mr.item_id IS NOT NULL THEN 1 ELSE 0 END) as read,
+		       f.title as feed_title, f.source_value as feed_url
+		FROM items i
+		JOIN feeds f ON f.id = i.feed_id
+		LEFT JOIN mcp_read mr ON mr.item_id = i.id
+		WHERE ${where.join(' AND ')}
+		ORDER BY i.timestamp DESC LIMIT ?
+	`;
+	const result = await db.prepare(sql).bind(...params).all<Raw>();
+	return result.results.map(row => ({ ...row, topics: parseJsonSafe<string[]>(row.topics, []) }));
+}
+
+export async function searchItemsMcp(
+	db: D1Database,
+	opts: { query: string; feedId?: string | string[]; since?: number; unreadOnly?: boolean; limit?: number },
+): Promise<DbItemCompact[]> {
+	type Raw = Omit<DbItemCompact, 'topics'> & { topics: string };
+	const { query, feedId, since, unreadOnly = false, limit = 50 } = opts;
+
+	const feedIds = await resolveMcpFeedScope(db, feedId);
+	if (feedIds.length === 0) return [];
+
+	const like = `%${query}%`;
+	const placeholders = feedIds.map(() => '?').join(',');
+	const where: string[] = ['(i.title LIKE ? OR i.text LIKE ? OR i.author LIKE ?)', `i.feed_id IN (${placeholders})`];
+	const params: unknown[] = [like, like, like, ...feedIds];
+	if (unreadOnly) where.push('mr.item_id IS NULL');
+	if (since) { where.push('i.timestamp >= ?'); params.push(since); }
+	params.push(limit);
+
+	const sql = `
+		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp,
+		       (CASE WHEN mr.item_id IS NOT NULL THEN 1 ELSE 0 END) as read,
+		       f.title as feed_title, f.source_value as feed_url
+		FROM items i
+		JOIN feeds f ON f.id = i.feed_id
+		LEFT JOIN mcp_read mr ON mr.item_id = i.id
+		WHERE ${where.join(' AND ')}
+		ORDER BY i.timestamp DESC LIMIT ?
+	`;
+	const result = await db.prepare(sql).bind(...params).all<Raw>();
+	return result.results.map(row => ({ ...row, topics: parseJsonSafe<string[]>(row.topics, []) }));
+}
+
+/** Get a stored item by id, but only if its feed is within the MCP scope. */
+export async function getItemByIdMcp(db: D1Database, id: string): Promise<DbItem | null> {
+	const feedIds = await getMcpSubscribedFeedIds(db);
+	if (feedIds.length === 0) return null;
+	const placeholders = feedIds.map(() => '?').join(',');
+	return db.prepare(`SELECT * FROM items WHERE id = ? AND feed_id IN (${placeholders}) LIMIT 1`)
+		.bind(id, ...feedIds).first<DbItem>();
+}
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 export async function getConfig(db: D1Database, key: string): Promise<string | null> {
