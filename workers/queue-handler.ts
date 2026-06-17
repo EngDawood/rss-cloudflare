@@ -1,4 +1,3 @@
-import type { MessageBatch } from '@cloudflare/workers-types';
 import type { QueueTask, FetchTask, SendTask } from './types/queue';
 import { Bot, GrammyError } from 'grammy';
 import { sendMediaToChannel, addFailedPost } from './services/telegram-bot';

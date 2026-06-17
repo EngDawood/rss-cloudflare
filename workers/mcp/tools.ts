@@ -6,8 +6,9 @@ import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format'
 import { enrichFeedItems } from '../utils/media-enrichment';
 import {
 	getFeeds, getFeedById, getFeedByUrl, insertFeed, upsertFeedBySource, removeFeed, setFeedEnabled,
-	updateLastFetched, upsertItems, listNewItems, searchItems, getItemById,
-	markItemsRead, getConfig, setConfig, dbItemToFeedItem,
+	updateLastFetched, upsertItems, getItemById,
+	listNewItemsMcp, searchItemsMcp, getItemByIdMcp, markMcpItemsRead,
+	getConfig, setConfig, dbItemToFeedItem,
 	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
 	insertNote, listNotes, searchNotes, deleteNote,
 	listPostLog, recall,
@@ -169,7 +170,7 @@ export function registerTools(server: McpServer, env: Env): void {
 
 	server.tool(
 		'list_new_items',
-		'List unread items (compact). Filter by feedId, keyword query (title/text/author), or since (Unix timestamp).',
+		'List unread items (compact), scoped to MCP-subscribed feeds. Filter by feedId, keyword query (title/text/author), or since (Unix timestamp). Read state is MCP-specific.',
 		{
 			feedId: z.string().optional(),
 			query: z.string().optional(),
@@ -178,7 +179,7 @@ export function registerTools(server: McpServer, env: Env): void {
 		},
 		async ({ feedId, query, since, limit }) => {
 			try {
-				const items = await listNewItems(db, { feedId, query, since, limit });
+				const items = await listNewItemsMcp(db, { feedId, query, since, limit });
 				return ok(items);
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));
@@ -188,7 +189,7 @@ export function registerTools(server: McpServer, env: Env): void {
 
 	server.tool(
 		'search_items',
-		'Search all stored items (read + unread) by keyword across title, text, and author. Filter further by feedId, since (Unix timestamp), or unreadOnly.',
+		'Search stored items (read + unread) by keyword across title, text, and author, scoped to MCP-subscribed feeds. Filter further by feedId, since (Unix timestamp), or unreadOnly. Read state is MCP-specific.',
 		{
 			query: z.string().min(1),
 			feedId: z.string().optional(),
@@ -198,7 +199,7 @@ export function registerTools(server: McpServer, env: Env): void {
 		},
 		async ({ query, feedId, since, unreadOnly, limit }) => {
 			try {
-				const items = await searchItems(db, { query, feedId, since, unreadOnly, limit });
+				const items = await searchItemsMcp(db, { query, feedId, since, unreadOnly, limit });
 				return ok(items);
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));
@@ -212,9 +213,9 @@ export function registerTools(server: McpServer, env: Env): void {
 		{ id: z.string(), markRead: z.boolean().optional().default(false) },
 		async ({ id, markRead }) => {
 			try {
-				const row = await getItemById(db, id);
-				if (!row) return err(`Item ${id} not found`);
-				if (markRead) await markItemsRead(db, [id], true);
+				const row = await getItemByIdMcp(db, id);
+				if (!row) return err(`Item ${id} not found or not in MCP subscription scope`);
+				if (markRead) await markMcpItemsRead(db, [id], true);
 				return ok({
 					...row,
 					topics: JSON.parse(row.topics || '[]'),
@@ -232,7 +233,7 @@ export function registerTools(server: McpServer, env: Env): void {
 		{ ids: z.array(z.string()).min(1) },
 		async ({ ids }) => {
 			try {
-				await markItemsRead(db, ids, true);
+				await markMcpItemsRead(db, ids, true);
 				return ok({ marked: ids.length });
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));
@@ -246,7 +247,7 @@ export function registerTools(server: McpServer, env: Env): void {
 		{ ids: z.array(z.string()).min(1) },
 		async ({ ids }) => {
 			try {
-				await markItemsRead(db, ids, false);
+				await markMcpItemsRead(db, ids, false);
 				return ok({ marked: ids.length });
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));
