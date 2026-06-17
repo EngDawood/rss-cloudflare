@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import { Bot } from 'grammy';
 import { fetchFeed } from '../services/feed-fetcher';
+import { fetchForSource } from '../services/source-fetcher';
 import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format';
 import { enrichFeedItems } from '../utils/media-enrichment';
 import { summarizeItem } from '../services/ai-summarizer';
@@ -108,23 +109,32 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				return c.json({ data: normalized });
 			}
 			case 'add_feed': {
-				const { url, title, categoryId, subscribeToMcp = false } = params;
+				const { url, title, categoryId, subscribeToMcp = false, sourceType: rawType = 'rss' } = params;
 				if (!url) return c.json({ error: 'url parameter is required' }, 400);
-				const existing = await getFeedByUrl(db, url);
-				if (existing) return c.json({ data: { message: 'Feed already exists', feed: existing } });
 
-				const result = await fetchFeed(url, title);
-				const feedTitle = title || result.feedTitle || url;
-				const feed = await upsertFeedBySource(db, { sourceType: 'rss_url', sourceValue: url, title: feedTitle });
+				const typeMap: Record<string, SourceType> = {
+					'rss': 'rss_url', 'rss-bridge': 'rss_url',
+					'rsshub': 'rsshub_url',
+					'instagram': 'instagram_user',
+					'tiktok': 'tiktok_user',
+				};
+				const internalType: SourceType = typeMap[rawType] ?? 'rss_url';
+				const isUrlType = internalType === 'rss_url' || internalType === 'rsshub_url';
+				const sourceValue = isUrlType ? url.trim() : url.replace(/^@/, '').trim();
+
+				if (isUrlType) {
+					const existing = await getFeedByUrl(db, sourceValue);
+					if (existing) return c.json({ data: { message: 'Feed already exists', feed: existing } });
+				}
+
+				const result = await fetchForSource({ type: internalType, value: sourceValue } as any, c.env);
+				const feedTitle = title || result.feedTitle || sourceValue;
+				const feed = await upsertFeedBySource(db, { sourceType: internalType, sourceValue, title: feedTitle });
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
 
-				if (subscribeToMcp) {
-					await addMcpSubscription(db, feed.id, feedTitle);
-				}
-				if (categoryId) {
-					await addFeedToCategory(db, categoryId, feed.id);
-				}
+				if (subscribeToMcp) await addMcpSubscription(db, feed.id, feedTitle);
+				if (categoryId) await addFeedToCategory(db, categoryId, feed.id);
 
 				return c.json({ data: { feed, itemsInserted: inserted, errors: result.errors } });
 			}

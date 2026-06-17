@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowsClockwise, Plus, Eye, Trash } from '@phosphor-icons/react';
+import { ArrowsClockwise, Plus, Eye, Trash, X } from '@phosphor-icons/react';
 import { useApp } from '../../context/AppContext';
 import { Modal } from '../common/Modal';
 
@@ -26,10 +26,13 @@ export const FeedsTab: React.FC = () => {
 
   // Modal State
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
+  const [addFeedType, setAddFeedType] = useState<'rss' | 'rsshub' | 'rss-bridge' | 'instagram' | 'tiktok'>('rss');
   const [addFeedUrl, setAddFeedUrl] = useState('');
   const [addFeedTitle, setAddFeedTitle] = useState('');
   const [addFeedDestination, setAddFeedDestination] = useState<'mcp' | 'telegram' | 'both'>('mcp');
   const [addFeedCategoryId, setAddFeedCategoryId] = useState('');
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
 
   const springTransition = { type: 'spring', stiffness: 100, damping: 20 } as const;
 
@@ -39,6 +42,30 @@ export const FeedsTab: React.FC = () => {
     });
   };
 
+  const handleCreateCategoryInline = async () => {
+    if (!newCategoryName.trim()) return;
+    const res = await callApi('create_category', { name: newCategoryName.trim() });
+    if (res.error) {
+      showToast(res.error, 'error');
+    } else {
+      showToast(`Category "${newCategoryName.trim()}" created.`, 'success');
+      await loadFeeds(true);
+      setAddFeedCategoryId(res.data.id);
+      setIsCreatingCategory(false);
+      setNewCategoryName('');
+    }
+  };
+
+  const resetAddFeedModal = () => {
+    setAddFeedUrl('');
+    setAddFeedTitle('');
+    setAddFeedType('rss');
+    setAddFeedDestination('mcp');
+    setAddFeedCategoryId('');
+    setIsCreatingCategory(false);
+    setNewCategoryName('');
+  };
+
   const handleAddFeed = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsAddFeedOpen(false);
@@ -46,6 +73,7 @@ export const FeedsTab: React.FC = () => {
     const subscribeToMcp = addFeedDestination === 'mcp' || addFeedDestination === 'both';
     const res = await callApi('add_feed', {
       url: addFeedUrl,
+      sourceType: addFeedType,
       title: addFeedTitle,
       subscribeToMcp,
       categoryId: addFeedCategoryId || undefined,
@@ -56,10 +84,7 @@ export const FeedsTab: React.FC = () => {
       showToast(`Feed successfully added! Imported ${res.data.itemsInserted || 0} items.`, 'success');
       loadFeeds();
     }
-    setAddFeedUrl('');
-    setAddFeedTitle('');
-    setAddFeedDestination('mcp');
-    setAddFeedCategoryId('');
+    resetAddFeedModal();
   };
 
   const handleToggleFeed = async (feedId: string, currentStatus: number) => {
@@ -310,13 +335,13 @@ export const FeedsTab: React.FC = () => {
       {/* MODAL: Add Feed */}
       <Modal
         isOpen={isAddFeedOpen}
-        onClose={() => setIsAddFeedOpen(false)}
-        title="Register RSS Feed"
+        onClose={() => { setIsAddFeedOpen(false); resetAddFeedModal(); }}
+        title="Register Feed"
         footer={
           <>
             <button
               type="button"
-              onClick={() => setIsAddFeedOpen(false)}
+              onClick={() => { setIsAddFeedOpen(false); resetAddFeedModal(); }}
               className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer transition"
             >
               Cancel
@@ -331,17 +356,54 @@ export const FeedsTab: React.FC = () => {
           </>
         }
       >
+        {/* Source Type */}
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Source Type</label>
+          <div className="flex bg-bg-input border border-border-base rounded-xl p-1 gap-0.5 flex-wrap">
+            {([
+              { id: 'rss', label: 'RSS' },
+              { id: 'rsshub', label: 'RSSHub' },
+              { id: 'rss-bridge', label: 'RSS-Bridge' },
+              { id: 'instagram', label: 'Instagram' },
+              { id: 'tiktok', label: 'TikTok' },
+            ] as const).map(opt => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => { setAddFeedType(opt.id); setAddFeedUrl(''); }}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition duration-200 cursor-pointer min-w-[60px] ${
+                  addFeedType === opt.id
+                    ? 'bg-accent-primary text-white shadow-sm'
+                    : 'text-text-muted hover:text-text-base'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* URL or Username */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Feed Source URL</label>
+          <label className="text-xs font-bold text-text-muted uppercase tracking-wider">
+            {addFeedType === 'instagram' || addFeedType === 'tiktok' ? 'Username' : 'Feed Source URL'}
+          </label>
           <input
-            type="url"
+            type={addFeedType === 'instagram' || addFeedType === 'tiktok' ? 'text' : 'url'}
             value={addFeedUrl}
             onChange={e => setAddFeedUrl(e.target.value)}
-            placeholder="https://example.com/rss.xml"
+            placeholder={
+              addFeedType === 'rsshub' ? 'https://rsshub.app/twitter/user/username' :
+              addFeedType === 'rss-bridge' ? 'https://rss-bridge.instance.com/?action=display&bridge=...' :
+              addFeedType === 'instagram' ? 'username (without @)' :
+              addFeedType === 'tiktok' ? 'username (without @)' :
+              'https://example.com/feed.xml'
+            }
             className="bg-bg-input border border-border-base rounded-xl px-4 py-3.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono mt-1"
             required
           />
         </div>
+
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Friendly Title (Optional)</label>
           <input
@@ -380,19 +442,63 @@ export const FeedsTab: React.FC = () => {
             {addFeedDestination === 'both' && 'Feed will be available for both MCP agent browsing and Telegram posting.'}
           </p>
         </div>
-        {(addFeedDestination === 'mcp' || addFeedDestination === 'both') && categories.length > 0 && (
+
+        {/* Category — shown for MCP destinations, always available (even if empty) */}
+        {(addFeedDestination === 'mcp' || addFeedDestination === 'both') && (
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Category (Optional)</label>
-            <select
-              value={addFeedCategoryId}
-              onChange={e => setAddFeedCategoryId(e.target.value)}
-              className="bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary mt-1"
-            >
-              <option value="">No category</option>
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
+            {!isCreatingCategory ? (
+              <div className="flex items-center gap-2 mt-1">
+                {categories.length > 0 ? (
+                  <select
+                    value={addFeedCategoryId}
+                    onChange={e => setAddFeedCategoryId(e.target.value)}
+                    className="flex-1 bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary"
+                  >
+                    <option value="">No category</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="flex-1 text-xs text-text-muted italic py-3">No categories yet</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingCategory(true)}
+                  className="flex items-center gap-1 px-3 py-2.5 text-xs font-bold rounded-xl bg-bg-input border border-border-base text-text-muted hover:text-text-base transition cursor-pointer flex-shrink-0"
+                  title="Create new category"
+                >
+                  <Plus size={12} /> New
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={e => setNewCategoryName(e.target.value)}
+                  placeholder="Category name..."
+                  className="flex-1 bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary"
+                  autoFocus
+                  onKeyDown={e => e.key === 'Enter' && handleCreateCategoryInline()}
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateCategoryInline}
+                  className="px-3 py-2.5 text-xs font-bold rounded-xl bg-accent-primary text-white hover:bg-accent-primary-hover transition cursor-pointer flex-shrink-0"
+                >
+                  Create
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setIsCreatingCategory(false); setNewCategoryName(''); }}
+                  className="p-2.5 rounded-xl bg-bg-input border border-border-base text-text-muted hover:text-text-base transition cursor-pointer flex-shrink-0"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </Modal>
