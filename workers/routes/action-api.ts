@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import { Bot } from 'grammy';
 import { fetchFeed } from '../services/feed-fetcher';
+import { fetchForSource } from '../services/source-fetcher';
 import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format';
 import { enrichFeedItems } from '../utils/media-enrichment';
 import { summarizeItem } from '../services/ai-summarizer';
@@ -20,8 +21,11 @@ import {
 import { launchWorkflowRun } from '../workflows/trigger';
 import { resolveTarget, logAndSend } from '../services/post-service';
 import { requireApiAuth } from '../utils/auth';
-import { getChannelsList, getChannelConfig } from '../services/telegram-bot/storage/kv-operations';
+import { getChannelsList, getChannelConfig, getFailedPosts, clearFailedPosts } from '../services/telegram-bot/storage/kv-operations';
+import { cleanupOldData } from '../cron/cleanup';
+import { semanticSearchItems, semanticSearchNotes, embedNote } from '../services/embed';
 import type { TelegramMediaMessage, SourceType } from '../types/telegram';
+import type { DbNote } from '../db/d1';
 
 type HonoEnv = { Bindings: Env };
 
@@ -103,23 +107,32 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				return c.json({ data: normalized });
 			}
 			case 'add_feed': {
-				const { url, title, categoryId, subscribeToMcp = false } = params;
+				const { url, title, categoryId, subscribeToMcp = false, sourceType: rawType = 'rss' } = params;
 				if (!url) return c.json({ error: 'url parameter is required' }, 400);
-				const existing = await getFeedByUrl(db, url);
-				if (existing) return c.json({ data: { message: 'Feed already exists', feed: existing } });
 
-				const result = await fetchFeed(url, title);
-				const feedTitle = title || result.feedTitle || url;
-				const feed = await upsertFeedBySource(db, { sourceType: 'rss_url', sourceValue: url, title: feedTitle });
+				const typeMap: Record<string, SourceType> = {
+					'rss': 'rss_url', 'rss-bridge': 'rss_url',
+					'rsshub': 'rsshub_url',
+					'instagram': 'instagram_user',
+					'tiktok': 'tiktok_user',
+				};
+				const internalType: SourceType = typeMap[rawType] ?? 'rss_url';
+				const isUrlType = internalType === 'rss_url' || internalType === 'rsshub_url';
+				const sourceValue = isUrlType ? url.trim() : url.replace(/^@/, '').trim();
+
+				if (isUrlType) {
+					const existing = await getFeedByUrl(db, sourceValue);
+					if (existing) return c.json({ data: { message: 'Feed already exists', feed: existing } });
+				}
+
+				const result = await fetchForSource({ type: internalType, value: sourceValue } as any, c.env);
+				const feedTitle = title || result.feedTitle || sourceValue;
+				const feed = await upsertFeedBySource(db, { sourceType: internalType, sourceValue, title: feedTitle });
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
 
-				if (subscribeToMcp) {
-					await addMcpSubscription(db, feed.id, feedTitle);
-				}
-				if (categoryId) {
-					await addFeedToCategory(db, categoryId, feed.id);
-				}
+				if (subscribeToMcp) await addMcpSubscription(db, feed.id, feedTitle);
+				if (categoryId) await addFeedToCategory(db, categoryId, feed.id);
 
 				return c.json({ data: { feed, itemsInserted: inserted, errors: result.errors } });
 			}
@@ -319,6 +332,8 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				const { content, tags, refItemId, refChat } = params;
 				if (!content) return c.json({ error: 'content is required' }, 400);
 				const note = await insertNote(db, { content, tags, refItemId, refChat });
+				// Embed the note for semantic search (non-fatal if Vectorize not configured).
+				await embedNote(c.env, note.id, content);
 				return c.json({ data: { ...note, tags: JSON.parse(note.tags) } });
 			}
 			case 'list_notes': {
@@ -639,6 +654,61 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 			}
 			case 'list_models': {
 				return c.json({ data: MODEL_SUGGESTIONS });
+			}
+
+			// ── Reliability: retry failed posts ────────────────────────────────────────
+			case 'retry_failed_posts': {
+				const { channelId } = params;
+				if (!channelId) return c.json({ error: 'channelId is required' }, 400);
+				const posts = await getFailedPosts(c.env.CACHE, channelId);
+				if (posts.length === 0) return c.json({ data: { queued: 0, message: 'No failed posts' } });
+				let queued = 0;
+				for (const item of posts) {
+					try {
+						await c.env.TELEGRAM_SEND_QUEUE.send({
+							type: 'send', channelId, item, settings: resolveFormatSettings(),
+						});
+						queued++;
+					} catch (err) {
+						console.error('[API] Failed to queue retry for item', item.id, err);
+					}
+				}
+				await clearFailedPosts(c.env.CACHE, channelId);
+				return c.json({ data: { queued } });
+			}
+
+			// ── Reliability: data-retention cleanup ────────────────────────────────────
+			case 'cleanup_data': {
+				const result = await cleanupOldData(c.env);
+				return c.json({ data: result });
+			}
+
+			// ── Semantic search (Vectorize) ────────────────────────────────────────────
+			case 'semantic_search_items': {
+				const { query, feedId, limit = 20 } = params;
+				if (!query) return c.json({ error: 'query is required' }, 400);
+				const ids = await semanticSearchItems(c.env, query, { limit, feedId });
+				if (ids.length > 0) {
+					const items = await listNewItems(db, { feedId: ids, limit, unreadOnly: false });
+					return c.json({ data: { items, source: 'vectorize' } });
+				}
+				// Vectorize not configured or no matches — fall back to LIKE search.
+				const items = await searchItems(db, { query, feedId, limit });
+				return c.json({ data: { items, source: 'keyword' } });
+			}
+			case 'semantic_search_notes': {
+				const { query, limit = 20 } = params;
+				if (!query) return c.json({ error: 'query is required' }, 400);
+				const ids = await semanticSearchNotes(c.env, query, limit);
+				if (ids.length > 0) {
+					const rows = (await Promise.all(
+						ids.map(id => db.prepare('SELECT * FROM notes WHERE id = ?').bind(id).first<DbNote>()),
+					)).filter(Boolean) as DbNote[];
+					return c.json({ data: { notes: rows, source: 'vectorize' } });
+				}
+				// Fallback to keyword search.
+				const notes = await searchNotes(db, query, limit);
+				return c.json({ data: { notes, source: 'keyword' } });
 			}
 
 			default:

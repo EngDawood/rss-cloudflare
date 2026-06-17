@@ -14,6 +14,10 @@ export interface DbFeed {
 	created_at: number;
 	ai_summary: string;   // 'inherit' | 'enable' | 'disable'
 	url: string;          // back-compat alias of source_value (SELECT-aliased)
+	// Health tracking (migration 0010)
+	last_error: string | null;
+	last_success_at: number | null;
+	consecutive_failures: number;
 }
 
 export interface DbFeedWithCounts extends DbFeed {
@@ -138,6 +142,7 @@ export async function upsertFeedBySource(
 		id, source_type: opts.sourceType, source_value: opts.sourceValue, title: opts.title ?? '',
 		enabled: 1, check_interval_minutes: interval, last_fetched_at: null, created_at: now,
 		ai_summary: 'inherit', url: opts.sourceValue,
+		last_error: null, last_success_at: null, consecutive_failures: 0,
 	};
 }
 
@@ -158,6 +163,29 @@ export async function setFeedEnabled(db: D1Database, feedId: string, enabled: bo
 export async function updateLastFetched(db: D1Database, feedId: string): Promise<void> {
 	const now = Math.floor(Date.now() / 1000);
 	await db.prepare('UPDATE feeds SET last_fetched_at = ? WHERE id = ?').bind(now, feedId).run();
+}
+
+/** On successful fetch: update timestamps and reset failure counter. */
+export async function recordFeedFetchSuccess(db: D1Database, feedId: string): Promise<void> {
+	const now = Math.floor(Date.now() / 1000);
+	await db.prepare(
+		'UPDATE feeds SET last_fetched_at = ?, last_success_at = ?, consecutive_failures = 0, last_error = NULL WHERE id = ?',
+	).bind(now, now, feedId).run();
+}
+
+/** On failed fetch: increment failure counter and record the error. */
+export async function recordFeedFetchFailure(db: D1Database, feedId: string, error: string): Promise<void> {
+	const now = Math.floor(Date.now() / 1000);
+	await db.prepare(
+		'UPDATE feeds SET last_fetched_at = ?, consecutive_failures = consecutive_failures + 1, last_error = ? WHERE id = ?',
+	).bind(now, error.slice(0, 500), feedId).run();
+}
+
+/** Return the current consecutive_failures count for a feed. */
+export async function getFeedConsecutiveFailures(db: D1Database, feedId: string): Promise<number> {
+	const row = await db.prepare('SELECT consecutive_failures FROM feeds WHERE id = ?')
+		.bind(feedId).first<{ consecutive_failures: number }>();
+	return row?.consecutive_failures ?? 0;
 }
 
 // ── Item upsert ───────────────────────────────────────────────────────────────

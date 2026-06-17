@@ -23,6 +23,12 @@ export const McpTab: React.FC = () => {
   const [addFeedToCatId, setAddFeedToCatId] = useState<string | null>(null);
   const [addFeedToCatFeedId, setAddFeedToCatFeedId] = useState('');
 
+  // Subscribe modal (subscribe + optional category in one step)
+  const [subscribeTargetFeed, setSubscribeTargetFeed] = useState<any | null>(null);
+  const [subscribeCatId, setSubscribeCatId] = useState('');
+  const [isCreatingSubCat, setIsCreatingSubCat] = useState(false);
+  const [newSubCatName, setNewSubCatName] = useState('');
+
   const springTransition = { type: 'spring', stiffness: 100, damping: 20 } as const;
 
   const callApiRef = useRef(callApi);
@@ -115,6 +121,43 @@ export const McpTab: React.FC = () => {
       showToast(isSubscribed ? 'Removed from MCP workspace.' : 'Added to MCP workspace.', 'success');
       loadMcpSubs();
     }
+  };
+
+  const resetSubscribeModal = () => {
+    setSubscribeTargetFeed(null);
+    setSubscribeCatId('');
+    setIsCreatingSubCat(false);
+    setNewSubCatName('');
+  };
+
+  const handleSubscribeWithCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subscribeTargetFeed) return;
+    const feedId = subscribeTargetFeed.id;
+
+    const res = await callApi('add_mcp_subscription', { feedId });
+    if (res.error) { showToast(res.error, 'error'); return; }
+
+    let finalCatId = subscribeCatId;
+    if (isCreatingSubCat && newSubCatName.trim()) {
+      const catRes = await callApi('create_category', { name: newSubCatName.trim() });
+      if (catRes.error) {
+        showToast(catRes.error, 'error');
+      } else {
+        finalCatId = catRes.data.id;
+        showToast(`Category "${newSubCatName.trim()}" created.`, 'success');
+        loadFeeds(true);
+      }
+    }
+
+    if (finalCatId) {
+      await callApi('add_feed_to_category', { categoryId: finalCatId, feedId });
+    }
+
+    showToast('Added to MCP workspace.', 'success');
+    resetSubscribeModal();
+    loadMcpSubs();
+    if (finalCatId) loadFeeds(true);
   };
 
   const subscribedFeedIds = new Set(mcpSubs.map((s: any) => s.feed_id));
@@ -294,7 +337,10 @@ export const McpTab: React.FC = () => {
                 </div>
                 <motion.button
                   whileTap={{ scale: 0.92 }}
-                  onClick={() => handleToggleMcpSub(feed.id, subscribed)}
+                  onClick={() => subscribed
+                    ? handleToggleMcpSub(feed.id, true)
+                    : setSubscribeTargetFeed(feed)
+                  }
                   className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition duration-200 cursor-pointer ${
                     subscribed
                       ? 'bg-accent-primary/10 text-accent-primary border border-accent-primary/20 hover:bg-rose-950/20 hover:text-rose-400 hover:border-rose-900/20'
@@ -351,6 +397,89 @@ export const McpTab: React.FC = () => {
             onKeyDown={e => e.key === 'Enter' && handleCreateCategory(e as any)}
           />
         </div>
+      </Modal>
+
+      {/* MODAL: Subscribe to MCP + assign category */}
+      <Modal
+        isOpen={!!subscribeTargetFeed}
+        onClose={resetSubscribeModal}
+        title="Subscribe to MCP Workspace"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={resetSubscribeModal}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              onClick={handleSubscribeWithCategory}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-accent-primary text-white hover:bg-accent-primary-hover cursor-pointer transition"
+            >
+              Subscribe
+            </button>
+          </>
+        }
+      >
+        {subscribeTargetFeed && (
+          <div className="flex flex-col gap-4">
+            <div className="p-3 rounded-xl bg-bg-input border border-border-base">
+              <p className="font-bold text-sm text-text-base truncate">{subscribeTargetFeed.title}</p>
+              <p className="text-[10px] text-text-muted font-mono truncate mt-0.5">{subscribeTargetFeed.url}</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Category (Optional)</label>
+              {!isCreatingSubCat ? (
+                <div className="flex items-center gap-2 mt-1">
+                  {categories.length > 0 ? (
+                    <select
+                      value={subscribeCatId}
+                      onChange={e => setSubscribeCatId(e.target.value)}
+                      className="flex-1 bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary"
+                    >
+                      <option value="">No category</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="flex-1 text-xs text-text-muted italic py-3">No categories yet</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingSubCat(true)}
+                    className="flex items-center gap-1 px-3 py-2.5 text-xs font-bold rounded-xl bg-bg-input border border-border-base text-text-muted hover:text-text-base transition cursor-pointer flex-shrink-0"
+                    title="Create new category"
+                  >
+                    <Plus size={12} /> New
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="text"
+                    value={newSubCatName}
+                    onChange={e => setNewSubCatName(e.target.value)}
+                    placeholder="Category name..."
+                    className="flex-1 bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary"
+                    autoFocus
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); } }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setIsCreatingSubCat(false); setNewSubCatName(''); }}
+                    className="p-2.5 rounded-xl bg-bg-input border border-border-base text-text-muted hover:text-text-base transition cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+              <p className="text-[10px] text-text-muted">Assign to a category to organize your MCP workspace.</p>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* MODAL: Add Feed to Category */}

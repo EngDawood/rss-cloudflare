@@ -4,11 +4,9 @@
 	"main": "workers/index.ts",
 	"compatibility_date": "2026-02-10",
 	"workers_dev": true,
-
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
-	
 	"observability": {
 		"enabled": true,
 		"head_sampling_rate": 1,
@@ -24,7 +22,6 @@
 			"head_sampling_rate": 1
 		}
 	},
-	
 	// KV namespace for caching (create with: npx wrangler kv namespace create CACHE)
 	"kv_namespaces": [
 		{
@@ -77,9 +74,7 @@
 			"class_name": "AgentWorkflow"
 		}
 	],
-	
 	"routes": [
-		
 		{
 			"pattern": "rss.feed.engdawood.com",
 			"custom_domain": true
@@ -89,12 +84,26 @@
 		"directory": "./app/dist",
 		"binding": "ASSETS"
 	},
-	// Cron trigger: check feeds every 5 minutes
+	// Cron triggers: every 5 min (feed checks) + daily 03:00 UTC (data cleanup)
 	"triggers": {
 		"crons": [
-			"*/5 * * * *"
+			"*/5 * * * *",
+			"0 3 * * *"
 		]
 	},
+	// Workers AI — used for embeddings (@cf/baai/bge-m3, multilingual including Arabic)
+	// Run `npm run cf-typegen` after adding this to regenerate Env types.
+	"ai": {
+		"binding": "AI"
+	},
+	// Vectorize index for semantic search over items + notes.
+	"vectorize": [
+		{
+			"binding": "VECTORIZE",
+			"index_name": "rss-items",
+			"remote": true
+		}
+	],
 	"queues": {
 		"producers": [
 			{
