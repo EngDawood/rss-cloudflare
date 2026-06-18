@@ -192,3 +192,4 @@ scripts/restore_app.py
 /app/node_modules/
 .antigravity/plans/*
 backup_temp/App_original_13-06-2026_225837.tsx
+checklist.md
