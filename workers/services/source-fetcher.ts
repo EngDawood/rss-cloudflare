@@ -189,6 +189,13 @@ function buildRSSBridgeUserUrl(instance: string, username: string): string {
 }
 
 /**
+ * Build the RSS-Bridge URL for an Instagram username via ImgsedBridge.
+ */
+function buildImgsedUserUrl(instance: string, username: string): string {
+	return `${instance}/?action=display&bridge=ImgsedBridge&context=Username&u=${encodeURIComponent(username)}&post=on&format=Atom`;
+}
+
+/**
  * Build the RSS-Bridge URL for an Instagram hashtag.
  */
 function buildRSSBridgeTagUrl(instance: string, hashtag: string): string {
@@ -201,7 +208,7 @@ function buildRSSBridgeTagUrl(instance: string, hashtag: string): string {
  */
 export async function fetchInstagramUser(username: string, env?: Env): Promise<FetchResult> {
 	const instances = await getConfiguredInstances(env, 'instagram');
-	return fetchFromRSSBridgeInstances(
+	const result = await fetchFromRSSBridgeInstances(
 		(instance) => RSSHUB_INSTANCES.includes(instance)
 			? buildRSSHubPostUrl(instance, username)
 			: buildRSSBridgeUserUrl(instance, username),
@@ -209,6 +216,31 @@ export async function fetchInstagramUser(username: string, env?: Env): Promise<F
 		instances,
 		env
 	);
+
+	if (result.items.length > 0) {
+		return result;
+	}
+
+	// Fallback: Try RSS-Bridge instances using ImgsedBridge
+	console.log(`[Instagram] Primary methods failed for ${username}, trying ImgsedBridge fallback...`);
+	const rssBridgeOnlyInstances = instances.filter(i => !RSSHUB_INSTANCES.includes(i));
+	
+	const fallbackResult = await fetchFromRSSBridgeInstances(
+		(instance) => buildImgsedUserUrl(instance, username),
+		`${username} (ImgsedBridge)`,
+		rssBridgeOnlyInstances,
+		env
+	);
+
+	if (fallbackResult.items.length > 0) {
+		return fallbackResult;
+	}
+
+	// If fallback also fails, return combined errors
+	return {
+		...fallbackResult,
+		errors: [...result.errors, ...fallbackResult.errors]
+	};
 }
 
 /**
