@@ -67,4 +67,23 @@ describe('feed-fetcher parser fallback id', () => {
 		const item = result.items[0];
 		expect(item.id).toBe('specific-guid-123');
 	});
+
+	it('should normalize Imgsed link to standard Instagram link', () => {
+		const mockAtomXml = `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test Feed</title>
+  <link rel="alternate" href="https://imgsed.com/claudeai/"/>
+  <entry>
+    <title>Post - claudeai - Post Title</title>
+    <link rel="alternate" href="https://imgsed.com/p/DVjsHcAEldb/"/>
+    <content type="html">Setting up Claude doesn’t mean starting from scratch.</content>
+    <author><name>claudeai</name></author>
+  </entry>
+</feed>`;
+
+		const result = parseXML(mockAtomXml);
+		expect(result.feedLink).toBe('https://www.instagram.com/claudeai/');
+		expect(result.items.length).toBe(1);
+		expect(result.items[0].link).toBe('https://www.instagram.com/p/DVjsHcAEldb/');
+	});
 });
