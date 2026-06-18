@@ -6,7 +6,7 @@ import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format'
 import { sendMediaToChannel } from '../services/telegram-bot/handlers/send-media';
 import { getAdminConfig } from '../services/telegram-bot/storage/kv-operations';
 import { enrichFeedItems } from '../utils/media-enrichment';
-import { getFoloChannelIds, getChannelConfigFromD1, upsertFeedBySource, upsertItems, addMcpSubscription } from '../db/d1';
+import { getFoloChannelIds, getChannelConfigFromD1, upsertFeedBySource, upsertItems, addMcpSubscription, listCategories, createCategory, addFeedToCategory } from '../db/d1';
 
 type HonoEnv = { Bindings: Env };
 
@@ -138,6 +138,12 @@ export async function handleFoloWebhook(c: Context<HonoEnv>): Promise<Response> 
 		});
 		await upsertItems(env.DB, dbFeed.id, [feedItem]);
 		await addMcpSubscription(env.DB, dbFeed.id, feedTitle);
+
+		// Group under a "Folo" category so Feed Reader and MCP can filter by it
+		const categories = await listCategories(env.DB);
+		let foloCategory = categories.find(c => c.name === 'Folo');
+		if (!foloCategory) foloCategory = await createCategory(env.DB, 'Folo');
+		await addFeedToCategory(env.DB, foloCategory.id, dbFeed.id);
 	} catch (err) {
 		console.warn('[folo] Failed to persist item to D1:', err);
 	}
