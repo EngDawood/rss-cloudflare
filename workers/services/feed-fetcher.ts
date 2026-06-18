@@ -56,8 +56,13 @@ export async function fetchFeed(
 
 		const xml = await response.text();
 
-		// Detect RSS-Bridge error pages (cURL timeouts, PHP exceptions, etc.)
-		if (xml.includes('HttpException') || xml.includes('cURL error')) {
+		// Detect RSS-Bridge error pages/feeds — cURL failures, PHP exceptions, "Bridge returned error N"
+		if (
+			xml.includes('HttpException') ||
+			xml.includes('cURL error') ||
+			xml.includes('Bridge returned error') ||
+			xml.includes('returnServerError')
+		) {
 			const snippet = xml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
 			return {
 				items: [],

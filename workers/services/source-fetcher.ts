@@ -36,10 +36,11 @@ export const RSSHUB_INSTANCES = [
  * Load instance list from D1 config (keys: instances_rssbridge / instances_tiktok / instances_rsshub).
  * Falls back to the hardcoded constants so the InstancesTab changes are actually honoured by the fetcher.
  */
-async function getConfiguredInstances(env: Env | undefined, type: 'rssbridge' | 'tiktok' | 'rsshub'): Promise<string[]> {
+async function getConfiguredInstances(env: Env | undefined, type: 'rssbridge' | 'tiktok' | 'rsshub' | 'instagram'): Promise<string[]> {
 	const defaults =
 		type === 'rsshub' ? RSSHUB_INSTANCES :
 		type === 'tiktok' ? RSS_BRIDGE_TIKTOK_INSTANCES :
+		type === 'instagram' ? [...RSS_BRIDGE_INSTANCES, ...RSSHUB_INSTANCES] :
 		RSS_BRIDGE_INSTANCES;
 	if (!env?.DB) return defaults;
 	try {
@@ -195,12 +196,15 @@ function buildRSSBridgeTagUrl(instance: string, hashtag: string): string {
 }
 
 /**
- * Fetch Instagram user feed via RSS-Bridge instances, with failover.
+ * Fetch Instagram user feed via the dedicated instagram instance list (RSS-Bridge + RSSHub combined).
+ * Per-instance URL format is chosen based on whether the instance is a known RSSHub host.
  */
 export async function fetchInstagramUser(username: string, env?: Env): Promise<FetchResult> {
-	const instances = await getConfiguredInstances(env, 'rssbridge');
+	const instances = await getConfiguredInstances(env, 'instagram');
 	return fetchFromRSSBridgeInstances(
-		(instance) => buildRSSBridgeUserUrl(instance, username),
+		(instance) => RSSHUB_INSTANCES.includes(instance)
+			? buildRSSHubPostUrl(instance, username)
+			: buildRSSBridgeUserUrl(instance, username),
 		username,
 		instances,
 		env
@@ -208,10 +212,12 @@ export async function fetchInstagramUser(username: string, env?: Env): Promise<F
 }
 
 /**
- * Fetch Instagram hashtag feed via RSS-Bridge instances, with failover.
+ * Fetch Instagram hashtag feed via the dedicated instagram instance list (RSS-Bridge only —
+ * RSSHub picnob.info does not expose a hashtag route).
  */
 export async function fetchInstagramTag(hashtag: string, env?: Env): Promise<FetchResult> {
-	const instances = await getConfiguredInstances(env, 'rssbridge');
+	const instances = (await getConfiguredInstances(env, 'instagram'))
+		.filter(i => !RSSHUB_INSTANCES.includes(i));
 	return fetchFromRSSBridgeInstances(
 		(instance) => buildRSSBridgeTagUrl(instance, hashtag),
 		`#${hashtag}`,
