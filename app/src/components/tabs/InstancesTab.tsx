@@ -12,11 +12,12 @@ interface TestResult {
 
 export const InstancesTab: React.FC = () => {
   const { callApi, showToast } = useApp();
-  const [instances, setInstances] = useState<{ rssbridge: string[]; tiktok: string[]; rsshub: string[] }>({ rssbridge: [], tiktok: [], rsshub: [] });
-  const [isBenchmarking, setIsBenchmarking] = useState<Record<string, boolean>>({ rssbridge: false, tiktok: false, rsshub: false });
-  const [isTesting, setIsTesting] = useState<Record<string, boolean>>({ rssbridge: false, tiktok: false, rsshub: false });
-  const [testResults, setTestResults] = useState<Record<string, TestResult | null>>({ rssbridge: null, tiktok: null, rsshub: null });
-  const [newInstanceInputs, setNewInstanceInputs] = useState<Record<string, string>>({ rssbridge: '', tiktok: '', rsshub: '' });
+  type InstanceType = 'instagram' | 'rssbridge' | 'tiktok' | 'rsshub';
+  const [instances, setInstances] = useState<Record<InstanceType, string[]>>({ instagram: [], rssbridge: [], tiktok: [], rsshub: [] });
+  const [isBenchmarking, setIsBenchmarking] = useState<Record<string, boolean>>({ instagram: false, rssbridge: false, tiktok: false, rsshub: false });
+  const [isTesting, setIsTesting] = useState<Record<string, boolean>>({ instagram: false, rssbridge: false, tiktok: false, rsshub: false });
+  const [testResults, setTestResults] = useState<Record<string, TestResult | null>>({ instagram: null, rssbridge: null, tiktok: null, rsshub: null });
+  const [newInstanceInputs, setNewInstanceInputs] = useState<Record<string, string>>({ instagram: '', rssbridge: '', tiktok: '', rsshub: '' });
 
   const callApiRef = useRef(callApi);
   callApiRef.current = callApi;
@@ -31,13 +32,13 @@ export const InstancesTab: React.FC = () => {
     loadInstances();
   }, [loadInstances]);
 
-  const handleSaveInstances = async (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
+  const handleSaveInstances = async (type: InstanceType) => {
     const res = await callApi('set_instances', { type, instances: instances[type] });
     if (res.error) showToast(`Failed to save: ${res.error}`, 'error');
     else showToast(`${type} instances saved (${instances[type].length} entries)`, 'success');
   };
 
-  const handleRunBenchmark = async (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
+  const handleRunBenchmark = async (type: InstanceType) => {
     setIsBenchmarking(prev => ({ ...prev, [type]: true }));
     showToast(`Benchmarking ${type} instances…`, 'info');
     const res = await callApi('run_benchmark', { type });
@@ -46,7 +47,7 @@ export const InstancesTab: React.FC = () => {
     setIsBenchmarking(prev => ({ ...prev, [type]: false }));
   };
 
-  const handleTestInstance = async (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
+  const handleTestInstance = async (type: InstanceType) => {
     const url = newInstanceInputs[type].trim();
     if (!url) return;
     setIsTesting(prev => ({ ...prev, [type]: true }));
@@ -57,7 +58,7 @@ export const InstancesTab: React.FC = () => {
     setIsTesting(prev => ({ ...prev, [type]: false }));
   };
 
-  const moveInstance = (type: 'rssbridge' | 'tiktok' | 'rsshub', index: number, dir: -1 | 1) => {
+  const moveInstance = (type: InstanceType, index: number, dir: -1 | 1) => {
     const list = [...instances[type]];
     const target = index + dir;
     if (target < 0 || target >= list.length) return;
@@ -65,22 +66,22 @@ export const InstancesTab: React.FC = () => {
     setInstances(prev => ({ ...prev, [type]: list }));
   };
 
-  const removeInstance = (type: 'rssbridge' | 'tiktok' | 'rsshub', index: number) => {
+  const removeInstance = (type: InstanceType, index: number) => {
     setInstances(prev => ({ ...prev, [type]: prev[type].filter((_, i) => i !== index) }));
   };
 
-  const addInstance = (type: 'rssbridge' | 'tiktok' | 'rsshub') => {
+  const addInstance = (type: InstanceType) => {
     const url = newInstanceInputs[type].trim().replace(/\/$/, '');
     if (!url || instances[type].includes(url)) return;
     setInstances(prev => ({ ...prev, [type]: [...prev[type], url] }));
     setNewInstanceInputs(prev => ({ ...prev, [type]: '' }));
   };
 
-
-  const instanceTypes = [
-    { key: 'rssbridge' as const, label: 'RSS-Bridge', color: 'blue' },
-    { key: 'tiktok' as const, label: 'TikTok-Specific', color: 'rose' },
-    { key: 'rsshub' as const, label: 'RSSHub', color: 'emerald' },
+  const instanceTypes: { key: InstanceType; label: string; color: string; description: string }[] = [
+    { key: 'instagram', label: 'Instagram', color: 'orange', description: 'Used for instagram_user and instagram_tag feeds — RSS-Bridge (InstagramBridge) + RSSHub (picnob.info) mixed.' },
+    { key: 'rssbridge', label: 'RSS-Bridge (General)', color: 'blue', description: 'Fallback pool for rss_url feeds that come from an RSS-Bridge instance.' },
+    { key: 'tiktok', label: 'TikTok', color: 'rose', description: 'Used for tiktok_user feeds — RSS-Bridge instances with TikTokBridge enabled.' },
+    { key: 'rsshub', label: 'RSSHub', color: 'emerald', description: 'Used for instagram_story and rsshub_url feeds.' },
   ];
 
   return (
@@ -97,16 +98,20 @@ export const InstancesTab: React.FC = () => {
       </div>
 
       <div className="flex flex-col gap-4">
-        {instanceTypes.map(({ key, label, color }) => (
+        {instanceTypes.map(({ key, label, color, description }) => (
           <div key={key} className="liquid-glass p-5 rounded-2xl flex flex-col gap-4">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted">{label}</h3>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  color === 'blue' ? 'bg-blue-500/10 text-blue-400' :
-                  color === 'rose' ? 'bg-rose-500/10 text-rose-400' :
-                  'bg-emerald-500/10 text-emerald-400'
-                }`}>{instances[key]?.length || 0}</span>
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted">{label}</h3>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    color === 'orange' ? 'bg-orange-500/10 text-orange-400' :
+                    color === 'blue' ? 'bg-blue-500/10 text-blue-400' :
+                    color === 'rose' ? 'bg-rose-500/10 text-rose-400' :
+                    'bg-emerald-500/10 text-emerald-400'
+                  }`}>{instances[key]?.length || 0}</span>
+                </div>
+                <p className="text-[10px] text-text-muted">{description}</p>
               </div>
               <motion.button
                 whileTap={{ scale: 0.97 }}

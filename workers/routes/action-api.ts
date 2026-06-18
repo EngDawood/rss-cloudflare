@@ -448,48 +448,52 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 			}
 
 			case 'get_instances': {
-				const [rb, tiktok, rsshub] = await Promise.all([
+				const [rb, tiktok, rsshub, instagram] = await Promise.all([
 					getConfig(db, 'instances_rssbridge'),
 					getConfig(db, 'instances_tiktok'),
 					getConfig(db, 'instances_rsshub'),
+					getConfig(db, 'instances_instagram'),
 				]);
 				const { FULL_RSS_BRIDGE_INSTANCES, RSS_BRIDGE_TIKTOK_INSTANCES, RSSHUB_INSTANCES } = await import('./test-bridges');
 				return c.json({ data: {
 					rssbridge: rb ? JSON.parse(rb) : FULL_RSS_BRIDGE_INSTANCES,
 					tiktok: tiktok ? JSON.parse(tiktok) : RSS_BRIDGE_TIKTOK_INSTANCES,
 					rsshub: rsshub ? JSON.parse(rsshub) : RSSHUB_INSTANCES,
+					instagram: instagram ? JSON.parse(instagram) : [...FULL_RSS_BRIDGE_INSTANCES, ...RSSHUB_INSTANCES],
 				}});
 			}
 
 			case 'set_instances': {
 				const { type, instances: list } = params;
 				if (!type || !Array.isArray(list)) return c.json({ error: 'type and instances[] are required' }, 400);
-				if (!['rssbridge', 'tiktok', 'rsshub'].includes(type)) return c.json({ error: 'type must be rssbridge | tiktok | rsshub' }, 400);
+				if (!['rssbridge', 'tiktok', 'rsshub', 'instagram'].includes(type)) return c.json({ error: 'type must be rssbridge | tiktok | rsshub | instagram' }, 400);
 				await setConfig(db, `instances_${type}`, JSON.stringify(list));
 				return c.json({ data: { saved: list.length } });
 			}
 
 			case 'run_benchmark': {
 				const { type } = params;
-				if (!type || !['rssbridge', 'tiktok', 'rsshub'].includes(type)) return c.json({ error: 'type must be rssbridge | tiktok | rsshub' }, 400);
+				if (!type || !['rssbridge', 'tiktok', 'rsshub', 'instagram'].includes(type)) return c.json({ error: 'type must be rssbridge | tiktok | rsshub | instagram' }, 400);
 				const { runBridgeBenchmark, FULL_RSS_BRIDGE_INSTANCES, RSS_BRIDGE_TIKTOK_INSTANCES, RSSHUB_INSTANCES } = await import('./test-bridges');
 				const savedRaw = await getConfig(db, `instances_${type}`);
 				const instanceList: string[] = savedRaw ? JSON.parse(savedRaw) :
 					type === 'rsshub' ? RSSHUB_INSTANCES :
 					type === 'tiktok' ? RSS_BRIDGE_TIKTOK_INSTANCES :
+					type === 'instagram' ? [...FULL_RSS_BRIDGE_INSTANCES, ...RSSHUB_INSTANCES] :
 					FULL_RSS_BRIDGE_INSTANCES;
-				const platform = type === 'rsshub' ? 'instagram' : type === 'tiktok' ? 'tiktok' : 'instagram';
+				const platform = type === 'tiktok' ? 'tiktok' : 'instagram';
 				const { results } = await runBridgeBenchmark(c.env, {
-					username: 'baharadawna',
+					username: 'claudeai',
 					platform,
-					instancesType: type === 'rsshub' ? 'rsshub' : 'rssbridge',
+					instancesType: type === 'rsshub' ? 'rsshub' : type === 'instagram' ? 'all' : 'rssbridge',
 					useCache: false,
 					overrideInstances: instanceList,
 				});
-				// Re-rank: successful first, then by items desc, then speed asc
+				// Re-rank: Success first, then Empty, then all errors; ties broken by items desc then speed asc
+				const statusRank = (s: string) => s === 'Success' ? 0 : s === 'Empty' ? 1 : 2;
 				results.sort((a, b) => {
-					if (a.status === 'Success' && b.status !== 'Success') return -1;
-					if (a.status !== 'Success' && b.status === 'Success') return 1;
+					const ra = statusRank(a.status), rb = statusRank(b.status);
+					if (ra !== rb) return ra - rb;
 					if (b.items !== a.items) return b.items - a.items;
 					return a.durationMs - b.durationMs;
 				});

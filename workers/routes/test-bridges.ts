@@ -169,9 +169,21 @@ export async function runBridgeBenchmark(
 
 			if (response.ok) {
 				const text = await response.text();
+				// Detect RSS-Bridge error feeds — these are valid Atom XML but contain
+				// error entries (Instagram blocked, cURL timeout, PHP exception, etc.).
+				// Same patterns as feed-fetcher.ts so benchmark results reflect real usability.
+				if (
+					text.includes('HttpException') ||
+					text.includes('cURL error') ||
+					text.includes('Bridge returned error') ||
+					text.includes('returnServerError') ||
+					text.includes('instagram.com/favicon.ico')
+				) {
+					return { instance, url, status: 'Bridge Error', durationMs: duration, items: 0, cacheStatus };
+				}
 				const isAtom = text.includes('<entry>');
 				const itemCount = (text.match(isAtom ? /<entry>/g : /<item>/g) || []).length;
-				return { instance, url, status: 'Success', durationMs: duration, items: itemCount, cacheStatus };
+				return { instance, url, status: itemCount > 0 ? 'Success' : 'Empty', durationMs: duration, items: itemCount, cacheStatus };
 			} else {
 				return { instance, url, status: `HTTP ${response.status}`, durationMs: duration, items: 0, cacheStatus };
 			}
@@ -192,9 +204,11 @@ export async function runBridgeBenchmark(
 	const promises = instancesToTest.map(instance => testInstance(instance));
 	const results = await Promise.all(promises);
 
+	const statusRank = (s: string) => s === 'Success' ? 0 : s === 'Empty' ? 1 : 2;
 	results.sort((a, b) => {
-		if (a.status === 'Success' && b.status !== 'Success') return -1;
-		if (a.status !== 'Success' && b.status === 'Success') return 1;
+		const ra = statusRank(a.status), rb = statusRank(b.status);
+		if (ra !== rb) return ra - rb;
+		if (b.items !== a.items) return b.items - a.items;
 		return a.durationMs - b.durationMs;
 	});
 
@@ -202,7 +216,7 @@ export async function runBridgeBenchmark(
 }
 
 export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> {
-	const username = c.req.param('u') || c.req.query('u') || 'baharadawna';
+	const username = c.req.param('u') || c.req.query('u') || 'claudeai';
 	const path = c.req.path;
 
 	let defaultPlatform = 'instagram';
@@ -351,7 +365,7 @@ export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> 
                 ${results.map(r => `
                 <tr>
                     <td><code>${r.instance}</code></td>
-                    <td class="${r.status === 'Success' ? 'success' : 'error'}">${r.status}</td>
+                    <td class="${r.status === 'Success' ? 'success' : r.status === 'Empty' ? 'slow' : 'error'}">${r.status}</td>
                     <td class="${r.durationMs < 3000 ? 'fast' : 'slow'}">${r.durationMs} ms</td>
                     <td>${r.items}</td>
                     <td class="${r.cacheStatus === 'Hit' ? 'cache-hit' : 'cache-miss'}">${r.cacheStatus}</td>

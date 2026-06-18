@@ -34,9 +34,10 @@ If you intend to call multiple tools and there are no dependencies between the t
 
 ## Project Overview
 
-RSS Bridge is a Cloudflare Worker with two main features:
+RSS Bridge is a Cloudflare Worker origin (https://github.com/EngDawood/rss-cloudflare.git) with two main features:
 1. **RSS Endpoint** — Converts Instagram profiles, hashtags, and RSS feeds to RSS 2.0 XML
-2. **Telegram Bot** — Admin bot for managing channel subscriptions and auto-posting from feeds via cron
+2. **Telegram Bot** — Admin bot for managing channel subscriptions and auto-posting from feeds via cron 
+3. **MCP Agent** — On-demand feed browsing and Telegram posting tools for AI agents (e.g. Claude) is organized into logical modules (services, routes, mcp, db) with a D1 database
 
 ## Commands
 
