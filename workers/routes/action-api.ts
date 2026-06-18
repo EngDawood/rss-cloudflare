@@ -166,17 +166,19 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 			case 'refresh_all': {
 				const feeds = await getFeeds(db);
 				const enabled = feeds.filter(f => f.enabled === 1);
-				const results: Array<{ feedId: string; title: string; inserted: number; errors: number }> = [];
-				for (const feed of enabled) {
-					try {
+				const settled = await Promise.allSettled(
+					enabled.map(async (feed) => {
 						const result = await fetchFeed(feed.url, feed.title || undefined);
 						const inserted = await upsertItems(db, feed.id, result.items);
 						await updateLastFetched(db, feed.id);
-						results.push({ feedId: feed.id, title: feed.title, inserted, errors: result.errors.length });
-					} catch (e) {
-						results.push({ feedId: feed.id, title: feed.title, inserted: 0, errors: 1 });
-					}
-				}
+						return { feedId: feed.id, title: feed.title, inserted, errors: result.errors.length };
+					})
+				);
+				const results = settled.map((r, i) =>
+					r.status === 'fulfilled'
+						? r.value
+						: { feedId: enabled[i].id, title: enabled[i].title, inserted: 0, errors: 1 }
+				);
 				return c.json({ data: { refreshed: results.length, results } });
 			}
 			case 'fetch_rss_feed': {
