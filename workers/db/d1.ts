@@ -1155,10 +1155,17 @@ export interface DbCategory {
 	id: string;
 	name: string;
 	created_at: number;
+	feed_count?: number;
 }
 
 export async function listCategories(db: D1Database): Promise<DbCategory[]> {
-	const result = await db.prepare('SELECT * FROM feed_categories ORDER BY name ASC').all<DbCategory>();
+	const result = await db.prepare(`
+		SELECT c.*, COUNT(fcm.feed_id) as feed_count
+		FROM feed_categories c
+		LEFT JOIN feed_category_members fcm ON fcm.category_id = c.id
+		GROUP BY c.id
+		ORDER BY c.name ASC
+	`).all<DbCategory>();
 	return result.results;
 }
 
