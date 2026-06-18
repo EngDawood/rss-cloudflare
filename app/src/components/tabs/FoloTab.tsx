@@ -386,7 +386,7 @@ interface WebhookCardProps {
 }
 
 const WebhookCard: React.FC<WebhookCardProps> = ({
-  webhook, onCopy: _onCopy, onDelete, onSubscribe, onUnsubscribe, renderChannelList, renderUrlRow,
+  webhook, onCopy: _onCopy, onDelete, onSubscribe, onUnsubscribe: _onUnsubscribe, renderChannelList, renderUrlRow,
 }) => {
   const [expanded, setExpanded] = useState(true);
 
