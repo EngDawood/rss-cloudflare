@@ -75,16 +75,16 @@ interface AppContextType {
   setReaderCategoryId: React.Dispatch<React.SetStateAction<string>>;
 
   // Category and View Filters
-  feedViewFilter: 'all' | 'mcp' | 'telegram' | 'category';
-  setFeedViewFilterState: React.Dispatch<React.SetStateAction<'all' | 'mcp' | 'telegram' | 'category'>>;
+  feedViewFilter: 'all' | 'mcp' | 'telegram' | 'category' | 'folo';
+  setFeedViewFilterState: React.Dispatch<React.SetStateAction<'all' | 'mcp' | 'telegram' | 'category' | 'folo'>>;
   selectedChannelId: string | null;
   setSelectedChannelIdState: React.Dispatch<React.SetStateAction<string | null>>;
   selectedFeedCategoryId: string | null;
   setSelectedFeedCategoryIdState: React.Dispatch<React.SetStateAction<string | null>>;
   categoryFeedIds: Record<string, string[]>;
   setCategoryFeedIds: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
-  
-  setFeedViewFilter: (v: 'all' | 'mcp' | 'telegram' | 'category') => void;
+
+  setFeedViewFilter: (v: 'all' | 'mcp' | 'telegram' | 'category' | 'folo') => void;
   setSelectedFeedCategoryId: (id: string | null) => Promise<void>;
   setSelectedChannelId: (id: string | null) => void;
 }
@@ -111,8 +111,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Feed/Category filters
-  const [feedViewFilter, setFeedViewFilterState] = useState<'all' | 'mcp' | 'telegram' | 'category'>(
-    () => (localStorage.getItem('rss_feed_filter') as 'all' | 'mcp' | 'telegram' | 'category') || 'all'
+  const [feedViewFilter, setFeedViewFilterState] = useState<'all' | 'mcp' | 'telegram' | 'category' | 'folo'>(
+    () => (localStorage.getItem('rss_feed_filter') as 'all' | 'mcp' | 'telegram' | 'category' | 'folo') || 'all'
   );
   const [selectedChannelId, setSelectedChannelIdState] = useState<string | null>(
     () => localStorage.getItem('rss_channel_filter') || null
@@ -164,7 +164,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Filter Helpers
-  const setFeedViewFilter = (v: 'all' | 'mcp' | 'telegram' | 'category') => {
+  const setFeedViewFilter = (v: 'all' | 'mcp' | 'telegram' | 'category' | 'folo') => {
     setFeedViewFilterState(v);
     localStorage.setItem('rss_feed_filter', v);
     if (v !== 'telegram') {
@@ -260,7 +260,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unreadOnly = readerStatusFilter === 'unread';
     const readOnly = readerStatusFilter === 'read';
 
-    // Resolve feed IDs: explicit selection wins; otherwise use category filter (MCP mode only)
+    // Resolve feed IDs: explicit selection wins; otherwise use category filter (MCP/Folo mode)
     let activeFeeds: string[] | undefined = readerFeedFilter.length > 0 ? readerFeedFilter : undefined;
     if (!activeFeeds && (feedViewFilter === 'mcp' || feedViewFilter === 'category') && readerCategoryId) {
       if (categoryFeedIds[readerCategoryId]) {
@@ -271,6 +271,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const ids = catFeedsRes.data.map((f: any) => f.id);
           setCategoryFeedIds(prev => ({ ...prev, [readerCategoryId]: ids }));
           activeFeeds = ids;
+        }
+      }
+    }
+    if (!activeFeeds && feedViewFilter === 'folo') {
+      const foloCategory = categories.find((c: any) => c.name === 'Folo');
+      if (foloCategory) {
+        if (categoryFeedIds[foloCategory.id]) {
+          activeFeeds = categoryFeedIds[foloCategory.id];
+        } else {
+          const catFeedsRes = await callApi('get_category_feeds', { categoryId: foloCategory.id });
+          if (!catFeedsRes.error && catFeedsRes.data) {
+            const ids = catFeedsRes.data.map((f: any) => f.id);
+            setCategoryFeedIds(prev => ({ ...prev, [foloCategory.id]: ids }));
+            activeFeeds = ids;
+          }
         }
       }
     }

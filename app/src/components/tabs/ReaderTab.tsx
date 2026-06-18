@@ -38,16 +38,22 @@ export const ReaderTab: React.FC = () => {
   const [isFeedDropdownOpen, setIsFeedDropdownOpen] = useState(false);
   const feedDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Derived: feeds filtered by MCP/Telegram/channel/category selection
+  // Derived: feeds filtered by MCP/Telegram/Folo/channel/category selection
+  const foloCategory = categories.find((c: any) => c.name === 'Folo');
   const filteredFeeds = feeds.filter(feed => {
     const channelIds: string[] = feed.telegram_channel_ids || [];
     if (feedViewFilter === 'mcp' || feedViewFilter === 'category') {
       if (channelIds.length !== 0) return false; // must be MCP-only
-      if (selectedFeedCategoryId) {
-        const ids = categoryFeedIds[selectedFeedCategoryId];
+      if (readerCategoryId) {
+        const ids = categoryFeedIds[readerCategoryId];
         return ids ? ids.includes(feed.id) : true;
       }
       return true;
+    }
+    if (feedViewFilter === 'folo') {
+      if (!foloCategory) return false;
+      const ids = categoryFeedIds[foloCategory.id];
+      return ids ? ids.includes(feed.id) : true;
     }
     if (feedViewFilter === 'telegram') {
       if (channelIds.length === 0) return false;
@@ -67,7 +73,7 @@ export const ReaderTab: React.FC = () => {
       return () => clearTimeout(delayDebounce);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readerSearch, readerFeedFilterStr, readerStatusFilter, readerCategoryId]);
+  }, [readerSearch, readerFeedFilterStr, readerStatusFilter, readerCategoryId, feedViewFilter]);
 
   // Click-away listener for feed selection dropdown
   useEffect(() => {
@@ -222,6 +228,7 @@ export const ReaderTab: React.FC = () => {
               { id: 'all', label: 'All' },
               { id: 'mcp', label: 'MCP' },
               { id: 'telegram', label: 'Telegram' },
+              { id: 'folo', label: 'Folo' },
             ] as const).map(opt => (
               <button
                 key={opt.id}
