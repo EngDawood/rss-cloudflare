@@ -17,6 +17,7 @@ import {
 	listCategories, getFeedsInCategory, createCategory, deleteCategory, addFeedToCategory, removeFeedFromCategory,
 	createWorkflow, updateWorkflow, listWorkflows, getWorkflow, deleteWorkflow, setWorkflowFeeds,
 	setRunStatus, listRuns, getRun, getRunEvents,
+	getFoloChannelIds, addFoloChannel, removeFoloChannel,
 } from '../db/d1';
 import { launchWorkflowRun } from '../workflows/trigger';
 import { resolveTarget, logAndSend } from '../services/post-service';
@@ -379,6 +380,33 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				if (!key || value === undefined) return c.json({ error: 'key and value are required' }, 400);
 				await setConfig(db, key, value);
 				return c.json({ data: { [key]: value } });
+			}
+			case 'get_folo_config': {
+				const secret = c.env.FOLO_WEBHOOK_SECRET;
+				const tokenPart = secret ? `?token=${encodeURIComponent(secret)}` : '';
+				const webhookUrl = `${c.env.WORKER_URL}/folo${tokenPart}`;
+				const channels = await getFoloChannelIds(db);
+				return c.json({
+					data: {
+						webhookUrl,
+						channels,
+						hasSecret: !!secret
+					}
+				});
+			}
+			case 'add_folo_channel': {
+				const { channelId } = params;
+				if (!channelId) return c.json({ error: 'channelId is required' }, 400);
+				await addFoloChannel(db, channelId);
+				const channels = await getFoloChannelIds(db);
+				return c.json({ data: { channels } });
+			}
+			case 'remove_folo_channel': {
+				const { channelId } = params;
+				if (!channelId) return c.json({ error: 'channelId is required' }, 400);
+				await removeFoloChannel(db, channelId);
+				const channels = await getFoloChannelIds(db);
+				return c.json({ data: { channels } });
 			}
 
 			// ── Category management ───────────────────────────────────────────────────

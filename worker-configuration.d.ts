@@ -27,6 +27,7 @@ interface __BaseEnv_Env {
 	AI_GATEWAY_TOKEN: string;
 	EMDASH_TOKEN: string;
 	EMDASH_URL: string;
+	FOLO_WEBHOOK_SECRET?: string;
 	RSSReaderMCP: DurableObjectNamespace<import("./workers/index").RSSReaderMCP>;
 	AGENT_WORKFLOW: Workflow<Parameters<import("./workers/index").AgentWorkflow['run']>[0]['payload']>;
 }

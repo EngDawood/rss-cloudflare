@@ -23,6 +23,7 @@ export const BOT_COMMANDS = [
 	{ command: 'setup', description: 'Sync bot commands & menu' },
 	{ command: 'telegraph', description: 'Configure Telegraph Instant View' },
 	{ command: 'ai', description: 'Configure AI summary settings' },
+	{ command: 'folo', description: 'Configure Folo webhook integrations' },
 	{ command: 'cancel', description: 'Cancel current action' },
 ];
 

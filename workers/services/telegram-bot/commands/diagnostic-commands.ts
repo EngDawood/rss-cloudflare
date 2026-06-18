@@ -11,28 +11,7 @@ import { IG_WEB_PROFILE, IG_TOP_SEARCH } from '../../../constants';
 import { enrichFeedItems } from '../../../utils/media-enrichment';
 import { sendFallbackMessage } from '../helpers/fallback-sender';
 import { fetchAndSendLatest } from '../handlers/fetch-and-send';
-
-const BOT_COMMANDS = [
-	{ command: 'start', description: 'Show all commands' },
-	{ command: 'help', description: 'How to use the bot' },
-	{ command: 'add', description: 'Register a channel: /add @channel' },
-	{ command: 'sub', description: 'Subscribe to a source: /sub @channel @iguser' },
-	{ command: 'unsub', description: 'Unsubscribe from a source' },
-	{ command: 'list', description: 'List all subscriptions' },
-	{ command: 'channels', description: 'List & manage channels' },
-	{ command: 'status', description: 'Status overview' },
-	{ command: 'seed', description: 'Mark source(s) as read' },
-	{ command: 'delay', description: 'Set check interval in minutes' },
-	{ command: 'set', description: 'Source format settings' },
-	{ command: 'set_default', description: 'Channel default format' },
-	{ command: 'enable', description: 'Enable a channel' },
-	{ command: 'disable', description: 'Disable a channel' },
-	{ command: 'test', description: 'Fetch & send latest post' },
-	{ command: 'debug', description: 'Test Instagram connectivity' },
-	{ command: 'setup', description: 'Sync bot commands & menu' },
-	{ command: 'telegraph', description: 'Configure Telegraph Instant View' },
-	{ command: 'cancel', description: 'Cancel current action' },
-];
+import { BOT_COMMANDS } from '../../../routes/setup';
 
 /**
  * Register diagnostic and testing commands.

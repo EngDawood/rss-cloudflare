@@ -9,6 +9,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { FeedsTab } from './components/tabs/FeedsTab';
 import { ReaderTab } from './components/tabs/ReaderTab';
 import { TelegramTab } from './components/tabs/TelegramTab';
+import { FoloTab } from './components/tabs/FoloTab';
 import { SandboxTab } from './components/tabs/SandboxTab';
 import { LogsTab } from './components/tabs/LogsTab';
 import { PlaygroundTab } from './components/tabs/PlaygroundTab';
@@ -49,6 +50,8 @@ export default function App() {
         return <ReaderTab />;
       case 'telegram':
         return <TelegramTab />;
+      case 'folo':
+        return <FoloTab />;
       case 'sandbox':
         return <SandboxTab />;
       case 'logs':

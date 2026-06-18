@@ -1432,3 +1432,18 @@ export async function getRunEvents(db: D1Database, runId: string): Promise<DbWor
 	).bind(runId).all<DbWorkflowRunEvent>();
 	return result.results;
 }
+
+// ── Folo webhook channel subscriptions (migration 0011) ───────────────────────
+
+export async function getFoloChannelIds(db: D1Database): Promise<string[]> {
+	const result = await db.prepare('SELECT channel_id FROM folo_channels ORDER BY created_at ASC').all<{ channel_id: string }>();
+	return result.results.map(r => r.channel_id);
+}
+
+export async function addFoloChannel(db: D1Database, channelId: string): Promise<void> {
+	await db.prepare('INSERT OR IGNORE INTO folo_channels (channel_id) VALUES (?)').bind(channelId).run();
+}
+
+export async function removeFoloChannel(db: D1Database, channelId: string): Promise<void> {
+	await db.prepare('DELETE FROM folo_channels WHERE channel_id = ?').bind(channelId).run();
+}
