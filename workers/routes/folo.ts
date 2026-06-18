@@ -6,7 +6,7 @@ import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format'
 import { sendMediaToChannel } from '../services/telegram-bot/handlers/send-media';
 import { getAdminConfig } from '../services/telegram-bot/storage/kv-operations';
 import { enrichFeedItems } from '../utils/media-enrichment';
-import { getFoloChannelIds, getChannelConfigFromD1 } from '../db/d1';
+import { getFoloChannelIds, getChannelConfigFromD1, upsertFeedBySource, upsertItems, addMcpSubscription, listCategories, createCategory, addFeedToCategory } from '../db/d1';
 
 type HonoEnv = { Bindings: Env };
 
@@ -111,12 +111,6 @@ export async function handleFoloWebhook(c: Context<HonoEnv>): Promise<Response> 
 		return c.json({ error: 'Invalid payload: missing entry or feed' }, 400);
 	}
 
-	// Load subscribed channels from D1
-	const channels = await getFoloChannelIds(env.DB);
-	if (channels.length === 0) {
-		return c.json({ ok: true, sent: 0, note: 'No channels subscribed' });
-	}
-
 	// Dedup: always compute a key; fall back to feedId+publishedAt when guid/id absent
 	const dedupeKey = payload.entry.guid || payload.entry.id || `${payload.entry.feedId}:${payload.entry.publishedAt}`;
 	const cacheKey = `folo:sent:${dedupeKey}`;
@@ -132,6 +126,33 @@ export async function handleFoloWebhook(c: Context<HonoEnv>): Promise<Response> 
 	}
 
 	const feedItem = payloadToFeedItem(payload);
+
+	// Persist feed + item to D1 so they appear in the Feed Reader and MCP tools
+	try {
+		const feedSourceUrl = payload.feed.siteUrl || payload.feed.url;
+		const feedTitle = payload.feed.title || feedSourceUrl;
+		const dbFeed = await upsertFeedBySource(env.DB, {
+			sourceType: 'rss_url',
+			sourceValue: feedSourceUrl,
+			title: feedTitle,
+		});
+		await upsertItems(env.DB, dbFeed.id, [feedItem]);
+		await addMcpSubscription(env.DB, dbFeed.id, feedTitle);
+
+		// Group under a "Folo" category so Feed Reader and MCP can filter by it
+		const categories = await listCategories(env.DB);
+		let foloCategory = categories.find(cat => cat.name === 'Folo');
+		if (!foloCategory) foloCategory = await createCategory(env.DB, 'Folo');
+		await addFeedToCategory(env.DB, foloCategory.id, dbFeed.id);
+	} catch (err) {
+		console.warn('[folo] Failed to persist item to D1:', err);
+	}
+
+	// Load subscribed channels and deliver
+	const channels = await getFoloChannelIds(env.DB);
+	if (channels.length === 0) {
+		return c.json({ ok: true, sent: 0, note: 'No channels subscribed' });
+	}
 
 	// Try Telegraph / Media Enrichment
 	try {
