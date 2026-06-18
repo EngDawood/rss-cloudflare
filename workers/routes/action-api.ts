@@ -18,6 +18,8 @@ import {
 	createWorkflow, updateWorkflow, listWorkflows, getWorkflow, deleteWorkflow, setWorkflowFeeds,
 	setRunStatus, listRuns, getRun, getRunEvents,
 	getFoloChannelIds, addFoloChannel, removeFoloChannel,
+	listFoloWebhooks, getFoloWebhook, createFoloWebhook, deleteFoloWebhook,
+	getFoloWebhookChannels, addFoloWebhookChannel, removeFoloWebhookChannel,
 } from '../db/d1';
 import { launchWorkflowRun } from '../workflows/trigger';
 import { resolveTarget, logAndSend } from '../services/post-service';
@@ -386,29 +388,77 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 			case 'get_folo_config': {
 				const secret = c.env.FOLO_WEBHOOK_SECRET;
 				const tokenPart = secret ? `?token=${encodeURIComponent(secret)}` : '';
-				const webhookUrl = `${c.env.WORKER_URL}/folo${tokenPart}`;
-				const channels = await getFoloChannelIds(db);
+				const legacyUrl = `${c.env.WORKER_URL}/folo${tokenPart}`;
+				const legacyChannels = await getFoloChannelIds(db);
+				const rawWebhooks = await listFoloWebhooks(db);
+				const webhooks = await Promise.all(rawWebhooks.map(async (wh) => {
+					const t = wh.token ? `&token=${encodeURIComponent(wh.token)}` : '';
+					return {
+						id: wh.id,
+						name: wh.name,
+						webhookUrl: `${c.env.WORKER_URL}/folo?id=${encodeURIComponent(wh.id)}${t}`,
+						channels: await getFoloWebhookChannels(db, wh.id),
+					};
+				}));
 				return c.json({
 					data: {
-						webhookUrl,
-						channels,
-						hasSecret: !!secret
+						legacy: { webhookUrl: legacyUrl, channels: legacyChannels, hasSecret: !!secret },
+						webhooks,
 					}
 				});
 			}
 			case 'add_folo_channel': {
-				const { channelId } = params;
+				const { channelId, webhookId } = params;
 				if (!channelId) return c.json({ error: 'channelId is required' }, 400);
+				if (webhookId) {
+					await addFoloWebhookChannel(db, channelId, webhookId);
+					return c.json({ data: { channels: await getFoloWebhookChannels(db, webhookId) } });
+				}
 				await addFoloChannel(db, channelId);
-				const channels = await getFoloChannelIds(db);
-				return c.json({ data: { channels } });
+				return c.json({ data: { channels: await getFoloChannelIds(db) } });
 			}
 			case 'remove_folo_channel': {
-				const { channelId } = params;
+				const { channelId, webhookId } = params;
 				if (!channelId) return c.json({ error: 'channelId is required' }, 400);
+				if (webhookId) {
+					await removeFoloWebhookChannel(db, channelId, webhookId);
+					return c.json({ data: { channels: await getFoloWebhookChannels(db, webhookId) } });
+				}
 				await removeFoloChannel(db, channelId);
-				const channels = await getFoloChannelIds(db);
-				return c.json({ data: { channels } });
+				return c.json({ data: { channels: await getFoloChannelIds(db) } });
+			}
+			case 'create_folo_webhook': {
+				const { id, name, token } = params;
+				if (!id || !name) return c.json({ error: 'id and name are required' }, 400);
+				if (await getFoloWebhook(db, id)) return c.json({ error: `Webhook '${id}' already exists` }, 409);
+				const finalToken = token || crypto.randomUUID().replace(/-/g, '');
+				await createFoloWebhook(db, id, name, finalToken);
+				const t = `&token=${encodeURIComponent(finalToken)}`;
+				return c.json({
+					data: {
+						id, name, token: finalToken,
+						webhookUrl: `${c.env.WORKER_URL}/folo?id=${encodeURIComponent(id)}${t}`,
+					}
+				});
+			}
+			case 'delete_folo_webhook': {
+				const { id } = params;
+				if (!id) return c.json({ error: 'id is required' }, 400);
+				await deleteFoloWebhook(db, id);
+				return c.json({ data: { ok: true } });
+			}
+			case 'list_folo_webhooks': {
+				const rawWebhooks = await listFoloWebhooks(db);
+				const webhooks = await Promise.all(rawWebhooks.map(async (wh) => {
+					const t = wh.token ? `&token=${encodeURIComponent(wh.token)}` : '';
+					return {
+						id: wh.id,
+						name: wh.name,
+						webhookUrl: `${c.env.WORKER_URL}/folo?id=${encodeURIComponent(wh.id)}${t}`,
+						channels: await getFoloWebhookChannels(db, wh.id),
+					};
+				}));
+				return c.json({ data: webhooks });
 			}
 
 			// ── Category management ───────────────────────────────────────────────────

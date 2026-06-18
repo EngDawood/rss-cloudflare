@@ -12,6 +12,7 @@ import {
 	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
 	insertNote, listNotes, searchNotes, deleteNote,
 	listPostLog, recall,
+	listCategories, getFeedsInCategory,
 } from '../db/d1';
 import { resolveTarget, logAndSend } from '../services/post-service';
 import type { TelegramMediaMessage } from '../types/telegram';
@@ -169,17 +170,41 @@ export function registerTools(server: McpServer, env: Env): void {
 	// ── Browse / read tracking ─────────────────────────────────────────────────
 
 	server.tool(
+		'list_categories',
+		'List all feed categories (e.g. "Folo", "Folo: Personal"). Use the category name as a filter in list_new_items or search_items.',
+		{},
+		async () => {
+			try {
+				const cats = await listCategories(db);
+				return ok(cats.map(c => ({ id: c.id, name: c.name, feedCount: c.feed_count ?? 0 })));
+			} catch (e) {
+				return err(e instanceof Error ? e.message : String(e));
+			}
+		},
+	);
+
+	server.tool(
 		'list_new_items',
-		'List unread items (compact), scoped to MCP-subscribed feeds. Filter by feedId, keyword query (title/text/author), or since (Unix timestamp). Read state is MCP-specific.',
+		'List unread items (compact), scoped to MCP-subscribed feeds. Filter by feedId, category name (e.g. "Folo: Personal"), keyword query, or since (Unix timestamp). Read state is MCP-specific.',
 		{
 			feedId: z.string().optional(),
+			category: z.string().optional(),
 			query: z.string().optional(),
 			since: z.number().int().optional(),
 			limit: z.number().int().min(1).max(200).optional().default(50),
 		},
-		async ({ feedId, query, since, limit }) => {
+		async ({ feedId, category, query, since, limit }) => {
 			try {
-				const items = await listNewItemsMcp(db, { feedId, query, since, limit });
+				let resolvedFeedId: string | string[] | undefined = feedId;
+				if (category && !feedId) {
+					const cats = await listCategories(db);
+					const cat = cats.find(c => c.name === category);
+					if (cat) {
+						const feeds = await getFeedsInCategory(db, cat.id);
+						resolvedFeedId = feeds.map(f => f.id);
+					}
+				}
+				const items = await listNewItemsMcp(db, { feedId: resolvedFeedId, query, since, limit });
 				return ok(items);
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));
@@ -189,17 +214,27 @@ export function registerTools(server: McpServer, env: Env): void {
 
 	server.tool(
 		'search_items',
-		'Search stored items (read + unread) by keyword across title, text, and author, scoped to MCP-subscribed feeds. Filter further by feedId, since (Unix timestamp), or unreadOnly. Read state is MCP-specific.',
+		'Search stored items (read + unread) by keyword, scoped to MCP-subscribed feeds. Filter further by feedId, category name (e.g. "Folo: Personal"), since (Unix timestamp), or unreadOnly. Read state is MCP-specific.',
 		{
 			query: z.string().min(1),
 			feedId: z.string().optional(),
+			category: z.string().optional(),
 			since: z.number().int().optional(),
 			unreadOnly: z.boolean().optional().default(false),
 			limit: z.number().int().min(1).max(200).optional().default(50),
 		},
-		async ({ query, feedId, since, unreadOnly, limit }) => {
+		async ({ query, feedId, category, since, unreadOnly, limit }) => {
 			try {
-				const items = await searchItemsMcp(db, { query, feedId, since, unreadOnly, limit });
+				let resolvedFeedId: string | string[] | undefined = feedId;
+				if (category && !feedId) {
+					const cats = await listCategories(db);
+					const cat = cats.find(c => c.name === category);
+					if (cat) {
+						const feeds = await getFeedsInCategory(db, cat.id);
+						resolvedFeedId = feeds.map(f => f.id);
+					}
+				}
+				const items = await searchItemsMcp(db, { query, feedId: resolvedFeedId, since, unreadOnly, limit });
 				return ok(items);
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));

@@ -290,6 +290,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
+    // MCP filter (no category selected): scope to feeds with no telegram subscriptions
+    if (!activeFeeds && feedViewFilter === 'mcp') {
+      activeFeeds = feeds
+        .filter(f => (f.telegram_channel_ids || []).length === 0)
+        .map(f => f.id);
+    }
+
+    // Telegram filter: scope to feeds that have telegram subscriptions, optionally by channel
+    if (!activeFeeds && feedViewFilter === 'telegram') {
+      const telegramFeeds = feeds.filter(f => (f.telegram_channel_ids || []).length > 0);
+      const channelFiltered = selectedChannelId
+        ? telegramFeeds.filter(f => (f.telegram_channel_ids || []).includes(selectedChannelId))
+        : telegramFeeds;
+      activeFeeds = channelFiltered.map(f => f.id);
+    }
+
     if (readerSearch.trim()) {
       res = await callApi('search_items', {
         query: readerSearch,
