@@ -141,7 +141,7 @@ export async function handleFoloWebhook(c: Context<HonoEnv>): Promise<Response> 
 
 		// Group under a "Folo" category so Feed Reader and MCP can filter by it
 		const categories = await listCategories(env.DB);
-		let foloCategory = categories.find(c => c.name === 'Folo');
+		let foloCategory = categories.find(cat => cat.name === 'Folo');
 		if (!foloCategory) foloCategory = await createCategory(env.DB, 'Folo');
 		await addFeedToCategory(env.DB, foloCategory.id, dbFeed.id);
 	} catch (err) {

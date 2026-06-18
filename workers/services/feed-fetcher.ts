@@ -111,9 +111,14 @@ export function parseXML(xml: string, overrideFeedTitle?: string): FetchResult {
 	const isAtom = $('feed').length > 0;
 
 	const feedTitle = overrideFeedTitle || $('feed > title, channel > title').first().text().trim() || 'Untitled Feed';
-	const feedLink = isAtom
+	let feedLink = isAtom
 		? ($('feed > link[rel="alternate"]').attr('href') || $('feed > link').attr('href') || '')
 		: ($('channel > link').text().trim() || '');
+
+	// Normalize Imgsed viewer links to standard Instagram links
+	if (feedLink.includes('imgsed.com/')) {
+		feedLink = feedLink.replace(/https?:\/\/(?:www\.)?imgsed\.com\//i, 'https://www.instagram.com/');
+	}
 
 	const items: FeedItem[] = [];
 	const entries = isAtom ? $('entry') : $('item');
@@ -148,9 +153,15 @@ function parseAtomEntry(
 	feedLink: string,
 ): FeedItem | null {
 	const id = entry.find('id').text().replace(/\s+/g, '');
-	const link = (entry.find('link[rel="alternate"]').attr('href')
+	let link = (entry.find('link[rel="alternate"]').attr('href')
 		|| entry.find('link').attr('href')
 		|| '').replace(/\s+/g, '');
+
+	// Normalize Imgsed viewer links to standard Instagram links
+	if (link.includes('imgsed.com/')) {
+		link = link.replace(/https?:\/\/(?:www\.)?imgsed\.com\//i, 'https://www.instagram.com/');
+	}
+
 	const title = entry.find('title').text().trim();
 	const author = entry.find('author > name').text().trim();
 	const published = entry.find('published').text() || entry.find('updated').text() || '';

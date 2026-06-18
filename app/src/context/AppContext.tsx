@@ -229,6 +229,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!feedsRes.error) setFeeds(feedsRes.data || []);
     if (!channelsRes.error) setChannels(channelsRes.data || []);
     if (!catsRes.error) setCategories(catsRes.data || []);
+
+    // Refresh active category membership cache if one is selected, and clear others to force reload
+    if (selectedFeedCategoryId) {
+      const res = await callApi('get_category_feeds', { categoryId: selectedFeedCategoryId });
+      if (!res.error) {
+        setCategoryFeedIds(prev => ({ ...prev, [selectedFeedCategoryId]: (res.data || []).map((f: any) => f.id) }));
+      }
+    }
+    setCategoryFeedIds(prev => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        if (key !== selectedFeedCategoryId) {
+          delete next[key];
+        }
+      }
+      return next;
+    });
+
     if (!silent) setIsLoading(false);
   };
 

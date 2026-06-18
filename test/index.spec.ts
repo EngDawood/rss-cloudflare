@@ -6,7 +6,7 @@ const expectedNotFound = '{"error":"Not found","usage":{"username":"/instagram?u
 
 describe('RSS Bridge worker', () => {
 	it('responds with Not found for unknown routes (unit style)', async () => {
-		const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/message');
+		const request = new Request<unknown, IncomingRequestCfProperties>('http://example.com/api/message');
 		const ctx = createExecutionContext();
 		const response = await worker.fetch(request, env, ctx);
 		await waitOnExecutionContext(ctx);
@@ -14,7 +14,7 @@ describe('RSS Bridge worker', () => {
 	});
 
 	it('responds with Not found for unknown routes (integration style)', async () => {
-		const request = new Request('http://example.com/message');
+		const request = new Request('http://example.com/api/message');
 		const response = await SELF.fetch(request);
 		expect(await response.text()).toBe(expectedNotFound);
 	});
