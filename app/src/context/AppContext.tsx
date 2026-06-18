@@ -92,7 +92,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const validTabs = ['feeds', 'reader', 'telegram', 'sandbox', 'logs', 'mcp', 'workflows', 'playground', 'chat', 'instances', 'test'];
+  const validTabs = ['feeds', 'reader', 'telegram', 'sandbox', 'logs', 'mcp', 'workflows', 'playground', 'chat', 'instances', 'test', 'folo'];
   const [activeTab, setActiveTab] = useState(() => {
     const path = window.location.pathname.replace(/^\//, '').split('/')[0];
     return validTabs.includes(path) ? path : 'feeds';

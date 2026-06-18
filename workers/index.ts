@@ -3,6 +3,7 @@ import { handleInstagramFeed } from './routes/instagram';
 import { handleTelegramWebhook } from './routes/telegram';
 import { handleSetup } from './routes/setup';
 import { handleTestBridges } from './routes/test-bridges';
+import { handleFoloWebhook } from './routes/folo';
 import { checkAllFeeds } from './cron/check-feeds';
 import { refreshSavedFeeds } from './cron/refresh-feeds';
 import { cleanupOldData } from './cron/cleanup';
@@ -30,6 +31,8 @@ app.get('/test-rsshub/:u', handleTestBridges);
 
 app.post('/telegram/webhook', handleTelegramWebhook);
 app.get('/telegram/setup', handleSetup);
+
+app.post('/folo', handleFoloWebhook);
 
 // Administrative Action and Chat Agent APIs
 app.post('/api/action', handleActionApi);
