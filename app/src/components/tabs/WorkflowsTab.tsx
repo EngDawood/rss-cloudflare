@@ -78,7 +78,9 @@ export const WorkflowsTab: React.FC = () => {
 
   const springTransition = { type: 'spring', stiffness: 100, damping: 20 } as const;
   const callApiRef = useRef(callApi);
-  callApiRef.current = callApi;
+  useEffect(() => {
+    callApiRef.current = callApi;
+  }, [callApi]);
 
   const loadWorkflows = useCallback(async () => {
     setLoading(true);
@@ -88,9 +90,12 @@ export const WorkflowsTab: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadWorkflows();
+    const timer = setTimeout(() => {
+      loadWorkflows();
+    }, 0);
     callApiRef.current('list_models').then(r => { if (!r.error) setModels(r.data || []); });
     callApiRef.current('list_chats').then(r => { if (!r.error) setChats(r.data || []); });
+    return () => clearTimeout(timer);
   }, [loadWorkflows]);
 
   const openCreate = () => { setForm(EMPTY_FORM); setIsEditorOpen(true); };

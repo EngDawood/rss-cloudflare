@@ -32,18 +32,22 @@ export const McpTab: React.FC = () => {
   const springTransition = { type: 'spring', stiffness: 100, damping: 20 } as const;
 
   const callApiRef = useRef(callApi);
-  callApiRef.current = callApi;
+  useEffect(() => {
+    callApiRef.current = callApi;
+  }, [callApi]);
 
   const loadMcpSubs = useCallback(async () => {
     setSubsLoading(true);
     const res = await callApiRef.current('list_mcp_subscriptions');
     if (!res.error) setMcpSubs(res.data || []);
     setSubsLoading(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    loadMcpSubs();
+    const timer = setTimeout(() => {
+      loadMcpSubs();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [loadMcpSubs]);
 
   const handleCreateCategory = async (e: React.FormEvent) => {

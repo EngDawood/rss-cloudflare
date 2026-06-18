@@ -292,7 +292,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Keep latest verifyToken in a ref so the effect below never needs it as a dep
   const verifyTokenRef = useRef(verifyToken);
-  verifyTokenRef.current = verifyToken;
+  useEffect(() => {
+    verifyTokenRef.current = verifyToken;
+  }, [verifyToken]);
 
   // Token sync effect — only re-runs when token changes, not on every render
   useEffect(() => {
@@ -300,7 +302,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       verifyTokenRef.current();
     }, 0);
     return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   // Theme Sync Effect
