@@ -483,7 +483,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 					FULL_RSS_BRIDGE_INSTANCES;
 				const platform = type === 'tiktok' ? 'tiktok' : 'instagram';
 				const { results } = await runBridgeBenchmark(c.env, {
-					username: 'baharadawna',
+					username: 'claudeai',
 					platform,
 					instancesType: type === 'rsshub' ? 'rsshub' : type === 'instagram' ? 'all' : 'rssbridge',
 					useCache: false,

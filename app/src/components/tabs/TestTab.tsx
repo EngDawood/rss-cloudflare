@@ -75,7 +75,7 @@ export const TestTab: React.FC = () => {
   const [builderQuery, setBuilderQuery] = useState('');
 
   // Benchmark state
-  const [benchUsername, setBenchUsername] = useState('baharadawna');
+  const [benchUsername, setBenchUsername] = useState('claudeai');
   const [benchInstancesType, setBenchInstancesType] = useState('all');
   const [benchPlatform, setBenchPlatform] = useState('instagram');
   const [benchCustomRoute, setBenchCustomRoute] = useState('');
@@ -345,7 +345,7 @@ export const TestTab: React.FC = () => {
                       placeholder={
                         builderPlatform === 'custom'
                           ? builderEngine === 'rsshub' ? '/anthropic/research  or  /youtube/channel/UC...' : '?action=display&bridge=YouTubeBridge&...'
-                          : builderPlatform === 'instagram_tag' ? 'e.g. nature' : 'e.g. baharadawna'
+                          : builderPlatform === 'instagram_tag' ? 'e.g. nature' : 'e.g. claudeai'
                       }
                       className="bg-bg-base border border-border-base rounded-xl px-3 py-1.5 text-xs text-text-base focus:outline-none focus:border-accent-primary font-mono"
                     />
@@ -481,7 +481,7 @@ export const TestTab: React.FC = () => {
                     type="text"
                     value={benchUsername}
                     onChange={e => setBenchUsername(e.target.value)}
-                    placeholder="e.g. baharadawna"
+                    placeholder="e.g. claudeai"
                     className="bg-bg-input border border-border-base rounded-xl px-4 py-2.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono w-48"
                   />
                 </div>

@@ -16,7 +16,7 @@ const RSS_BRIDGE_TIKTOK_INSTANCES = [
 const timeoutMs = 15000; // 15 seconds
 
 export async function handleTestRSSBridge(c: Context<HonoEnv>): Promise<Response> {
-    const username = c.req.query('u') || 'baharadawna';
+    const username = c.req.query('u') || 'claudeai';
     const type = c.req.query('type') || 'instagram'; // 'instagram' or 'tiktok'
 
     const instancesToTest = type === 'tiktok' ? RSS_BRIDGE_TIKTOK_INSTANCES : RSS_BRIDGE_INSTANCES;

@@ -216,7 +216,7 @@ export async function runBridgeBenchmark(
 }
 
 export async function handleTestBridges(c: Context<HonoEnv>): Promise<Response> {
-	const username = c.req.param('u') || c.req.query('u') || 'baharadawna';
+	const username = c.req.param('u') || c.req.query('u') || 'claudeai';
 	const path = c.req.path;
 
 	let defaultPlatform = 'instagram';

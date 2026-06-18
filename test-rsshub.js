@@ -14,7 +14,7 @@ const RSSHUB_INSTANCES = [
 	'https://rss.4040940.xyz'
 ];
 
-const username = 'baharadawna';
+const username = 'claudeai';
 const timeoutMs = 15000; // 15 seconds
 
 async function testInstance(instance) {

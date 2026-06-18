@@ -19,7 +19,7 @@ const RSSHUB_INSTANCES = [
 const timeoutMs = 15000; // 15 seconds
 
 export async function handleTestRSSHub(c: Context<HonoEnv>): Promise<Response> {
-    const username = c.req.query('u') || 'baharadawna';
+    const username = c.req.query('u') || 'claudeai';
 
     async function testInstance(instance: string) {
         const url = `${instance}/picnob.info/user/${encodeURIComponent(username)}/stories`;
