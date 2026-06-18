@@ -72,7 +72,7 @@ export const ReaderTab: React.FC = () => {
       return () => clearTimeout(delayDebounce);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readerSearch, readerFeedFilterStr, readerStatusFilter, readerCategoryId, feedViewFilter]);
+  }, [readerSearch, readerFeedFilterStr, readerStatusFilter, readerCategoryId, feedViewFilter, selectedChannelId]);
 
   // Click-away listener for feed selection dropdown
   useEffect(() => {
