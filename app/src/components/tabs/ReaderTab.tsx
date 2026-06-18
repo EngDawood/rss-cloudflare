@@ -14,7 +14,6 @@ export const ReaderTab: React.FC = () => {
     setFeedViewFilter,
     selectedChannelId,
     setSelectedChannelId,
-    selectedFeedCategoryId,
     readerCategoryId,
     setReaderCategoryId,
     categoryFeedIds,
