@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 export interface ApiResponse<T = any> {
   data?: T;
@@ -11,7 +11,9 @@ export function useApi(token: string, onUnauthorized: (message: string) => void)
 
   // Keep onUnauthorized stable via ref so callApi doesn't need it as a dep
   const onUnauthorizedRef = useRef(onUnauthorized);
-  onUnauthorizedRef.current = onUnauthorized;
+  useEffect(() => {
+    onUnauthorizedRef.current = onUnauthorized;
+  }, [onUnauthorized]);
 
   const callApi = useCallback(async <T = any>(action: string, params: any = {}): Promise<ApiResponse<T>> => {
     setIsApiLoading(true);

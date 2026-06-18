@@ -20,12 +20,13 @@ export const InstancesTab: React.FC = () => {
   const [newInstanceInputs, setNewInstanceInputs] = useState<Record<string, string>>({ instagram: '', rssbridge: '', tiktok: '', rsshub: '' });
 
   const callApiRef = useRef(callApi);
-  callApiRef.current = callApi;
+  useEffect(() => {
+    callApiRef.current = callApi;
+  }, [callApi]);
 
   const loadInstances = useCallback(async () => {
     const res = await callApiRef.current('get_instances');
     if (!res.error && res.data) setInstances(res.data);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
