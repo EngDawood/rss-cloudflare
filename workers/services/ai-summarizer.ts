@@ -4,7 +4,7 @@ import { updateItemSummary, resolveAiModel, resolveAiPrompt } from '../db/d1';
 const GATEWAY_URL =
 	'https://gateway.ai.cloudflare.com/v1/c53938b50ea00b247dcd72dd2e9eada3/rss-summarizer/compat/chat/completions';
 
-const DEFAULT_MODEL = 'nvidia/llama-3.1-nemotron-70b-instruct';
+const DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct-fp8-fast';
 
 const SYSTEM_PROMPT =
 	'أنت مساعد متخصص في تلخيص الأخبار والمقالات. ' +
