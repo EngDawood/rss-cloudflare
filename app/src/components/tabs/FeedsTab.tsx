@@ -24,6 +24,14 @@ export const FeedsTab: React.FC = () => {
     setActiveTab
   } = useApp();
 
+  // Feeds Sort Order State
+  const [feedsSortOrder, setFeedsSortOrder] = useState<string>(() => localStorage.getItem('rss_feeds_sort_order') || 'name_asc');
+
+  const handleSortChange = (order: string) => {
+    setFeedsSortOrder(order);
+    localStorage.setItem('rss_feeds_sort_order', order);
+  };
+
   // Modal State
   const [isAddFeedOpen, setIsAddFeedOpen] = useState(false);
   const [addFeedType, setAddFeedType] = useState<'rss' | 'rsshub' | 'rss-bridge' | 'instagram' | 'tiktok'>('rss');
@@ -149,6 +157,25 @@ export const FeedsTab: React.FC = () => {
     return true; // 'all'
   });
 
+  const sortedFeeds = [...filteredFeeds].sort((a, b) => {
+    switch (feedsSortOrder) {
+      case 'name_asc':
+        return a.title.localeCompare(b.title);
+      case 'name_desc':
+        return b.title.localeCompare(a.title);
+      case 'synced_desc':
+        return (b.last_fetched_at || 0) - (a.last_fetched_at || 0);
+      case 'synced_asc':
+        return (a.last_fetched_at || 9999999999) - (b.last_fetched_at || 9999999999);
+      case 'unread_desc':
+        return (b.unread_count || 0) - (a.unread_count || 0);
+      case 'created_desc':
+        return (b.created_at || 0) - (a.created_at || 0);
+      default:
+        return 0;
+    }
+  });
+
   const formatDate = (unixSecs: number | null | undefined) => {
     if (!unixSecs) return 'Never';
     const date = new Date(unixSecs * 1000);
@@ -242,21 +269,35 @@ export const FeedsTab: React.FC = () => {
           </select>
         )}
 
+        {/* Sort selector */}
+        <select
+          value={feedsSortOrder}
+          onChange={e => handleSortChange(e.target.value)}
+          className="bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
+        >
+          <option value="name_asc">🔤 Title (A-Z)</option>
+          <option value="name_desc">🔤 Title (Z-A)</option>
+          <option value="synced_desc">🔄 Last Synced (Newest)</option>
+          <option value="synced_asc">🔄 Last Synced (Oldest)</option>
+          <option value="unread_desc">✉️ Unread Items</option>
+          <option value="created_desc">📅 Date Created</option>
+        </select>
+
         <span className="text-[11px] text-text-muted font-mono">
-          {filteredFeeds.length} / {feeds.length} feeds
+          {sortedFeeds.length} / {feeds.length} feeds
         </span>
       </div>
 
       {/* Feeds Card Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {filteredFeeds.length === 0 ? (
+        {sortedFeeds.length === 0 ? (
           <div className="lg:col-span-2 p-12 text-center border border-dashed border-border-base rounded-2xl bg-bg-card/25 text-sm text-text-muted">
             {feeds.length === 0
               ? 'No feeds registered. Click "Add Feed" to start importing content.'
               : `No ${feedViewFilter === 'mcp' ? 'MCP-only' : feedViewFilter === 'telegram' ? 'Telegram' : ''} feeds found.`}
           </div>
         ) : (
-          filteredFeeds.map(feed => (
+          sortedFeeds.map(feed => (
             <motion.div 
               key={feed.id}
               whileHover={{ y: -4 }}
