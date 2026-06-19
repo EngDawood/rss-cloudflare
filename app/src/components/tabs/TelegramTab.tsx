@@ -181,12 +181,12 @@ export const TelegramTab: React.FC = () => {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Telegram Chat ID (Numeric)</label>
-          <input 
-            type="text" 
-            value={chatIdVal} 
-            onChange={e => setChatIdVal(e.target.value)} 
-            placeholder="e.g. -100123456789" 
+          <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Chat ID or Username</label>
+          <input
+            type="text"
+            value={chatIdVal}
+            onChange={e => setChatIdVal(e.target.value)}
+            placeholder="e.g. @mychannel or -100123456789"
             className="bg-bg-input border border-border-base rounded-xl px-4 py-3.5 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono mt-1"
             required
           />

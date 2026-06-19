@@ -247,7 +247,23 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 			case 'add_chat': {
 				const { name, chatId, type = 'channel', makeDefault = false } = params;
 				if (!name || !chatId) return c.json({ error: 'name and chatId are required' }, 400);
-				const chat = await upsertChat(db, name, chatId, type, makeDefault);
+				let resolvedId = String(chatId).trim();
+				// Extract username from t.me URLs (https://t.me/x or t.me/x)
+				const tmeMatch = resolvedId.match(/(?:https?:\/\/)?t\.me\/([^/?#\s]+)/i);
+				if (tmeMatch) resolvedId = tmeMatch[1];
+				// Strip leading @
+				if (resolvedId.startsWith('@')) resolvedId = resolvedId.slice(1);
+				// Resolve non-numeric values via Telegram API
+				if (!/^-?\d+$/.test(resolvedId)) {
+					try {
+						const bot = new Bot(c.env.TELEGRAM_BOT_TOKEN);
+						const resolved = await bot.api.getChat(`@${resolvedId}`);
+						resolvedId = String(resolved.id);
+					} catch (e) {
+						return c.json({ error: `Could not resolve "@${resolvedId}": ${e instanceof Error ? e.message : String(e)}` }, 400);
+					}
+				}
+				const chat = await upsertChat(db, name, resolvedId, type, makeDefault);
 				return c.json({ data: chat });
 			}
 			case 'remove_chat': {
