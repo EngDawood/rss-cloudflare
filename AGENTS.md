@@ -99,3 +99,8 @@ A Cloudflare Worker that provides an RSS bridge for Instagram, a powerful Telegr
 ## AGENTS.md Maintenance
 
 When adding new Cloudflare resources (KV, D1, Queues, Durable Objects, etc.), update `wrangler.jsonc` and run `pnpm run cf-typegen` before committing.
+
+## Git Rules
+
+- **Do NOT use `git add .`** under any circumstances.
+- When staging changes, explicitly specify only the file paths that you have created or edited during the current session (e.g., `git add path/to/file1 path/to/file2`).
