@@ -4,7 +4,7 @@ import { updateItemSummary, resolveAiModel, resolveAiPrompt } from '../db/d1';
 const GATEWAY_URL =
 	'https://gateway.ai.cloudflare.com/v1/c53938b50ea00b247dcd72dd2e9eada3/rss-summarizer/compat/chat/completions';
 
-const DEFAULT_DYNAMIC_ROUTE = 'dynamic/summarize';
+const DEFAULT_MODEL = 'nvidia/llama-3.1-nemotron-70b-instruct';
 
 const SYSTEM_PROMPT =
 	'أنت مساعد متخصص في تلخيص الأخبار والمقالات. ' +
@@ -60,8 +60,7 @@ export async function summarizeItem(
 		throw new Error('Article text is too short to summarize (must be at least 50 characters).');
 	}
 
-	// Use user-configured model if explicitly provided; otherwise use the gateway dynamic route
-	const resolvedModel = model ? normalizeGatewayModel(model) : DEFAULT_DYNAMIC_ROUTE;
+	const resolvedModel = normalizeGatewayModel(model || DEFAULT_MODEL);
 
 	try {
 		const response = await fetch(GATEWAY_URL, {
