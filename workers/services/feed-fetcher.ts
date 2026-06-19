@@ -146,6 +146,30 @@ function generateFallbackId(title: string, text: string): string {
 	return 'hash-' + Math.abs(hash).toString(36);
 }
 
+/**
+ * Canonical Instagram post id derived from the post URL shortcode.
+ *
+ * Both InstagramBridge (primary) and the ImgsedBridge fallback link to the same
+ * /p/<shortcode>/ post, but each emits its own Atom <id> (urn:sha1 of its own content),
+ * so the SAME post gets a DIFFERENT id per bridge. post_log/items dedup keys on the id,
+ * so when the fallback kicks in every already-sent post looks new and is re-sent. Keying
+ * on the shortcode makes the id stable across bridges. Returns null for non-Instagram links.
+ */
+function instagramCanonicalId(link: string): string | null {
+	const m = link.match(/instagram\.com\/(?:p|reel|tv)\/([\w-]+)/i);
+	return m ? `https://www.instagram.com/p/${m[1]}/` : null;
+}
+
+/** Proxy/viewer media hosts (e.g. ImgsedBridge's imginn) that Telegram cannot fetch. */
+function isProxyMediaUrl(url: string): boolean {
+	return /^https?:\/\/(?:[^/]+\.)?(?:imginn\.com|imgsed\.com)\//i.test(url);
+}
+
+/** Heuristic: Instagram CDN video URLs carry .mp4; image URLs do not. */
+function isVideoMediaUrl(url: string): boolean {
+	return /\.mp4(?:[?&]|$)/i.test(url);
+}
+
 function parseAtomEntry(
 	entry: cheerio.Cheerio<any>,
 	$: cheerio.CheerioAPI,
@@ -186,7 +210,7 @@ function parseAtomEntry(
 	});
 
 	return {
-		id: id || link || generateFallbackId(title, text),
+		id: instagramCanonicalId(link) || id || link || generateFallbackId(title, text),
 		link,
 		title,
 		text,
@@ -234,7 +258,7 @@ function parseRSSItem(
 	});
 
 	return {
-		id: guid || link || generateFallbackId(title, text),
+		id: instagramCanonicalId(link) || guid || link || generateFallbackId(title, text),
 		link,
 		title,
 		text,
@@ -264,10 +288,13 @@ function extractMedia(
 	entry.find('link[rel="enclosure"]').each((_, el) => {
 		const href = $(el).attr('href')?.replace(/\s+/g, '');
 		const mimeType = $(el).attr('type') || '';
-		if (href && !seen.has(href)) {
+		// ImgsedBridge pairs each post with a proxy enclosure (imginn.com — unfetchable by
+		// Telegram) followed by the real cdninstagram URL, both typed application/octet-stream.
+		// Skip the proxy and classify by URL so the usable CDN media is what gets sent.
+		if (href && !seen.has(href) && !isProxyMediaUrl(href)) {
 			seen.add(href);
 			media.push({
-				type: mimeType.startsWith('video/') ? 'video' : 'photo',
+				type: mimeType.startsWith('video/') || isVideoMediaUrl(href) ? 'video' : 'photo',
 				url: href,
 			});
 		}
@@ -288,7 +315,20 @@ function extractMedia(
 			}
 		});
 
-		// Images from <img> (only if no enclosures found, to avoid duplicates)
+		// Fallback when enclosures yielded nothing usable (e.g. proxy-only enclosures):
+		// recover the direct Instagram CDN URL from ImgsedBridge "Download" anchors,
+		// preferring it over the imginn <img> proxy below.
+		if (media.length === 0) {
+			content$('a[href]').each((_, el) => {
+				const href = content$(el).attr('href')?.replace(/\s+/g, '');
+				if (href && /(?:cdninstagram\.com|fbcdn\.net)/i.test(href) && !isProxyMediaUrl(href) && !seen.has(href)) {
+					seen.add(href);
+					media.push({ type: isVideoMediaUrl(href) ? 'video' : 'photo', url: href });
+				}
+			});
+		}
+
+		// Images from <img> (only if nothing usable found above, to avoid duplicates)
 		if (media.length === 0) {
 			content$('img').each((_, el) => {
 				const src = content$(el).attr('src')?.replace(/\s+/g, '');
@@ -376,6 +416,15 @@ function extractMediaFromRSS(
 function extractTextFromHtml(html: string): string {
 	if (!html) return '';
 
+	// ImgsedBridge fallback bakes proxy boilerplate links ("Download", "Display on
+	// Instagram") and a trailing "by @user" into the content. Strip them so the fallback
+	// caption matches the primary InstagramBridge body and the channel's configured format
+	// (author/source are rendered by the footer, not duplicated inside the caption).
+	const isImgsed = /imgsed\.com|Display on Instagram/i.test(html);
+	if (isImgsed) {
+		html = html.replace(/<a\b[^>]*>\s*(?:Download|Display on Instagram)\s*<\/a>/gi, '');
+	}
+
 	// Instagram RSS-Bridge pattern: caption is after the last <br><br>
 	const brbrIdx = html.lastIndexOf('<br><br>');
 	let textSource = html;
@@ -395,7 +444,11 @@ function extractTextFromHtml(html: string): string {
 		.replace(/\n{3,}/g, '\n\n')
 		.trim();
 
-	return decodeHtmlEntities(raw);
+	let text = decodeHtmlEntities(raw);
+	if (isImgsed) {
+		text = text.replace(/\s*by @[\w.]+\s*$/i, '').trim();
+	}
+	return text;
 }
 
 function decodeHtmlEntities(text: string): string {
