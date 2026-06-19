@@ -29,7 +29,9 @@ export const ReaderTab: React.FC = () => {
     setReaderSearch,
     isAuthenticated,
     activeTab,
-    isApiLoading
+    isApiLoading,
+    readerSortOrder,
+    setReaderSortOrder
   } = useApp();
 
   // Local States
@@ -72,7 +74,7 @@ export const ReaderTab: React.FC = () => {
       return () => clearTimeout(delayDebounce);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readerSearch, readerFeedFilterStr, readerStatusFilter, readerCategoryId, feedViewFilter, selectedChannelId]);
+  }, [readerSearch, readerFeedFilterStr, readerStatusFilter, readerCategoryId, feedViewFilter, selectedChannelId, readerSortOrder]);
 
   // Click-away listener for feed selection dropdown
   useEffect(() => {
@@ -392,6 +394,18 @@ export const ReaderTab: React.FC = () => {
               </button>
             ))}
           </div>
+
+          {/* Sort Order Selector */}
+          <select
+            value={readerSortOrder}
+            onChange={e => setReaderSortOrder(e.target.value as any)}
+            className="bg-bg-input border border-border-base rounded-xl px-3 py-2.5 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
+          >
+            <option value="newest_published">📅 Newest Published</option>
+            <option value="oldest_published">📅 Oldest Published</option>
+            <option value="newly_added">📥 Newly Added</option>
+            <option value="oldest_added">📥 Oldest Added</option>
+          </select>
 
           <motion.button 
             whileTap={{ scale: 0.98 }}

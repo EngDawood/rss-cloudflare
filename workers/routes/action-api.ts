@@ -202,14 +202,14 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 
 			// ── Browse / read tracking ─────────────────────────────────────────────────
 			case 'list_new_items': {
-				const { feedId, query, since, limit = 50, unreadOnly, readOnly } = params;
-				const items = await listNewItems(db, { feedId, query, since, limit, unreadOnly, readOnly });
+				const { feedId, query, since, limit = 50, unreadOnly, readOnly, orderBy } = params;
+				const items = await listNewItems(db, { feedId, query, since, limit, unreadOnly, readOnly, orderBy });
 				return c.json({ data: items });
 			}
 			case 'search_items': {
-				const { query, feedId, since, unreadOnly = false, readOnly = false, limit = 50 } = params;
+				const { query, feedId, since, unreadOnly = false, readOnly = false, limit = 50, orderBy } = params;
 				if (!query) return c.json({ error: 'query is required' }, 400);
-				const items = await searchItems(db, { query, feedId, since, unreadOnly, readOnly, limit });
+				const items = await searchItems(db, { query, feedId, since, unreadOnly, readOnly, limit, orderBy });
 				return c.json({ data: items });
 			}
 			case 'get_item': {
