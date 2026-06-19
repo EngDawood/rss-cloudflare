@@ -193,3 +193,4 @@ scripts/restore_app.py
 .antigravity/plans/*
 backup_temp/App_original_13-06-2026_225837.tsx
 checklist.md
+workers/db/d1.ts.bak
