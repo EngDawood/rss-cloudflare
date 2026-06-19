@@ -192,8 +192,9 @@ export function registerTools(server: McpServer, env: Env): void {
 			query: z.string().optional(),
 			since: z.number().int().optional(),
 			limit: z.number().int().min(1).max(200).optional().default(50),
+			orderBy: z.enum(['newest_published', 'oldest_published', 'newly_added', 'oldest_added']).optional().default('newest_published'),
 		},
-		async ({ feedId, category, query, since, limit }) => {
+		async ({ feedId, category, query, since, limit, orderBy }) => {
 			try {
 				let resolvedFeedId: string | string[] | undefined = feedId;
 				if (category && !feedId) {
@@ -204,7 +205,7 @@ export function registerTools(server: McpServer, env: Env): void {
 						resolvedFeedId = feeds.map(f => f.id);
 					}
 				}
-				const items = await listNewItemsMcp(db, { feedId: resolvedFeedId, query, since, limit });
+				const items = await listNewItemsMcp(db, { feedId: resolvedFeedId, query, since, limit, orderBy });
 				return ok(items);
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));
@@ -222,8 +223,9 @@ export function registerTools(server: McpServer, env: Env): void {
 			since: z.number().int().optional(),
 			unreadOnly: z.boolean().optional().default(false),
 			limit: z.number().int().min(1).max(200).optional().default(50),
+			orderBy: z.enum(['newest_published', 'oldest_published', 'newly_added', 'oldest_added']).optional().default('newest_published'),
 		},
-		async ({ query, feedId, category, since, unreadOnly, limit }) => {
+		async ({ query, feedId, category, since, unreadOnly, limit, orderBy }) => {
 			try {
 				let resolvedFeedId: string | string[] | undefined = feedId;
 				if (category && !feedId) {
@@ -234,7 +236,7 @@ export function registerTools(server: McpServer, env: Env): void {
 						resolvedFeedId = feeds.map(f => f.id);
 					}
 				}
-				const items = await searchItemsMcp(db, { query, feedId: resolvedFeedId, since, unreadOnly, limit });
+				const items = await searchItemsMcp(db, { query, feedId: resolvedFeedId, since, unreadOnly, limit, orderBy });
 				return ok(items);
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));

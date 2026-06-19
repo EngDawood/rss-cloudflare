@@ -73,6 +73,8 @@ interface AppContextType {
   setReaderSearch: (search: string) => void;
   readerCategoryId: string;
   setReaderCategoryId: React.Dispatch<React.SetStateAction<string>>;
+  readerSortOrder: 'newest_published' | 'oldest_published' | 'newly_added' | 'oldest_added';
+  setReaderSortOrder: (sortOrder: 'newest_published' | 'oldest_published' | 'newly_added' | 'oldest_added') => void;
 
   // Category and View Filters
   feedViewFilter: 'all' | 'mcp' | 'telegram' | 'category' | 'folo';
@@ -137,6 +139,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [readerStatusFilter, setReaderStatusFilter] = useState<'unread' | 'read' | 'all'>('unread');
   const [readerSearch, setReaderSearch] = useState('');
   const [readerCategoryId, setReaderCategoryId] = useState<string>('');
+  const [readerSortOrder, setReaderSortOrder] = useState<'newest_published' | 'oldest_published' | 'newly_added' | 'oldest_added'>('newest_published');
 
   // Toast Helpers
   const removeToast = useCallback((id: number) => {
@@ -312,14 +315,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         feedId: activeFeeds,
         unreadOnly,
         readOnly,
-        limit: 30
+        limit: 30,
+        orderBy: readerSortOrder
       });
     } else {
       res = await callApi('list_new_items', {
         feedId: activeFeeds,
         unreadOnly,
         readOnly,
-        limit: 30
+        limit: 30,
+        orderBy: readerSortOrder
       });
     }
     if (!res.error) {
@@ -373,7 +378,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     callApi, isApiLoading,
     feeds, setFeeds, channels, setChannels, categories, setCategories, chats, setChats, unreadItems, setUnreadItems, timeline, setTimeline, postLogs, setPostLogs, config, setConfigState,
     loadFeeds, loadChats, loadReaderItems, loadLogsAndConfig,
-    readerFeedFilter, setReaderFeedFilter, readerStatusFilter, setReaderStatusFilter, readerSearch, setReaderSearch, readerCategoryId, setReaderCategoryId,
+    readerFeedFilter, setReaderFeedFilter, readerStatusFilter, setReaderStatusFilter, readerSearch, setReaderSearch, readerCategoryId, setReaderCategoryId, readerSortOrder, setReaderSortOrder,
     feedViewFilter, setFeedViewFilterState, selectedChannelId, setSelectedChannelIdState, selectedFeedCategoryId, setSelectedFeedCategoryIdState, categoryFeedIds, setCategoryFeedIds,
     setFeedViewFilter, setSelectedFeedCategoryId, setSelectedChannelId
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,7 +387,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     token, isAuthenticated, isTokenModalOpen, tempToken, verifyToken,
     toasts, callApi, isApiLoading,
     feeds, channels, categories, chats, unreadItems, timeline, postLogs, config,
-    readerFeedFilter, readerStatusFilter, readerSearch, readerCategoryId,
+    readerFeedFilter, readerStatusFilter, readerSearch, readerCategoryId, readerSortOrder,
     feedViewFilter, selectedChannelId, selectedFeedCategoryId, categoryFeedIds,
   ]);
 

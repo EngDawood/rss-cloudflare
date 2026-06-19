@@ -235,10 +235,11 @@ export async function listNewItems(
 		since?: number;
 		unreadOnly?: boolean;
 		readOnly?: boolean;
+		orderBy?: 'newest_published' | 'oldest_published' | 'newly_added' | 'oldest_added';
 	},
 ): Promise<DbItemCompact[]> {
 	type Raw = Omit<DbItemCompact, 'topics'> & { topics: string };
-	const { feedId, limit = 50, query, since, unreadOnly = true, readOnly = false } = opts ?? {};
+	const { feedId, limit = 50, query, since, unreadOnly = true, readOnly = false, orderBy = 'newest_published' } = opts ?? {};
 
 	const where: string[] = [];
 	if (readOnly) {
@@ -267,13 +268,22 @@ export async function listNewItems(
 	}
 	if (since) { where.push('i.timestamp >= ?'); params.push(since); }
 
+	let orderByClause = 'i.timestamp DESC';
+	if (orderBy === 'oldest_published') {
+		orderByClause = 'i.timestamp ASC';
+	} else if (orderBy === 'newly_added') {
+		orderByClause = 'i.fetched_at DESC';
+	} else if (orderBy === 'oldest_added') {
+		orderByClause = 'i.fetched_at ASC';
+	}
+
 	params.push(limit);
 	const sql = `
 		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp, i.read,
 		       f.title as feed_title, f.source_value as feed_url
 		FROM items i JOIN feeds f ON f.id = i.feed_id
 		WHERE ${where.length ? where.join(' AND ') : '1=1'}
-		ORDER BY i.timestamp DESC LIMIT ?
+		ORDER BY ${orderByClause} LIMIT ?
 	`;
 	const result = await db.prepare(sql).bind(...params).all<Raw>();
 	return result.results.map(row => ({
@@ -291,10 +301,11 @@ export async function searchItems(
 		unreadOnly?: boolean;
 		readOnly?: boolean;
 		limit?: number;
+		orderBy?: 'newest_published' | 'oldest_published' | 'newly_added' | 'oldest_added';
 	},
 ): Promise<DbItemCompact[]> {
 	type Raw = Omit<DbItemCompact, 'topics'> & { topics: string };
-	const { query, feedId, since, unreadOnly = false, readOnly = false, limit = 50 } = opts;
+	const { query, feedId, since, unreadOnly = false, readOnly = false, limit = 50, orderBy = 'newest_published' } = opts;
 
 	const like = `%${query}%`;
 	const where: string[] = ['(i.title LIKE ? OR i.text LIKE ? OR i.author LIKE ?)'];
@@ -319,13 +330,22 @@ export async function searchItems(
 	}
 	if (since) { where.push('i.timestamp >= ?'); params.push(since); }
 
+	let orderByClause = 'i.timestamp DESC';
+	if (orderBy === 'oldest_published') {
+		orderByClause = 'i.timestamp ASC';
+	} else if (orderBy === 'newly_added') {
+		orderByClause = 'i.fetched_at DESC';
+	} else if (orderBy === 'oldest_added') {
+		orderByClause = 'i.fetched_at ASC';
+	}
+
 	params.push(limit);
 	const sql = `
 		SELECT i.feed_id, i.id, i.title, i.link, i.author, i.topics, i.timestamp, i.read,
 		       f.title as feed_title, f.source_value as feed_url
 		FROM items i JOIN feeds f ON f.id = i.feed_id
 		WHERE ${where.join(' AND ')}
-		ORDER BY i.timestamp DESC LIMIT ?
+		ORDER BY ${orderByClause} LIMIT ?
 	`;
 	const result = await db.prepare(sql).bind(...params).all<Raw>();
 	return result.results.map(row => ({
@@ -378,10 +398,17 @@ async function resolveMcpFeedScope(db: D1Database, feedId?: string | string[]): 
 
 export async function listNewItemsMcp(
 	db: D1Database,
-	opts?: { feedId?: string | string[]; limit?: number; query?: string; since?: number; unreadOnly?: boolean },
+	opts?: {
+		feedId?: string | string[];
+		limit?: number;
+		query?: string;
+		since?: number;
+		unreadOnly?: boolean;
+		orderBy?: 'newest_published' | 'oldest_published' | 'newly_added' | 'oldest_added';
+	},
 ): Promise<DbItemCompact[]> {
 	type Raw = Omit<DbItemCompact, 'topics'> & { topics: string };
-	const { feedId, limit = 50, query, since, unreadOnly = true } = opts ?? {};
+	const { feedId, limit = 50, query, since, unreadOnly = true, orderBy = 'newest_published' } = opts ?? {};
 
 	const feedIds = await resolveMcpFeedScope(db, feedId);
 	if (feedIds.length === 0) return [];
@@ -396,6 +423,16 @@ export async function listNewItemsMcp(
 		params.push(like, like, like);
 	}
 	if (since) { where.push('i.timestamp >= ?'); params.push(since); }
+
+	let orderByClause = 'i.timestamp DESC';
+	if (orderBy === 'oldest_published') {
+		orderByClause = 'i.timestamp ASC';
+	} else if (orderBy === 'newly_added') {
+		orderByClause = 'i.fetched_at DESC';
+	} else if (orderBy === 'oldest_added') {
+		orderByClause = 'i.fetched_at ASC';
+	}
+
 	params.push(limit);
 
 	const sql = `
@@ -406,7 +443,7 @@ export async function listNewItemsMcp(
 		JOIN feeds f ON f.id = i.feed_id
 		LEFT JOIN mcp_read mr ON mr.item_id = i.id
 		WHERE ${where.join(' AND ')}
-		ORDER BY i.timestamp DESC LIMIT ?
+		ORDER BY ${orderByClause} LIMIT ?
 	`;
 	const result = await db.prepare(sql).bind(...params).all<Raw>();
 	return result.results.map(row => ({ ...row, topics: parseJsonSafe<string[]>(row.topics, []) }));
@@ -414,10 +451,17 @@ export async function listNewItemsMcp(
 
 export async function searchItemsMcp(
 	db: D1Database,
-	opts: { query: string; feedId?: string | string[]; since?: number; unreadOnly?: boolean; limit?: number },
+	opts: {
+		query: string;
+		feedId?: string | string[];
+		since?: number;
+		unreadOnly?: boolean;
+		limit?: number;
+		orderBy?: 'newest_published' | 'oldest_published' | 'newly_added' | 'oldest_added';
+	},
 ): Promise<DbItemCompact[]> {
 	type Raw = Omit<DbItemCompact, 'topics'> & { topics: string };
-	const { query, feedId, since, unreadOnly = false, limit = 50 } = opts;
+	const { query, feedId, since, unreadOnly = false, limit = 50, orderBy = 'newest_published' } = opts;
 
 	const feedIds = await resolveMcpFeedScope(db, feedId);
 	if (feedIds.length === 0) return [];
@@ -428,6 +472,16 @@ export async function searchItemsMcp(
 	const params: unknown[] = [like, like, like, ...feedIds];
 	if (unreadOnly) where.push('mr.item_id IS NULL');
 	if (since) { where.push('i.timestamp >= ?'); params.push(since); }
+
+	let orderByClause = 'i.timestamp DESC';
+	if (orderBy === 'oldest_published') {
+		orderByClause = 'i.timestamp ASC';
+	} else if (orderBy === 'newly_added') {
+		orderByClause = 'i.fetched_at DESC';
+	} else if (orderBy === 'oldest_added') {
+		orderByClause = 'i.fetched_at ASC';
+	}
+
 	params.push(limit);
 
 	const sql = `
@@ -438,7 +492,7 @@ export async function searchItemsMcp(
 		JOIN feeds f ON f.id = i.feed_id
 		LEFT JOIN mcp_read mr ON mr.item_id = i.id
 		WHERE ${where.join(' AND ')}
-		ORDER BY i.timestamp DESC LIMIT ?
+		ORDER BY ${orderByClause} LIMIT ?
 	`;
 	const result = await db.prepare(sql).bind(...params).all<Raw>();
 	return result.results.map(row => ({ ...row, topics: parseJsonSafe<string[]>(row.topics, []) }));
