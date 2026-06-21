@@ -6,8 +6,6 @@ import {
 export const GATEWAY_URL =
 	'https://gateway.ai.cloudflare.com/v1/c53938b50ea00b247dcd72dd2e9eada3/rss-summarizer/compat/chat/completions';
 
-const DEFAULT_DYNAMIC_CHAT_ROUTE = 'dynamic/chat';
-
 const AGENT_SYSTEM_PROMPT =
 	`You are the official RSS & MCP Chat Agent. You have access to the local RSS reader database ` +
 	`and can perform read-only queries (feeds, unread items, logs) as well as save administrative notes. ` +
@@ -166,7 +164,7 @@ export async function runChatAgent(
 	const toolsCalled: string[] = [];
 
 	const configuredModel = await getConfig(db, 'ai_model');
-	const resolvedModel = configuredModel ? normalizeGatewayModel(configuredModel) : DEFAULT_DYNAMIC_CHAT_ROUTE;
+	const resolvedModel = normalizeGatewayModel(configuredModel || env.CHAT_AI_MODEL || 'google-ai-studio/gemini-2.0-flash');
 
 	// Build messages array
 	const messages: any[] = [

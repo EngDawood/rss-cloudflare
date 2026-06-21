@@ -4,9 +4,9 @@ import { useApp } from '../../context/AppContext';
 import { Modal } from '../common/Modal';
 
 const MODEL_OPTIONS = [
-  { label: 'NVIDIA Llama 70B (Default)', value: 'nvidia/llama-3.1-nemotron-70b-instruct' },
-  { label: 'Gemini 2.0 Flash', value: 'google/gemini-2.0-flash' },
-  { label: 'Gemini 1.5 Flash', value: 'google/gemini-1.5-flash' },
+  { label: 'NVIDIA Llama 70B (Default)', value: 'custom-nvidia-nim/llama-3.1-nemotron-70b-instruct' },
+  { label: 'Gemini 2.0 Flash', value: 'google-ai-studio/gemini-2.0-flash' },
+  { label: 'Gemini 1.5 Flash', value: 'google-ai-studio/gemini-1.5-flash' },
   { label: 'Groq Llama 70B', value: 'groq/llama-3.3-70b-versatile' },
   { label: 'Groq Llama 8B', value: 'groq/llama-3.1-8b-instant' },
   { label: 'Mistral Large', value: 'mistral/mistral-large-latest' },
