@@ -1,0 +1,129 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "rss-bridge",
+	"main": "workers/index.ts",
+	"compatibility_date": "2026-02-10",
+	"workers_dev": true,
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"persist": true,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": true,
+			"persist": true,
+			"head_sampling_rate": 1
+		}
+	},
+	// KV namespace for caching (create with: npx wrangler kv namespace create CACHE)
+	"kv_namespaces": [
+		{
+			"binding": "CACHE",
+			"id": "66a6f30828f94d508b4f55e93c8d1b7f"
+		}
+	],
+	// D1 database for RSS reader MCP
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "rss-reader",
+			"database_id": "aaf791f2-3ff0-4c55-b9c1-047842843091"
+		}
+	],
+	// Durable Object for the MCP server (McpAgent requires SQLite-backed DO)
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "RSSReaderMCP",
+				"class_name": "RSSReaderMCP"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": [
+				"RSSReaderMCP"
+			]
+		}
+	],
+	"vars": {
+		"USER_ID_CACHE_TTL": "86400",
+		"FEED_CACHE_TTL": "900",
+		"ADMIN_TELEGRAM_ID": "801062947",
+		"WORKER_URL": "https://rss-bridge.engdawood.workers.dev",
+		"DEFAULT_AI_MODEL": "nvidia/llama-3.1-nemotron-70b-instruct",
+		"CHAT_AI_MODEL": "google/gemini-2.0-flash",
+		"EMDASH_URL": "https://engdawood.com"
+		// Placeholder — override with: npx wrangler secret put MCP_AUTH_TOKEN
+		// "MCP_AUTH_TOKEN": ""
+		// EMDASH_TOKEN is a secret — set with: npx wrangler secret put EMDASH_TOKEN
+	},
+	// Durable agent workflows (migration 0009)
+	"workflows": [
+		{
+			"name": "agent-processor",
+			"binding": "AGENT_WORKFLOW",
+			"class_name": "AgentWorkflow"
+		}
+	],
+	"routes": [
+		{
+			"pattern": "rss.feed.engdawood.com",
+			"custom_domain": true
+		}
+	],
+	"assets": {
+		"directory": "./app/dist",
+		"binding": "ASSETS"
+	},
+	// Cron triggers: every 5 min (feed checks) + daily 03:00 UTC (data cleanup)
+	"triggers": {
+		"crons": [
+			"*/5 * * * *",
+			"0 3 * * *"
+		]
+	},
+	// Workers AI — used for embeddings (@cf/baai/bge-m3, multilingual including Arabic)
+	// Run `npm run cf-typegen` after adding this to regenerate Env types.
+	"ai": {
+		"binding": "AI"
+	},
+	"queues": {
+		"producers": [
+			{
+				"binding": "FEED_FETCH_QUEUE",
+				"queue": "rss-bot-fetch-queue"
+			},
+			{
+				"binding": "TELEGRAM_SEND_QUEUE",
+				"queue": "rss-bot-send-queue"
+			}
+		],
+		"consumers": [
+			{
+				"queue": "rss-bot-fetch-queue",
+				"max_batch_size": 10
+			},
+			{
+				"queue": "rss-bot-send-queue",
+				"max_batch_size": 1
+			}
+		]
+	}
+	// Secrets (set via wrangler secret put):
+	// - IG_SESSION_ID
+	// - IG_DS_USER_ID
+	// - TELEGRAM_BOT_TOKEN
+	// - TELEGRAM_WEBHOOK_SECRET
+	// - FOLO_WEBHOOK_SECRET  (optional: if set, Folo webhook requests must include ?token=<secret>)
+	// - MCP_AUTH_TOKEN       (overrides the empty var above for production auth)
+	// - AI_GATEWAY_TOKEN     (required: Cloudflare AI Gateway authenticated token)
+}

@@ -174,9 +174,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSelectedChannelIdState(null);
       localStorage.removeItem('rss_channel_filter');
     }
-    if (v !== 'mcp' && v !== 'category') {
+    if (v !== 'mcp' && v !== 'category' && v !== 'folo') {
       setSelectedFeedCategoryIdState(null);
       localStorage.removeItem('rss_category_filter');
+    } else if (v === 'folo') {
+      const currentCat = categories.find(c => c.id === selectedFeedCategoryId);
+      if (currentCat && currentCat.name !== 'Folo' && !currentCat.name.startsWith('Folo:')) {
+        setSelectedFeedCategoryIdState(null);
+        localStorage.removeItem('rss_category_filter');
+      }
+
+      // Prefetch Folo categories
+      const foloCats = categories.filter((c: any) => c.name === 'Folo' || c.name.startsWith('Folo:'));
+      for (const cat of foloCats) {
+        if (!categoryFeedIds[cat.id]) {
+          callApi('get_category_feeds', { categoryId: cat.id }).then(res => {
+            if (!res.error && res.data) {
+              const ids = res.data.map((f: any) => f.id);
+              setCategoryFeedIds(prev => ({ ...prev, [cat.id]: ids }));
+            }
+          });
+        }
+      }
     }
   };
 
@@ -278,18 +297,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
     if (!activeFeeds && feedViewFilter === 'folo') {
-      const foloCategory = categories.find((c: any) => c.name === 'Folo');
-      if (foloCategory) {
-        if (categoryFeedIds[foloCategory.id]) {
-          activeFeeds = categoryFeedIds[foloCategory.id];
+      if (readerCategoryId) {
+        if (categoryFeedIds[readerCategoryId]) {
+          activeFeeds = categoryFeedIds[readerCategoryId];
         } else {
-          const catFeedsRes = await callApi('get_category_feeds', { categoryId: foloCategory.id });
+          const catFeedsRes = await callApi('get_category_feeds', { categoryId: readerCategoryId });
           if (!catFeedsRes.error && catFeedsRes.data) {
             const ids = catFeedsRes.data.map((f: any) => f.id);
-            setCategoryFeedIds(prev => ({ ...prev, [foloCategory.id]: ids }));
+            setCategoryFeedIds(prev => ({ ...prev, [readerCategoryId]: ids }));
             activeFeeds = ids;
           }
         }
+      } else {
+        const foloCategories = categories.filter((c: any) => c.name === 'Folo' || c.name.startsWith('Folo:'));
+        const combinedIds: string[] = [];
+        for (const cat of foloCategories) {
+          let ids = categoryFeedIds[cat.id];
+          if (!ids) {
+            const catFeedsRes = await callApi('get_category_feeds', { categoryId: cat.id });
+            if (!catFeedsRes.error && catFeedsRes.data) {
+              ids = catFeedsRes.data.map((f: any) => f.id);
+              setCategoryFeedIds(prev => ({ ...prev, [cat.id]: ids }));
+            }
+          }
+          if (ids) {
+            combinedIds.push(...ids);
+          }
+        }
+        activeFeeds = combinedIds;
       }
     }
 

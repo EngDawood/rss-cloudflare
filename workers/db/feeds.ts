@@ -417,3 +417,16 @@ export async function createCategory(db: D1Database, name: string): Promise<DbCa
 export async function deleteCategory(db: D1Database, categoryId: string): Promise<void> {
 	await db.prepare('DELETE FROM feed_categories WHERE id = ?').bind(categoryId).run();
 }
+
+export async function getFoloFeeds(db: D1Database): Promise<DbFeed[]> {
+	const result = await db.prepare(`
+		SELECT f.*, f.source_value AS url
+		FROM feeds f
+		JOIN feed_category_members fcm ON f.id = fcm.feed_id
+		JOIN feed_categories c ON fcm.category_id = c.id
+		WHERE c.name = 'Folo' OR c.name LIKE 'Folo:%'
+		GROUP BY f.id
+		ORDER BY f.title ASC
+	`).all<DbFeed>();
+	return result.results;
+}

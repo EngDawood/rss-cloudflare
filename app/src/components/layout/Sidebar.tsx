@@ -21,7 +21,7 @@ export const Sidebar: React.FC = () => {
     { id: 'feeds', label: 'RSS Feeds', icon: Rss },
     { id: 'reader', label: 'Feed Reader', icon: BookOpen },
     { id: 'telegram', label: 'Telegram Targets', icon: TelegramLogo },
-    { id: 'folo', label: 'Folo Webhook', icon: ShareNetwork },
+    { id: 'folo', label: 'Folo', icon: ShareNetwork },
     { id: 'sandbox', label: 'Post Sandbox', icon: PaperPlaneTilt },
     { id: 'logs', label: 'Recall & Logs', icon: Clock },
     { id: 'mcp', label: 'MCP Settings', icon: Robot },
