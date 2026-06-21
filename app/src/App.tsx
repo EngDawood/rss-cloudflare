@@ -74,26 +74,24 @@ export default function App() {
   };
 
   return (
-    <div className="bg-glow-radial min-h-[100dvh] flex flex-col antialiased relative">
-      {/* Visual textures - DOM Optimized */}
-      <div className="mesh-grid absolute inset-0 z-0 pointer-events-none opacity-40" />
+    <div className="rr-app bg-bg-base text-text-base h-[100dvh] flex antialiased relative overflow-hidden">
+      {/* Visual textures */}
+      <div className="mesh-grid absolute inset-0 z-0 pointer-events-none opacity-50" />
       <div className="grain-overlay" />
 
       {/* Toast Notifications */}
       <ToastContainer />
 
-      {/* Header */}
-      <Header />
+      {/* Navigation Sidebar (full height) */}
+      <Sidebar />
 
-      {/* Main Container */}
-      <div className="max-w-[1400px] w-full mx-auto px-8 py-10 flex-grow grid grid-cols-1 md:grid-cols-[auto_1fr] gap-12 z-10 relative">
-        {/* Navigation Sidebar */}
-        <Sidebar />
+      {/* Main column */}
+      <div className="flex-1 min-w-0 flex flex-col relative z-10">
+        <Header />
 
-        {/* Content Panel */}
-        <main className="min-w-0">
+        <main className="flex-1 min-h-0 relative bg-bg-base">
           <AnimatePresence mode="wait">
-            
+
             {/* SKELETON LOADER */}
             {isLoading && (
               <motion.div
@@ -101,13 +99,13 @@ export default function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex flex-col gap-6"
+                className="absolute inset-0 rr-scroll flex flex-col gap-6 px-10 py-8"
               >
-                <div className="h-10 w-1/3 bg-white/5 rounded-xl animate-pulse" />
-                <div className="p-8 rounded-2xl border border-border-base bg-bg-card/30 flex flex-col gap-4 animate-pulse">
-                  <div className="h-5 w-full bg-white/5 rounded-lg" />
-                  <div className="h-5 w-3/4 bg-white/5 rounded-lg" />
-                  <div className="h-5 w-5/6 bg-white/5 rounded-lg" />
+                <div className="h-10 w-1/3 bg-surface rounded-xl animate-pulse" />
+                <div className="p-8 rounded-2xl border border-border-base bg-surface/60 flex flex-col gap-4 animate-pulse">
+                  <div className="h-5 w-full bg-surface-2 rounded-lg" />
+                  <div className="h-5 w-3/4 bg-surface-2 rounded-lg" />
+                  <div className="h-5 w-5/6 bg-surface-2 rounded-lg" />
                 </div>
               </motion.div>
             )}
@@ -119,13 +117,16 @@ export default function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex flex-col items-center justify-center gap-4 py-24 text-center"
+                className="absolute inset-0 flex flex-col items-center justify-center gap-5 text-center px-8"
               >
-                <div className="text-4xl">🔒</div>
-                <p className="text-text-muted text-sm">Access restricted. Enter your token to continue.</p>
+                <div className="w-[76px] h-[76px] rounded-full bg-surface border border-border-base flex items-center justify-center text-accent text-3xl">🔒</div>
+                <div>
+                  <div className="font-display font-semibold text-2xl text-ink mb-1.5">Access restricted</div>
+                  <p className="text-muted text-sm max-w-sm leading-relaxed">Enter your bearer token to read and manage the Reading Room.</p>
+                </div>
                 <button
                   onClick={() => setIsTokenModalOpen(true)}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-accent-primary text-white hover:bg-accent-primary-hover transition cursor-pointer"
+                  className="btn-press px-5 py-2.5 rounded-full text-[13px] font-semibold bg-accent text-onaccent hover:bg-accent-primary-hover transition cursor-pointer"
                 >
                   Enter Token
                 </button>
@@ -133,7 +134,18 @@ export default function App() {
             )}
 
             {/* Render selected panel */}
-            {!isLoading && isAuthenticated === true && renderActiveTab()}
+            {!isLoading && isAuthenticated === true && (
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="absolute inset-0"
+              >
+                {renderActiveTab()}
+              </motion.div>
+            )}
 
           </AnimatePresence>
         </main>
@@ -146,15 +158,15 @@ export default function App() {
         title="Access Credentials"
         footer={
           <>
-            <button 
-              onClick={() => setIsTokenModalOpen(false)} 
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer transition"
+            <button
+              onClick={() => setIsTokenModalOpen(false)}
+              className="btn-press px-4 py-2 rounded-full text-xs font-semibold bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer transition"
             >
               Cancel
             </button>
-            <button 
-              onClick={handleSaveToken} 
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-accent-primary text-white hover:bg-accent-primary-hover cursor-pointer transition"
+            <button
+              onClick={handleSaveToken}
+              className="btn-press px-4 py-2 rounded-full text-xs font-semibold bg-accent text-onaccent hover:bg-accent-primary-hover cursor-pointer transition"
             >
               Save Secret
             </button>
@@ -162,12 +174,12 @@ export default function App() {
         }
       >
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-text-muted uppercase tracking-wider">MCP_AUTH_TOKEN</label>
-          <input 
-            type="password" 
-            value={tempToken} 
-            onChange={e => setTempToken(e.target.value)} 
-            placeholder="Enter bearer secret token..." 
+          <label className="text-[10px] font-semibold text-muted uppercase tracking-[0.14em] font-mono">MCP_AUTH_TOKEN</label>
+          <input
+            type="password"
+            value={tempToken}
+            onChange={e => setTempToken(e.target.value)}
+            placeholder="Enter bearer secret token..."
             className="bg-bg-input border border-border-base rounded-xl px-4 py-3 text-sm text-text-base focus:outline-none focus:border-accent-primary font-mono mt-1"
           />
           <p className="text-[10px] text-text-muted leading-relaxed mt-2.5 font-semibold">

@@ -1,59 +1,83 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { Moon, Sun, ShieldCheck, ShieldWarning, Gear } from '@phosphor-icons/react';
+import { Sun, Moon, Gear } from '@phosphor-icons/react';
 import { useApp } from '../../context/AppContext';
+
+const CRUMBS: Record<string, string> = {
+  feeds: 'Your Feeds',
+  reader: 'Reader',
+  telegram: 'Telegram',
+  folo: 'Folo Webhook',
+  sandbox: 'Post Sandbox',
+  logs: 'Recall & Logs',
+  mcp: 'MCP Settings',
+  workflows: 'Workflows',
+  playground: 'Playground',
+  chat: 'Agent Chat',
+  instances: 'Instances',
+  test: 'Test Parser',
+};
 
 export const Header: React.FC = () => {
   const {
+    activeTab,
     theme,
     setTheme,
     isAuthenticated,
     token,
     setTempToken,
-    setIsTokenModalOpen
+    setIsTokenModalOpen,
   } = useApp();
 
+  const crumb = CRUMBS[activeTab] || activeTab;
+
+  const seg = (on: boolean) =>
+    `btn-press flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer ${
+      on ? 'bg-accent text-onaccent' : 'bg-transparent text-muted hover:text-ink'
+    }`;
+
   return (
-    <header className="sticky top-0 bg-bg-card/75 backdrop-blur-md border-b border-border-base px-8 py-5 flex items-center justify-between z-40">
-      <div className="flex items-center gap-4">
-        <div className="w-10 h-10 rounded-xl bg-accent-primary flex items-center justify-center font-bold text-white shadow-lg shadow-accent-primary/10">R</div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-bold text-xl leading-tight bg-gradient-to-r from-text-base to-text-muted bg-clip-text text-transparent">RSS Bridge & MCP</h1>
-            <span className="w-1.5 h-1.5 rounded-full bg-accent-primary shadow-[0_0_10px_var(--color-accent-primary)]" />
-          </div>
-          <span className="text-[10px] text-text-muted font-mono tracking-widest uppercase">Cloudflare Worker Panel</span>
-        </div>
-      </div>
+    <header className="h-16 flex-none border-b border-border-base flex items-center px-7 gap-3.5 bg-surface relative z-30">
+      <div className="font-mono text-[11px] tracking-[0.14em] uppercase text-muted truncate">{crumb}</div>
 
-      <div className="flex items-center gap-4">
-        {/* Light/Dark Toggle Button */}
-        <motion.button 
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-          className="p-2.5 rounded-xl bg-bg-input border border-border-base text-text-muted hover:text-text-base cursor-pointer transition flex items-center justify-center"
-          title="Toggle theme mode"
+      <div className="ml-auto flex items-center gap-3">
+        {/* Theme segmented toggle */}
+        <div className="flex bg-bg-base border border-border-base rounded-full p-[3px] gap-0.5">
+          <button onClick={() => setTheme('light')} className={seg(theme === 'light')}>
+            <Sun size={13} weight="bold" />
+            <span className="hidden sm:inline">Light</span>
+          </button>
+          <button onClick={() => setTheme('dark')} className={seg(theme === 'dark')}>
+            <Moon size={13} weight="bold" />
+            <span className="hidden sm:inline">Dark</span>
+          </button>
+        </div>
+
+        {/* Auth pill */}
+        <div
+          className={`hidden md:flex items-center gap-2 px-3 py-[7px] rounded-full text-xs font-semibold ${
+            isAuthenticated === true
+              ? 'bg-ok-soft text-ok'
+              : isAuthenticated === false
+              ? 'bg-accent-soft text-accent'
+              : 'bg-bg-input text-muted'
+          }`}
         >
-          {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
-        </motion.button>
-
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border ${
-          isAuthenticated === true ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-          isAuthenticated === false ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
-          'bg-bg-input text-text-muted border-border-base'
-        }`}>
-          {isAuthenticated === true ? <ShieldCheck size={14} className="text-emerald-400" /> : <ShieldWarning size={14} className="text-rose-400" />}
-          <span className="font-mono">{isAuthenticated === true ? 'Authenticated' : isAuthenticated === false ? 'No Access' : 'Connecting'}</span>
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              isAuthenticated === true ? 'bg-ok' : isAuthenticated === false ? 'bg-accent' : 'bg-muted'
+            }`}
+          />
+          {isAuthenticated === true ? 'Authenticated' : isAuthenticated === false ? 'No Access' : 'Connecting'}
         </div>
 
-        <motion.button 
-          whileTap={{ scale: 0.98 }}
+        {/* Settings gear */}
+        <button
           onClick={() => { setTempToken(token); setIsTokenModalOpen(true); }}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-bg-input border border-border-base text-text-muted hover:text-text-base transition duration-200 cursor-pointer"
+          title="Setup access token"
+          className="btn-press w-[38px] h-[38px] rounded-full border border-line-strong bg-bg-base text-ink-soft hover:text-accent flex items-center justify-center cursor-pointer"
         >
-          <Gear size={14} />
-          <span>Setup Token</span>
-        </motion.button>
+          <Gear size={15} />
+        </button>
       </div>
     </header>
   );

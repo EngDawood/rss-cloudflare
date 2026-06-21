@@ -1,60 +1,93 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg-base: var(--color-bg-base-val);
-  --color-bg-card: var(--color-bg-card-val);
-  --color-text-base: var(--color-text-base-val);
-  --color-text-muted: var(--color-text-muted-val);
-  --color-border-base: var(--color-border-base-val);
-  --color-bg-input: var(--color-bg-input-val);
-  
-  --color-accent-primary: var(--color-accent-primary-val);
-  --color-accent-primary-hover: var(--color-accent-primary-hover-val);
+  /* ===== Semantic tokens (existing utility names, repointed to Reading Room) ===== */
+  --color-bg-base: var(--rr-bg);
+  --color-bg-card: var(--rr-surface);
+  --color-text-base: var(--rr-ink);
+  --color-text-muted: var(--rr-muted);
+  --color-border-base: var(--rr-line);
+  --color-bg-input: var(--rr-surface-2);
+
+  --color-accent-primary: var(--rr-accent);
+  --color-accent-primary-hover: var(--rr-accent-hover);
+
+  /* ===== Reading Room editorial tokens (new utilities: bg-surface, text-ink, …) ===== */
+  --color-bg: var(--rr-bg);
+  --color-surface: var(--rr-surface);
+  --color-surface-2: var(--rr-surface-2);
+  --color-ink: var(--rr-ink);
+  --color-ink-soft: var(--rr-ink-soft);
+  --color-muted: var(--rr-muted);
+  --color-line: var(--rr-line);
+  --color-line-strong: var(--rr-line-strong);
+  --color-accent: var(--rr-accent);
+  --color-accent-soft: var(--rr-accent-soft);
+  --color-onaccent: var(--rr-onaccent);
+  --color-ok: var(--rr-ok);
+  --color-ok-soft: var(--rr-ok-soft);
+  --color-warn: var(--rr-warn);
+  --color-danger: var(--rr-danger);
+
+  /* ===== Fonts ===== */
+  --font-display: 'Newsreader', serif;
+  --font-serif: 'Newsreader', serif;
+  --font-body: 'Outfit', sans-serif;
+  --font-mono: 'Fira Code', monospace;
 }
 
 @layer base {
   :root {
-    /* DEFAULT Theme Mode: Obsidian Dark Mode */
-    --color-bg-base-val: #08090B; /* Pure dark obsidian background */
-    --color-bg-card-val: rgba(18, 19, 22, 0.45); /* Glass card backing */
-    --color-text-base-val: #f4f4f5; /* Off-white base text */
-    --color-text-muted-val: #a1a1aa; /* Muted text */
-    --color-border-base-val: rgba(255, 255, 255, 0.06); /* Glass border */
-    --color-bg-input-val: #121316; /* Solid dark inputs */
-
-    /* Accent color: Terracotta */
-    --color-accent-primary-val: #B85A3A;
-    --color-accent-primary-hover-val: #a34c2e;
+    /* DEFAULT Theme Mode: Reading Room — Warm Dark */
+    --rr-bg: #16130f;
+    --rr-surface: #211c16;
+    --rr-surface-2: #2b251d;
+    --rr-ink: #efe7d7;
+    --rr-ink-soft: #c9bda7;
+    --rr-muted: #8a7d68;
+    --rr-line: #342c22;
+    --rr-line-strong: #443a2c;
+    --rr-accent: #D9824E;
+    --rr-accent-hover: #c4673a;
+    --rr-accent-soft: rgba(217, 130, 78, 0.16);
+    --rr-onaccent: #1a140f;
+    --rr-ok: #6fae84;
+    --rr-ok-soft: rgba(111, 174, 132, 0.14);
+    --rr-warn: #d6a456;
+    --rr-danger: #c4564a;
 
     /* Material properties */
-    --inner-border-opacity: 0.05;
-    --shadow-color: rgba(0, 0, 0, 0.5);
-    --grid-line: rgba(255, 255, 255, 0.012);
-    --glow-color-1: rgba(184, 90, 58, 0.08); /* Terracotta glow */
-    --glow-color-2: rgba(255, 255, 255, 0.01);
-
-    --font-display: 'Plus Jakarta Sans', sans-serif;
-    --font-body: 'Outfit', sans-serif;
-    --font-mono: 'Fira Code', monospace;
+    --inner-border-opacity: 0.04;
+    --shadow-color: rgba(0, 0, 0, 0.45);
+    --grid-line: rgba(255, 255, 255, 0.014);
+    --glow-color-1: rgba(217, 130, 78, 0.06);
+    --glow-color-2: rgba(255, 255, 255, 0.008);
   }
 
-  /* Light Theme Mode: Warm Parchment */
+  /* Light Theme Mode: Reading Room — Warm Parchment */
   html.light {
-    --color-bg-base-val: #F3EEE2; /* Warm linen parchment background */
-    --color-bg-card-val: rgba(236, 229, 211, 0.65); /* Warm sand glass cards (#ECE5D3) */
-    --color-text-base-val: #1e293b; /* Readable dark slate text */
-    --color-text-muted-val: #475569; /* Muted slate subheadings */
-    --color-border-base-val: rgba(15, 23, 42, 0.08); /* 1px border lines */
-    --color-bg-input-val: #ECE5D3; /* Warm sand solid input fields */
+    --rr-bg: #F3EEE2;
+    --rr-surface: #EAE2CE;
+    --rr-surface-2: #E2D8C0;
+    --rr-ink: #2a2620;
+    --rr-ink-soft: #564d3f;
+    --rr-muted: #9a8d78;
+    --rr-line: #ddd3bb;
+    --rr-line-strong: #c8bda1;
+    --rr-accent: #B85A3A;
+    --rr-accent-hover: #953d1f;
+    --rr-accent-soft: rgba(184, 90, 58, 0.12);
+    --rr-onaccent: #F8F4EA;
+    --rr-ok: #3f7a52;
+    --rr-ok-soft: rgba(63, 122, 82, 0.12);
+    --rr-warn: #b07a2a;
+    --rr-danger: #b4453a;
 
-    --color-accent-primary-val: #B85A3A;
-    --color-accent-primary-hover-val: #953d1f;
-
-    --inner-border-opacity: 0.2;
-    --shadow-color: rgba(15, 23, 42, 0.02);
-    --grid-line: rgba(15, 23, 42, 0.012);
-    --glow-color-1: rgba(184, 90, 58, 0.015);
-    --glow-color-2: rgba(114, 62, 42, 0.005);
+    --inner-border-opacity: 0.5;
+    --shadow-color: rgba(60, 40, 20, 0.10);
+    --grid-line: rgba(60, 40, 20, 0.018);
+    --glow-color-1: rgba(184, 90, 58, 0.05);
+    --glow-color-2: rgba(114, 62, 42, 0.02);
   }
 
   body {
@@ -63,63 +96,60 @@
     color: var(--color-text-base);
     overflow-x: hidden;
   }
-  
+
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
-    letter-spacing: -0.025em;
+    letter-spacing: -0.01em;
   }
 }
 
-/* Tactile Custom Scrollbars */
+/* ===== Reading Room scrollbars ===== */
+.rr-scroll { overflow-y: auto; }
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 7px;
+  height: 7px;
 }
-
 ::-webkit-scrollbar-track {
-  background: rgba(7, 8, 10, 0.1);
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--rr-line-strong);
   border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.03);
 }
-
-html.light ::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.1);
-  border: 1px solid rgba(15, 23, 42, 0.03);
-}
-
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-accent-primary);
 }
 
-/* Premium Ambient Lighting Elements */
+/* ===== Ambient background ===== */
 .bg-glow-radial {
-  background-image: 
+  background-image:
     radial-gradient(circle at 0% 0%, var(--glow-color-1) 0%, transparent 50%),
     radial-gradient(circle at 100% 100%, var(--glow-color-2) 0%, transparent 50%),
     radial-gradient(circle at 50% 50%, var(--color-bg-base) 0%, var(--color-bg-base) 100%);
 }
 
 .mesh-grid {
-  background-image: 
+  background-image:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-size: 26px 26px;
 }
 
-/* Liquid Glass Refraction */
+/* ===== Surface card (was liquid-glass) — solid editorial surface ===== */
 .liquid-glass {
   background: var(--color-bg-card);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--color-border-base);
-  box-shadow: 
+  box-shadow:
     inset 0 1px 0 0 rgba(255, 255, 255, var(--inner-border-opacity)),
-    0 10px 30px -10px var(--shadow-color);
+    0 12px 34px -22px var(--shadow-color);
 }
+
+/* ===== Interaction primitives ===== */
+.btn-press { transition: transform .12s, background-color .3s, color .3s, border-color .3s; }
+.btn-press:active { transform: scale(.97); }
+
+.rr-row { transition: transform .3s cubic-bezier(.16, 1, .3, 1), box-shadow .3s; }
+.rr-row:hover { transform: translateY(-2px); }
 
 /* Grain Overlay (DOM Optimized) */
 .grain-overlay {
@@ -130,7 +160,7 @@ html.light ::-webkit-scrollbar-thumb {
   height: 100vh;
   z-index: 9999;
   pointer-events: none;
-  opacity: 0.015;
+  opacity: 0.018;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
 }
 
@@ -150,15 +180,30 @@ html.light ::-webkit-scrollbar-thumb {
   animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Editorial drop cap on first paragraph of an article body */
+.rr-dropcap > p:first-of-type::first-letter,
+.rr-dropcap.rss-content-html > p:first-of-type::first-letter {
+  float: left;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 68px;
+  line-height: 0.76;
+  padding: 7px 12px 0 0;
+  color: var(--color-accent-primary);
+}
+
 /* RSS Formatted Content Styles */
 .rss-content-html {
   word-break: break-word;
-  font-family: var(--font-body);
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  line-height: 1.78;
+  color: var(--color-ink-soft);
 }
 
 .rss-content-html p {
-  margin-bottom: 1.25rem;
-  line-height: 1.7;
+  margin-bottom: 1.375rem;
+  line-height: 1.78;
 }
 
 .rss-content-html a {
@@ -176,7 +221,7 @@ html.light ::-webkit-scrollbar-thumb {
   margin-bottom: 1.25rem;
   padding-left: 1.5rem;
   display: flex;
-  flex-col: column;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
@@ -208,18 +253,19 @@ html.light ::-webkit-scrollbar-thumb {
   color: var(--color-text-base);
 }
 
-.rss-content-html h1 { font-size: 1.5rem; }
-.rss-content-html h2 { font-size: 1.35rem; }
-.rss-content-html h3 { font-size: 1.2rem; }
+.rss-content-html h1 { font-size: 1.7rem; }
+.rss-content-html h2 { font-size: 1.45rem; }
+.rss-content-html h3 { font-size: 1.25rem; }
 .rss-content-html h4 { font-size: 1.1rem; }
 
 .rss-content-html blockquote {
   border-left: 3px solid var(--color-accent-primary);
-  padding-left: 1.25rem;
-  color: var(--color-text-muted);
+  padding-left: 1.375rem;
+  color: var(--color-text-base);
   font-style: italic;
-  margin: 1.5rem 0;
-  line-height: 1.6;
+  font-size: 1.2rem;
+  margin: 1.75rem 0;
+  line-height: 1.5;
 }
 
 .rss-content-html pre, .rss-content-html code {
@@ -227,7 +273,7 @@ html.light ::-webkit-scrollbar-thumb {
   background: var(--color-bg-input);
   padding: 0.2rem 0.4rem;
   border-radius: 0.375rem;
-  font-size: 0.875em;
+  font-size: 0.8em;
   border: 1px solid var(--color-border-base);
 }
 
@@ -244,4 +290,3 @@ html.light ::-webkit-scrollbar-thumb {
   border: none;
   font-size: inherit;
 }
-

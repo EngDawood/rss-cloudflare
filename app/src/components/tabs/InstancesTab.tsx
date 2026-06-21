@@ -91,11 +91,11 @@ export const InstancesTab: React.FC = () => {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      className="flex flex-col gap-6"
+      className="h-full rr-scroll px-6 md:px-10 py-8 flex flex-col gap-6"
     >
       <div>
-        <h2 className="font-bold text-2xl tracking-tight text-text-base">Instance Management</h2>
-        <p className="text-xs text-text-muted mt-1">Reorder, add, or remove instances. Top 3 are tried on each fetch — benchmark ranks by items returned, then speed.</p>
+        <h2 className="font-display font-semibold text-[32px] leading-none text-ink">Instance Management</h2>
+        <p className="font-display italic text-[15px] text-muted mt-1.5">Reorder, add, or remove instances — top 3 are tried on each fetch; benchmark ranks by items returned, then speed.</p>
       </div>
 
       <div className="flex flex-col gap-4">
@@ -169,7 +169,7 @@ export const InstancesTab: React.FC = () => {
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 onClick={() => handleSaveInstances(key)}
-                className="w-full py-2.5 rounded-xl bg-accent-primary hover:bg-accent-primary-hover text-white font-bold text-xs transition duration-200 cursor-pointer"
+                className="btn-press w-full py-2.5 rounded-full bg-accent hover:bg-accent-primary-hover text-onaccent font-semibold text-xs transition cursor-pointer"
               >
                 Save Order
               </motion.button>

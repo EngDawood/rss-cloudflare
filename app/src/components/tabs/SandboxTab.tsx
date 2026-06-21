@@ -49,11 +49,11 @@ export const SandboxTab: React.FC = () => {
       initial={{ opacity: 0, y: 8 }} 
       animate={{ opacity: 1, y: 0 }} 
       exit={{ opacity: 0, y: -8 }}
-      className="flex flex-col gap-6"
+      className="h-full rr-scroll px-6 md:px-10 py-8 flex flex-col gap-6"
     >
       <div>
-        <h2 className="font-bold text-2xl tracking-tight text-text-base">Post Sandbox</h2>
-        <p className="text-xs text-text-muted mt-1">Manually dispatch customized media payloads to Telegram targets</p>
+        <h2 className="font-display font-semibold text-[32px] leading-none text-ink">Post Sandbox</h2>
+        <p className="font-display italic text-[15px] text-muted mt-1.5">Manually dispatch custom media payloads to Telegram targets</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -133,7 +133,7 @@ export const SandboxTab: React.FC = () => {
             <motion.button 
               whileTap={{ scale: 0.98 }}
               type="submit"
-              className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold bg-accent-primary hover:bg-accent-primary-hover text-white transition duration-200 mt-2 cursor-pointer w-full"
+              className="btn-press flex items-center justify-center gap-2 py-3.5 rounded-full font-semibold bg-accent hover:bg-accent-primary-hover text-onaccent transition mt-2 cursor-pointer w-full"
             >
               <PaperPlaneTilt size={16} />
               <span>Dispatch Payload</span>
