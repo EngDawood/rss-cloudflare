@@ -80,11 +80,11 @@ export const PlaygroundTab: React.FC = () => {
       initial={{ opacity: 0, y: 8 }} 
       animate={{ opacity: 1, y: 0 }} 
       exit={{ opacity: 0, y: -8 }}
-      className="flex flex-col gap-6"
+      className="h-full rr-scroll px-6 md:px-10 py-8 flex flex-col gap-6"
     >
       <div>
-        <h2 className="font-bold text-2xl tracking-tight text-text-base">MCP Playground</h2>
-        <p className="text-xs text-text-muted mt-1">Interactively query and inspect the Model Context Protocol tools schema</p>
+        <h2 className="font-display font-semibold text-[32px] leading-none text-ink">MCP Playground</h2>
+        <p className="font-display italic text-[15px] text-muted mt-1.5">Interactively query and inspect the Model Context Protocol tools</p>
       </div>
 
       <div className="liquid-glass p-6 rounded-2xl">
@@ -132,7 +132,7 @@ export const PlaygroundTab: React.FC = () => {
                 whileTap={{ scale: 0.98 }}
                 onClick={handleExecuteTool}
                 disabled={isExecutingTool}
-                className="px-6 py-3 text-xs font-bold text-white bg-accent-primary hover:bg-accent-primary-hover transition duration-200 rounded-xl cursor-pointer disabled:opacity-50"
+                className="btn-press px-6 py-3 text-xs font-semibold text-onaccent bg-accent hover:bg-accent-primary-hover transition rounded-full cursor-pointer disabled:opacity-50"
               >
                 {isExecutingTool ? 'Calling...' : 'Call Tool'}
               </motion.button>

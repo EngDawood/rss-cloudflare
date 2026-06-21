@@ -178,13 +178,13 @@ export const McpTab: React.FC = () => {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      className="flex flex-col gap-8"
+      className="h-full rr-scroll px-6 md:px-10 py-8 flex flex-col gap-8"
     >
       {/* Header */}
-      <div className="flex justify-between items-center flex-wrap gap-4">
+      <div className="flex justify-between items-end flex-wrap gap-4">
         <div>
-          <h2 className="font-bold text-2xl tracking-tight text-text-base">MCP Configuration</h2>
-          <p className="text-xs text-text-muted mt-1">Manage MCP workspace subscriptions and feed categories</p>
+          <h2 className="font-display font-semibold text-[32px] leading-none text-ink">MCP Configuration</h2>
+          <p className="font-display italic text-[15px] text-muted mt-1.5">Manage MCP workspace subscriptions and feed categories</p>
         </div>
       </div>
 
@@ -199,10 +199,10 @@ export const McpTab: React.FC = () => {
           <motion.button
             whileTap={{ scale: 0.97 }}
             onClick={() => setIsNewCatOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-white bg-accent-primary rounded-xl hover:bg-accent-primary-hover transition duration-200 shadow-lg shadow-accent-primary/10 cursor-pointer"
+            className="btn-press flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-onaccent bg-accent rounded-full hover:bg-accent-primary-hover transition cursor-pointer"
           >
-            <Plus size={13} />
-            New Category
+            <Plus size={13} weight="bold" />
+            New category
           </motion.button>
         </div>
 

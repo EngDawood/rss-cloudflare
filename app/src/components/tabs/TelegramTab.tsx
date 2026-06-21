@@ -64,20 +64,20 @@ export const TelegramTab: React.FC = () => {
       initial={{ opacity: 0, y: 8 }} 
       animate={{ opacity: 1, y: 0 }} 
       exit={{ opacity: 0, y: -8 }}
-      className="flex flex-col gap-6"
+      className="h-full rr-scroll px-6 md:px-10 py-8 flex flex-col gap-6"
     >
-      <div className="flex justify-between items-center flex-wrap gap-4">
+      <div className="flex justify-between items-end flex-wrap gap-4">
         <div>
-          <h2 className="font-bold text-2xl tracking-tight text-text-base">Telegram Targets</h2>
-          <p className="text-xs text-text-muted mt-1">Configure Telegram channels and groups to receive dispatches</p>
+          <h2 className="font-display font-semibold text-[32px] leading-none text-ink">Telegram Targets</h2>
+          <p className="font-display italic text-[15px] text-muted mt-1.5">Channels and groups that receive dispatches</p>
         </div>
-        <motion.button 
+        <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={() => setIsAddChatOpen(true)}
-          className="flex items-center gap-2 px-4.5 py-2.5 text-xs font-bold text-white bg-accent-primary rounded-xl hover:bg-accent-primary-hover transition duration-200 shadow-lg cursor-pointer"
+          className="btn-press flex items-center gap-2 px-[18px] py-2.5 text-[13px] font-semibold text-onaccent bg-accent rounded-full hover:bg-accent-primary-hover transition cursor-pointer"
         >
-          <Plus size={14} />
-          <span>Register Chat</span>
+          <Plus size={14} weight="bold" />
+          <span>Register chat</span>
         </motion.button>
       </div>
 

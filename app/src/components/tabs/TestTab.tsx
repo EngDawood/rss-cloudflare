@@ -219,7 +219,7 @@ export const TestTab: React.FC = () => {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      className="flex flex-col gap-6"
+      className="h-full rr-scroll px-6 md:px-10 py-8 flex flex-col gap-6"
     >
       {/* Sub-nav */}
       <div className="flex gap-1 p-1 bg-bg-input border border-border-base rounded-xl w-fit">
@@ -241,8 +241,8 @@ export const TestTab: React.FC = () => {
       {subTab === 'parser' && (
         <>
           <div>
-            <h2 className="font-bold text-2xl tracking-tight text-text-base">Test Feed Parser</h2>
-            <p className="text-xs text-text-muted mt-1">Download and preview items from any external feed before registering it</p>
+            <h2 className="font-display font-semibold text-[32px] leading-none text-ink">Test Feed Parser</h2>
+            <p className="font-display italic text-[15px] text-muted mt-1.5">Download and preview items from any external feed before registering it</p>
           </div>
 
           <div className="liquid-glass p-6 rounded-2xl flex flex-col gap-4">
