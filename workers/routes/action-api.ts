@@ -12,8 +12,8 @@ import {
 	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
 	insertNote, listNotes, searchNotes, deleteNote,
 	listPostLog, recall, updateItemSummary,
-	upsertFeedBySource, upsertChannel, addTelegramSubscription, addMcpSubscription, removeMcpSubscription,
-	getChannels, getTelegramSubscriptions, getMcpSubscriptions,
+	upsertFeedBySource, upsertChannel, addTelegramSubscription, removeTelegramSubscription, addMcpSubscription, removeMcpSubscription,
+	getChannels, getTelegramSubscriptions, getTelegramSubscriptionsByFeed, getMcpSubscriptions, getFoloFeeds,
 	listCategories, getFeedsInCategory, createCategory, deleteCategory, addFeedToCategory, removeFeedFromCategory,
 	createWorkflow, updateWorkflow, listWorkflows, getWorkflow, deleteWorkflow, setWorkflowFeeds,
 	setRunStatus, listRuns, getRun, getRunEvents,
@@ -442,6 +442,29 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				}
 				await removeFoloChannel(db, channelId);
 				return c.json({ data: { channels: await getFoloChannelIds(db) } });
+			}
+			case 'get_folo_feeds': {
+				const foloFeeds = await getFoloFeeds(db);
+				const normalized = await Promise.all(foloFeeds.map(async (f) => {
+					const subs = await getTelegramSubscriptionsByFeed(db, f.id);
+					return {
+						...f,
+						telegram_channel_ids: subs.map(s => s.channel_id),
+					};
+				}));
+				return c.json({ data: normalized });
+			}
+			case 'add_telegram_subscription': {
+				const { channelId, feedId, mediaFilter = 'all' } = params;
+				if (!channelId || !feedId) return c.json({ error: 'channelId and feedId are required' }, 400);
+				await addTelegramSubscription(db, { channelId, feedId, mediaFilter });
+				return c.json({ data: { success: true } });
+			}
+			case 'remove_telegram_subscription': {
+				const { channelId, feedId } = params;
+				if (!channelId || !feedId) return c.json({ error: 'channelId and feedId are required' }, 400);
+				await removeTelegramSubscription(db, channelId, feedId);
+				return c.json({ data: { success: true } });
 			}
 			case 'create_folo_webhook': {
 				const { id, name, token } = params;

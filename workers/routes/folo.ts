@@ -9,7 +9,7 @@ import { enrichFeedItems } from '../utils/media-enrichment';
 import {
 	getFoloChannelIds, getChannelConfigFromD1, upsertFeedBySource, upsertItems,
 	addMcpSubscription, listCategories, createCategory, addFeedToCategory,
-	getFoloWebhook, getFoloWebhookChannels,
+	getFoloWebhook, getFoloWebhookChannels, getTelegramSubscriptionsByFeed,
 } from '../db/d1';
 
 type HonoEnv = { Bindings: Env };
@@ -153,6 +153,7 @@ export async function handleFoloWebhook(c: Context<HonoEnv>): Promise<Response> 
 
 	const feedItem = payloadToFeedItem(payload);
 
+	let dbFeedId: string | null = null;
 	// Persist feed + item to D1 under the appropriate category
 	try {
 		const feedSourceUrl = payload.feed.siteUrl || payload.feed.url;
@@ -162,6 +163,7 @@ export async function handleFoloWebhook(c: Context<HonoEnv>): Promise<Response> 
 			sourceValue: feedSourceUrl,
 			title: feedTitle,
 		});
+		dbFeedId = dbFeed.id;
 		await upsertItems(env.DB, dbFeed.id, [feedItem]);
 		await addMcpSubscription(env.DB, dbFeed.id, feedTitle);
 
@@ -172,6 +174,20 @@ export async function handleFoloWebhook(c: Context<HonoEnv>): Promise<Response> 
 		await addFeedToCategory(env.DB, category.id, dbFeed.id);
 	} catch (err) {
 		console.warn('[folo] Failed to persist item to D1:', err);
+	}
+
+	// Also get channels subscribed specifically to this feed
+	if (dbFeedId) {
+		try {
+			const feedSubs = await getTelegramSubscriptionsByFeed(env.DB, dbFeedId);
+			for (const sub of feedSubs) {
+				if (sub.enabled && !channelIds.includes(sub.channel_id)) {
+					channelIds.push(sub.channel_id);
+				}
+			}
+		} catch (err) {
+			console.warn('[folo] Failed to get feed-specific subscriptions:', err);
+		}
 	}
 
 	if (channelIds.length === 0) {

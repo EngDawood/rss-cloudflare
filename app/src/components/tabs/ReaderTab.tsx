@@ -40,7 +40,6 @@ export const ReaderTab: React.FC = () => {
   const feedDropdownRef = useRef<HTMLDivElement>(null);
 
   // Derived: feeds filtered by MCP/Telegram/Folo/channel/category selection
-  const foloCategory = categories.find((c: any) => c.name === 'Folo');
   const filteredFeeds = feeds.filter(feed => {
     const channelIds: string[] = feed.telegram_channel_ids || [];
     if (feedViewFilter === 'mcp' || feedViewFilter === 'category') {
@@ -52,9 +51,15 @@ export const ReaderTab: React.FC = () => {
       return true;
     }
     if (feedViewFilter === 'folo') {
-      if (!foloCategory) return false;
-      const ids = categoryFeedIds[foloCategory.id];
-      return ids ? ids.includes(feed.id) : true;
+      const foloCategories = categories.filter((c: any) => c.name === 'Folo' || c.name.startsWith('Folo:'));
+      if (readerCategoryId) {
+        const ids = categoryFeedIds[readerCategoryId];
+        return ids ? ids.includes(feed.id) : false;
+      }
+      return foloCategories.some(cat => {
+        const ids = categoryFeedIds[cat.id];
+        return ids ? ids.includes(feed.id) : false;
+      });
     }
     if (feedViewFilter === 'telegram') {
       if (channelIds.length === 0) return false;
@@ -262,7 +267,7 @@ export const ReaderTab: React.FC = () => {
             </select>
           )}
 
-          {(feedViewFilter === 'mcp' || feedViewFilter === 'category') && categories.length > 0 && (
+          {(feedViewFilter === 'mcp' || feedViewFilter === 'category' || feedViewFilter === 'folo') && categories.length > 0 && (
             <select
               value={readerCategoryId}
               onChange={async e => {
@@ -280,7 +285,10 @@ export const ReaderTab: React.FC = () => {
               className="bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
             >
               <option value="">All Categories</option>
-              {categories.map(cat => (
+              {(feedViewFilter === 'folo'
+                ? categories.filter(c => c.name === 'Folo' || c.name.startsWith('Folo:'))
+                : categories
+              ).map(cat => (
                 <option key={cat.id} value={cat.id}>{cat.name} ({cat.feed_count})</option>
               ))}
             </select>

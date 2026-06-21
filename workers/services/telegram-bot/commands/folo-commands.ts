@@ -1,9 +1,10 @@
-import type { Bot } from 'grammy';
+import { Bot, InlineKeyboard } from 'grammy';
 import { resolveChannelArg } from '../helpers/channel-resolver';
 import {
 	getFoloChannelIds, addFoloChannel, removeFoloChannel, getChannelById,
 	listFoloWebhooks, getFoloWebhook, createFoloWebhook, deleteFoloWebhook,
 	getFoloWebhookChannels, addFoloWebhookChannel, removeFoloWebhookChannel,
+	getFoloFeeds, getTelegramSubscriptions, addTelegramSubscription, removeTelegramSubscription,
 } from '../../../db/d1';
 
 /**
@@ -202,6 +203,46 @@ export function registerFoloCommands(bot: Bot, env: Env, _kv: KVNamespace): void
 			return;
 		}
 
+		// /folo sub @channel
+		if (subcommand === 'sub' || subcommand === 'subscribe') {
+			const channelArg = args[1];
+			if (!channelArg) {
+				await ctx.reply('Usage: <code>/folo sub @channel</code>', { parse_mode: 'HTML' });
+				return;
+			}
+			const resolved = await resolveChannelArg(bot, env.DB, channelArg);
+			if (!resolved) {
+				await ctx.reply(`Could not resolve channel: <code>${channelArg}</code>`, { parse_mode: 'HTML' });
+				return;
+			}
+
+			const foloFeeds = await getFoloFeeds(env.DB);
+			if (foloFeeds.length === 0) {
+				await ctx.reply('No Folo feeds are currently registered. Feeds are registered automatically when they push new articles via Folo webhooks.');
+				return;
+			}
+
+			const subs = await getTelegramSubscriptions(env.DB, resolved.id);
+			const subbedFeedIds = new Set(subs.map(s => s.feed_id));
+
+			const keyboard = new InlineKeyboard();
+			for (const feed of foloFeeds) {
+				const isSubbed = subbedFeedIds.has(feed.id);
+				const label = `${isSubbed ? '✅' : '➕'} ${feed.title || feed.source_value}`;
+				const callbackData = isSubbed
+					? `folounsub:${resolved.id}:${feed.id}`
+					: `folosub:${resolved.id}:${feed.id}`;
+				keyboard.text(label, callbackData).row();
+			}
+
+			await ctx.reply(
+				`<b>Folo Feed Subscriptions for ${resolved.title}</b>\n\n` +
+				`Click on a feed to subscribe/unsubscribe this channel:`,
+				{ parse_mode: 'HTML', reply_markup: keyboard }
+			);
+			return;
+		}
+
 		// /folo — overview
 		const secret = env.FOLO_WEBHOOK_SECRET;
 		const legacyTokenPart = secret ? `?token=${encodeURIComponent(secret)}` : '';
@@ -230,10 +271,59 @@ export function registerFoloCommands(bot: Bot, env: Env, _kv: KVNamespace): void
 			'<b>Commands:</b>\n' +
 			'<code>/folo new &lt;id&gt; &lt;name&gt;</code> — create webhook\n' +
 			'<code>/folo info &lt;id&gt;</code> — URL + channels\n' +
-			'<code>/folo add &lt;id&gt; @channel</code> — subscribe channel\n' +
-			'<code>/folo remove &lt;id&gt; @channel</code> — unsubscribe\n' +
+			'<code>/folo add &lt;id&gt; @channel</code> — subscribe to webhook\n' +
+			'<code>/folo remove &lt;id&gt; @channel</code> — unsubscribe from webhook\n' +
+			'<code>/folo sub @channel</code> — subscribe to custom feed\n' +
 			'<code>/folo del &lt;id&gt;</code> — delete webhook',
 			{ parse_mode: 'HTML' }
 		);
 	});
+
+	bot.callbackQuery(/^folosub:(-?\d+):([a-f0-9]+)$/, async (ctx) => {
+		const match = ctx.match;
+		if (!match) return;
+		const channelId = match[1];
+		const feedId = match[2];
+
+		await addTelegramSubscription(env.DB, { channelId, feedId });
+		await ctx.answerCallbackQuery({ text: 'Subscribed successfully!' });
+
+		// Update keyboard
+		await updateFoloSubKeyboard(ctx, channelId, env.DB);
+	});
+
+	bot.callbackQuery(/^folounsub:(-?\d+):([a-f0-9]+)$/, async (ctx) => {
+		const match = ctx.match;
+		if (!match) return;
+		const channelId = match[1];
+		const feedId = match[2];
+
+		await removeTelegramSubscription(env.DB, channelId, feedId);
+		await ctx.answerCallbackQuery({ text: 'Unsubscribed successfully!' });
+
+		// Update keyboard
+		await updateFoloSubKeyboard(ctx, channelId, env.DB);
+	});
+}
+
+async function updateFoloSubKeyboard(ctx: any, channelId: string, db: D1Database) {
+	const foloFeeds = await getFoloFeeds(db);
+	const subs = await getTelegramSubscriptions(db, channelId);
+	const subbedFeedIds = new Set(subs.map(s => s.feed_id));
+
+	const keyboard = new InlineKeyboard();
+	for (const feed of foloFeeds) {
+		const isSubbed = subbedFeedIds.has(feed.id);
+		const label = `${isSubbed ? '✅' : '➕'} ${feed.title || feed.source_value}`;
+		const callbackData = isSubbed
+			? `folounsub:${channelId}:${feed.id}`
+			: `folosub:${channelId}:${feed.id}`;
+		keyboard.text(label, callbackData).row();
+	}
+
+	try {
+		await ctx.editMessageReplyMarkup({ reply_markup: keyboard });
+	} catch (err) {
+		console.warn('Failed to edit callback keyboard:', err);
+	}
 }

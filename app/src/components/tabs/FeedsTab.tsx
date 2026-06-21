@@ -149,6 +149,17 @@ export const FeedsTab: React.FC = () => {
       }
       return true;
     }
+    if (feedViewFilter === 'folo') {
+      const foloCategories = categories.filter((c: any) => c.name === 'Folo' || c.name.startsWith('Folo:'));
+      if (selectedFeedCategoryId) {
+        const ids = categoryFeedIds[selectedFeedCategoryId];
+        return ids ? ids.includes(feed.id) : false;
+      }
+      return foloCategories.some(cat => {
+        const ids = categoryFeedIds[cat.id];
+        return ids ? ids.includes(feed.id) : false;
+      });
+    }
     if (feedViewFilter === 'telegram') {
       if (channelIds.length === 0) return false;
       if (selectedChannelId) return channelIds.includes(selectedChannelId);
@@ -222,6 +233,7 @@ export const FeedsTab: React.FC = () => {
             { id: 'all', label: 'All Feeds' },
             { id: 'mcp', label: 'MCP Only' },
             { id: 'telegram', label: 'Telegram' },
+            { id: 'folo', label: 'Folo' },
           ] as const).map(opt => (
             <button
               key={opt.id}
@@ -250,20 +262,25 @@ export const FeedsTab: React.FC = () => {
           </select>
         )}
 
-        {(feedViewFilter === 'mcp' || feedViewFilter === 'category') && categories.length > 0 && (
+        {(feedViewFilter === 'mcp' || feedViewFilter === 'category' || feedViewFilter === 'folo') && categories.length > 0 && (
           <select
             value={selectedFeedCategoryId || ''}
             onChange={e => {
               const id = e.target.value || null;
-              setFeedViewFilterState(id ? 'category' : 'mcp');
-              if (id) localStorage.setItem('rss_feed_filter', 'category');
-              else localStorage.setItem('rss_feed_filter', 'mcp');
+              if (feedViewFilter !== 'folo') {
+                setFeedViewFilterState(id ? 'category' : 'mcp');
+                if (id) localStorage.setItem('rss_feed_filter', 'category');
+                else localStorage.setItem('rss_feed_filter', 'mcp');
+              }
               setSelectedFeedCategoryId(id);
             }}
             className="bg-bg-input border border-border-base rounded-xl px-3 py-2 text-xs text-text-base focus:outline-none focus:border-accent-primary cursor-pointer font-semibold"
           >
             <option value="">All Categories</option>
-            {categories.map(cat => (
+            {(feedViewFilter === 'folo'
+              ? categories.filter(c => c.name === 'Folo' || c.name.startsWith('Folo:'))
+              : categories
+            ).map(cat => (
               <option key={cat.id} value={cat.id}>{cat.name} ({cat.feed_count})</option>
             ))}
           </select>
