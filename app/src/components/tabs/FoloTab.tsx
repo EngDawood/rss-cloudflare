@@ -63,7 +63,8 @@ export const FoloTab: React.FC = () => {
       loadFoloFeeds();
     }, 0);
     return () => clearTimeout(timer);
-  }, [load, loadChats, loadFoloFeeds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCopy = (url: string) => {
     navigator.clipboard.writeText(url);
