@@ -167,7 +167,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Filter Helpers
-  const setFeedViewFilter = (v: 'all' | 'mcp' | 'telegram' | 'category' | 'folo') => {
+  const setFeedViewFilter = useCallback((v: 'all' | 'mcp' | 'telegram' | 'category' | 'folo') => {
     setFeedViewFilterState(v);
     localStorage.setItem('rss_feed_filter', v);
     if (v !== 'telegram') {
@@ -197,9 +197,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     }
-  };
+  }, [categories, selectedFeedCategoryId, categoryFeedIds, callApi]);
 
-  const setSelectedFeedCategoryId = async (id: string | null) => {
+  const setSelectedFeedCategoryId = useCallback(async (id: string | null) => {
     setSelectedFeedCategoryIdState(id);
     if (id) {
       localStorage.setItem('rss_category_filter', id);
@@ -210,13 +210,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       localStorage.removeItem('rss_category_filter');
     }
-  };
+  }, [categoryFeedIds, callApi]);
 
-  const setSelectedChannelId = (id: string | null) => {
+  const setSelectedChannelId = useCallback((id: string | null) => {
     setSelectedChannelIdState(id);
     if (id) localStorage.setItem('rss_channel_filter', id);
     else localStorage.removeItem('rss_channel_filter');
-  };
+  }, []);
 
   const verifyToken = useCallback(async () => {
     setIsLoading(true);
@@ -241,7 +241,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [callApi]);
 
   // Data Loading Helpers
-  const loadFeeds = async (silent = false) => {
+  const loadFeeds = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true);
     const [feedsRes, channelsRes, catsRes] = await Promise.all([
       callApi('list_feeds'),
@@ -270,14 +270,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     if (!silent) setIsLoading(false);
-  };
+  }, [callApi, selectedFeedCategoryId]);
 
-  const loadChats = async () => {
+  const loadChats = useCallback(async () => {
     const res = await callApi('list_chats');
     if (!res.error) setChats(res.data || []);
-  };
+  }, [callApi]);
 
-  const loadReaderItems = async () => {
+  const loadReaderItems = useCallback(async () => {
     let res;
     const unreadOnly = readerStatusFilter === 'unread';
     const readOnly = readerStatusFilter === 'read';
@@ -365,9 +365,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!res.error) {
       setUnreadItems(res.data || []);
     }
-  };
+  }, [
+    callApi,
+    readerStatusFilter,
+    readerFeedFilter,
+    feedViewFilter,
+    readerCategoryId,
+    categoryFeedIds,
+    categories,
+    feeds,
+    selectedChannelId,
+    readerSearch,
+    readerSortOrder
+  ]);
 
-  const loadLogsAndConfig = async () => {
+  const loadLogsAndConfig = useCallback(async () => {
     const [recallRes, logsRes, configRes] = await Promise.all([
       callApi('recall', { limit: 20 }),
       callApi('list_post_log', { limit: 20 }),
@@ -377,7 +389,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!recallRes.error) setTimeline(recallRes.data || []);
     if (!logsRes.error) setPostLogs(logsRes.data || []);
     if (!configRes.error) setConfigState(configRes.data || {});
-  };
+  }, [callApi]);
 
   // Keep latest verifyToken in a ref so the effect below never needs it as a dep
   const verifyTokenRef = useRef(verifyToken);
