@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - dev
+  pull_request:
+    branches: ["main"]
+
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
