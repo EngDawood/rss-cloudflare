@@ -5,3 +5,8 @@ onlyBuiltDependencies:
   - esbuild
   - sharp
   - workerd
+  
+allowBuilds:
+  electron: true
+  core-js: false
+  esbuild: false
