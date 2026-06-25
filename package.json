@@ -15,8 +15,12 @@
 		"lint": "eslint app"
 	},
 	"devDependencies": {
+		"@changesets/cli": "^2.31.0",
 		"@cloudflare/vitest-pool-workers": "^0.12.4",
 		"@eslint/js": "^10.0.1",
+		"@semantic-release/changelog": "^6.0.3",
+		"@semantic-release/git": "^10.0.1",
+		"@semantic-release/github": "^12.0.8",
 		"@tailwindcss/vite": "^4.3.0",
 		"@types/node": "^25.2.3",
 		"@types/react": "^19.2.14",
@@ -27,6 +31,7 @@
 		"eslint-plugin-react-hooks": "^7.1.1",
 		"eslint-plugin-react-refresh": "^0.5.2",
 		"globals": "^17.6.0",
+		"semantic-release": "^25.0.5",
 		"typescript": "^5.5.2",
 		"typescript-eslint": "^8.59.2",
 		"vite": "^8.0.12",
