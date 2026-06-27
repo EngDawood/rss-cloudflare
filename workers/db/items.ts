@@ -308,6 +308,31 @@ export async function searchItemsMcp(
 	return result.results.map(row => ({ ...row, topics: parseJsonSafe<string[]>(row.topics, []) }));
 }
 
+// ── RSS bundle item query ─────────────────────────────────────────────────────
+
+export interface DbItemForRss extends DbItem {
+	feed_title: string;
+	feed_url: string;
+}
+
+export async function getItemsForFeeds(
+	db: D1Database,
+	feedIds: string[],
+	limit = 50,
+): Promise<DbItemForRss[]> {
+	if (feedIds.length === 0) return [];
+	const placeholders = feedIds.map(() => '?').join(',');
+	const result = await db.prepare(`
+		SELECT i.*, f.title AS feed_title, f.source_value AS feed_url
+		FROM items i
+		JOIN feeds f ON f.id = i.feed_id
+		WHERE i.feed_id IN (${placeholders})
+		ORDER BY i.timestamp DESC
+		LIMIT ?
+	`).bind(...feedIds, limit).all<DbItemForRss>();
+	return result.results;
+}
+
 /** Get a stored item by id, but only if its feed is within the MCP scope. */
 export async function getItemByIdMcp(db: D1Database, id: string): Promise<DbItem | null> {
 	const feedIds = await getMcpSubscribedFeedIds(db);

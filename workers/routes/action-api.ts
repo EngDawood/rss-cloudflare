@@ -20,6 +20,8 @@ import {
 	getFoloChannelIds, addFoloChannel, removeFoloChannel,
 	listFoloWebhooks, getFoloWebhook, createFoloWebhook, deleteFoloWebhook,
 	getFoloWebhookChannels, addFoloWebhookChannel, removeFoloWebhookChannel,
+	listRssBundles, getRssBundleBySlug, getRssBundleFeedIds, createRssBundle,
+	updateRssBundle, deleteRssBundle, addFeedToBundle, removeFeedFromBundle,
 } from '../db/d1';
 import { launchWorkflowRun } from '../workflows/trigger';
 import { resolveTarget, logAndSend } from '../services/post-service';
@@ -832,6 +834,55 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				// Fallback to keyword search.
 				const notes = await searchNotes(db, query, limit);
 				return c.json({ data: { notes, source: 'keyword' } });
+			}
+
+			// ── RSS Bundles ──────────────────────────────────────────────────────────
+			case 'list_bundles': {
+				const bundles = await listRssBundles(db);
+				const withFeeds = await Promise.all(bundles.map(async b => ({
+					...b,
+					feed_ids: await getRssBundleFeedIds(db, b.id),
+				})));
+				return c.json({ data: withFeeds });
+			}
+			case 'create_bundle': {
+				const { slug, title, description } = params;
+				if (!slug || !title) return c.json({ error: 'slug and title are required' }, 400);
+				const existing = await getRssBundleBySlug(db, slug);
+				if (existing) return c.json({ error: `Bundle with slug "${slug}" already exists` }, 409);
+				const bundle = await createRssBundle(db, { slug, title, description });
+				return c.json({ data: bundle });
+			}
+			case 'update_bundle': {
+				const { id, title, description, enabled } = params;
+				if (!id) return c.json({ error: 'id is required' }, 400);
+				await updateRssBundle(db, id, { title, description, enabled });
+				return c.json({ data: { ok: true } });
+			}
+			case 'delete_bundle': {
+				const { id } = params;
+				if (!id) return c.json({ error: 'id is required' }, 400);
+				await deleteRssBundle(db, id);
+				return c.json({ data: { ok: true } });
+			}
+			case 'get_bundle_feeds': {
+				const { bundleId } = params;
+				if (!bundleId) return c.json({ error: 'bundleId is required' }, 400);
+				const feedIds = await getRssBundleFeedIds(db, bundleId);
+				const feedRows = await Promise.all(feedIds.map(id => getFeedById(db, id)));
+				return c.json({ data: feedRows.filter(Boolean) });
+			}
+			case 'add_feed_to_bundle': {
+				const { bundleId, feedId } = params;
+				if (!bundleId || !feedId) return c.json({ error: 'bundleId and feedId are required' }, 400);
+				await addFeedToBundle(db, bundleId, feedId);
+				return c.json({ data: { ok: true } });
+			}
+			case 'remove_feed_from_bundle': {
+				const { bundleId, feedId } = params;
+				if (!bundleId || !feedId) return c.json({ error: 'bundleId and feedId are required' }, 400);
+				await removeFeedFromBundle(db, bundleId, feedId);
+				return c.json({ data: { ok: true } });
 			}
 
 			default:

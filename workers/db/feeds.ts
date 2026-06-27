@@ -418,6 +418,73 @@ export async function deleteCategory(db: D1Database, categoryId: string): Promis
 	await db.prepare('DELETE FROM feed_categories WHERE id = ?').bind(categoryId).run();
 }
 
+// ── RSS Bundles ───────────────────────────────────────────────────────────────
+
+export interface DbRssBundle {
+	id: string;
+	slug: string;
+	title: string;
+	description: string;
+	enabled: number;
+	created_at: number;
+}
+
+export async function listRssBundles(db: D1Database): Promise<DbRssBundle[]> {
+	const result = await db.prepare('SELECT * FROM rss_bundles ORDER BY created_at ASC').all<DbRssBundle>();
+	return result.results;
+}
+
+export async function getRssBundleBySlug(db: D1Database, slug: string): Promise<DbRssBundle | null> {
+	return db.prepare('SELECT * FROM rss_bundles WHERE slug = ? AND enabled = 1').bind(slug).first<DbRssBundle>();
+}
+
+export async function getRssBundleFeedIds(db: D1Database, bundleId: string): Promise<string[]> {
+	const result = await db.prepare('SELECT feed_id FROM rss_bundle_feeds WHERE bundle_id = ?')
+		.bind(bundleId).all<{ feed_id: string }>();
+	return result.results.map(r => r.feed_id);
+}
+
+export async function createRssBundle(
+	db: D1Database,
+	opts: { slug: string; title: string; description?: string },
+): Promise<DbRssBundle> {
+	const id = genId();
+	const now = Math.floor(Date.now() / 1000);
+	await db.prepare(
+		'INSERT INTO rss_bundles (id, slug, title, description, enabled, created_at) VALUES (?, ?, ?, ?, 1, ?)',
+	).bind(id, opts.slug, opts.title, opts.description ?? '', now).run();
+	return { id, slug: opts.slug, title: opts.title, description: opts.description ?? '', enabled: 1, created_at: now };
+}
+
+export async function updateRssBundle(
+	db: D1Database,
+	id: string,
+	opts: { title?: string; description?: string; enabled?: boolean },
+): Promise<void> {
+	const updates: string[] = [];
+	const params: unknown[] = [];
+	if (opts.title !== undefined) { updates.push('title = ?'); params.push(opts.title); }
+	if (opts.description !== undefined) { updates.push('description = ?'); params.push(opts.description); }
+	if (opts.enabled !== undefined) { updates.push('enabled = ?'); params.push(opts.enabled ? 1 : 0); }
+	if (updates.length === 0) return;
+	params.push(id);
+	await db.prepare(`UPDATE rss_bundles SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
+}
+
+export async function deleteRssBundle(db: D1Database, id: string): Promise<void> {
+	await db.prepare('DELETE FROM rss_bundles WHERE id = ?').bind(id).run();
+}
+
+export async function addFeedToBundle(db: D1Database, bundleId: string, feedId: string): Promise<void> {
+	await db.prepare('INSERT OR IGNORE INTO rss_bundle_feeds (bundle_id, feed_id) VALUES (?, ?)')
+		.bind(bundleId, feedId).run();
+}
+
+export async function removeFeedFromBundle(db: D1Database, bundleId: string, feedId: string): Promise<void> {
+	await db.prepare('DELETE FROM rss_bundle_feeds WHERE bundle_id = ? AND feed_id = ?')
+		.bind(bundleId, feedId).run();
+}
+
 export async function getFoloFeeds(db: D1Database): Promise<DbFeed[]> {
 	const result = await db.prepare(`
 		SELECT f.*, f.source_value AS url

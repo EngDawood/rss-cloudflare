@@ -11,6 +11,7 @@ import { handleQueue } from './queue-handler';
 import { RSSReaderMCP } from './mcp/index';
 import { QueueTask } from './types/queue';
 import { handleActionApi, handleChatApi, handleMigrateChannels } from './routes/action-api';
+import { handleRssBundleFeed } from './routes/rss-bundle';
 import { checkCronWorkflows } from './workflows/trigger';
 import { AgentWorkflow } from './workflows/agent-workflow';
 import { mcpAuthRejected } from './utils/auth';
@@ -38,6 +39,10 @@ app.post('/folo', handleFoloWebhook);
 app.post('/api/action', handleActionApi);
 app.post('/api/chat', handleChatApi);
 app.post('/api/migrate-channels', handleMigrateChannels);
+
+// Named RSS bundle endpoint — /feed/:slug or /:slug.xml (for rss.feed.engdawood.com custom domain)
+app.get('/feed/:slug', handleRssBundleFeed);
+app.get('/:slug{[^/]+\\.xml}', handleRssBundleFeed);
 
 // MCP server
 app.on(['GET', 'POST', 'DELETE'], ['/mcp', '/mcp/*'], async (c) => {
