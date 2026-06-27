@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/EngDawood/rss-cloudflare/compare/v1.1.0...v1.2.0) (2026-06-27)
+
+
+### Features
+
+* **ui:** merge bot channels and named chats into unified Telegram Targets list ([60be8f1](https://github.com/EngDawood/rss-cloudflare/commit/60be8f100b96b328d0a723225bde3d85f59a1d85))
+
 # [1.1.0](https://github.com/EngDawood/rss-cloudflare/compare/v1.0.0...v1.1.0) (2026-06-27)
 
 
