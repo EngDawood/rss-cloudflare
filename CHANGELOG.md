@@ -1,3 +1,12 @@
+# [1.1.0](https://github.com/EngDawood/rss-cloudflare/compare/v1.0.0...v1.1.0) (2026-06-27)
+
+
+### Features
+
+* add Bundles tab and integrate with app context ([d243940](https://github.com/EngDawood/rss-cloudflare/commit/d243940fc9043f5bf2635cca9aaaed523e8962be))
+* add custom domains for rss.engdawood.com ([161c763](https://github.com/EngDawood/rss-cloudflare/commit/161c763cf18a662da02b4ab0a08a6e861e0f79c3))
+* implement RSS bundles with CRUD operations and feed management ([0a97882](https://github.com/EngDawood/rss-cloudflare/commit/0a97882d6b96d0d9ddeefd85a7c2058c36fc54b3))
+
 # 1.0.0 (2026-06-25)
 
 
