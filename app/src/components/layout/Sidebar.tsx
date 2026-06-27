@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Rss, BookOpen, TelegramLogo, ShareNetwork,
   ChatCircleText, Terminal, FlowArrow, PaperPlaneTilt,
-  Clock, Robot, GlobeSimple, MagnifyingGlass,
+  Clock, Robot, GlobeSimple, MagnifyingGlass, Stack,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import { useApp } from '../../context/AppContext';
@@ -30,6 +30,7 @@ export const Sidebar: React.FC = () => {
         { id: 'reader', label: 'Reader', icon: BookOpen, badge: unreadTotal },
         { id: 'telegram', label: 'Telegram', icon: TelegramLogo },
         { id: 'folo', label: 'Folo Webhook', icon: ShareNetwork },
+        { id: 'bundles', label: 'RSS Bundles', icon: Stack },
       ],
     },
     {
