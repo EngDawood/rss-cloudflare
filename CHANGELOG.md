@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/EngDawood/rss-cloudflare/compare/v1.2.0...v1.3.0) (2026-06-27)
+
+
+### Features
+
+* remove redundant custom domain entry for RSS bridge ([d98ac8e](https://github.com/EngDawood/rss-cloudflare/commit/d98ac8e368c9ae193b5514725ca3b375b0e171d6))
+
 # [1.2.0](https://github.com/EngDawood/rss-cloudflare/compare/v1.1.0...v1.2.0) (2026-06-27)
 
 
