@@ -78,7 +78,16 @@
 		{
 			"pattern": "rss.feed.engdawood.com",
 			"custom_domain": true
+		},	
+		{
+			"pattern": "rss.engdawood.com",
+			"custom_domain": true
+		},
+		{
+			"pattern": "https://rss.engdawood.com",
+			"custom_domain": true
 		}
+
 	],
 	"assets": {
 		"directory": "./app/dist",
