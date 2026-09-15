@@ -15,7 +15,7 @@ export async function sendFallbackMessage(
 	error?: unknown
 ): Promise<void> {
 	const thumbnail = item.media[0]?.thumbnailUrl;
-	const link = item.link;
+	const link = item.link || item.feedLink || '';
 
 	let caption = item.text
 		? `${escapeHtmlBot(item.text.substring(0, 1000))}${item.text.length > 1000 ? '…' : ''}`
@@ -26,7 +26,7 @@ export async function sendFallbackMessage(
 		caption += `\n\n⚠️ <b>File exceeds Telegram's 50MB limit.</b>`;
 	}
 
-	if (fallbackMode === 'thumbnail_link') {
+	if (fallbackMode === 'thumbnail_link' && link) {
 		caption += caption ? `\n\n<a href="${link}">View original post</a>` : `<a href="${link}">View original post</a>`;
 	}
 

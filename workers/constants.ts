@@ -51,7 +51,7 @@ export const DEFAULT_FORMAT_SETTINGS: FormatSettings = {
 	notification: 'normal',
 	media: 'enable',
 	author: 'disable',
-	sourceFormat: 'disable',
+	sourceFormat: 'title_link',
 	linkPreview: 'disable',
 	lengthLimit: 0,
 	fallbackMode: 'thumbnail_link',

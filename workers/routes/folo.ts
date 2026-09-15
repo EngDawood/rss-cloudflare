@@ -78,13 +78,13 @@ function payloadToFeedItem(payload: FoloWebhookPayload): FeedItem {
 
 	return {
 		id: entry.guid || entry.id,
-		link: entry.url || '',
+		link: entry.url || (entry.guid?.startsWith('http') ? entry.guid : '') || feed.siteUrl || feed.url || '',
 		title: entry.title || '',
 		text,
 		contentHtml: entry.content || undefined,
 		author: entry.author || '',
-		feedTitle: feed.title || '',
-		feedLink: feed.siteUrl || feed.url,
+		feedTitle: feed.title || feed.siteUrl || feed.url || 'Folo',
+		feedLink: feed.siteUrl || feed.url || '',
 		timestamp: new Date(entry.publishedAt).getTime() / 1000,
 		mediaType: deriveMediaType(entry.media),
 		media: mediaItems,
