@@ -119,7 +119,7 @@ export const ReaderTab: React.FC = () => {
     if (!res.error && res.data) {
       setSelectedReaderItem((prev: any) => {
         if (prev?.id === item.id) {
-          return { ...prev, text: res.data.text, summary: res.data.summary, media: res.data.media, mediaType: res.data.media_type, contentHtml: res.data.content_html };
+          return { ...prev, text: res.data.text, summary: res.data.summary, media: res.data.media, mediaType: res.data.media_type, contentHtml: res.data.content_html, link: res.data.link || prev.link };
         }
         return prev;
       });
@@ -402,9 +402,11 @@ export const ReaderTab: React.FC = () => {
               <button onClick={() => handleTriggerAiSummary(selectedReaderItem.id)} title="Summarize (Arabic)" className="btn-press w-[38px] h-[38px] rounded-full bg-transparent border-[1.5px] border-line-strong text-ink-soft hover:text-accent flex items-center justify-center cursor-pointer">
                 <Sparkle size={14} />
               </button>
-              <a href={selectedReaderItem.link} target="_blank" rel="noreferrer" title="Original source" className="btn-press w-[38px] h-[38px] rounded-full bg-transparent border-[1.5px] border-line-strong text-ink-soft hover:text-accent flex items-center justify-center cursor-pointer">
-                <BookmarkSimple size={14} />
-              </a>
+              {selectedReaderItem.link && (
+                <a href={selectedReaderItem.link} target="_blank" rel="noreferrer" title="Original source" className="btn-press w-[38px] h-[38px] rounded-full bg-transparent border-[1.5px] border-line-strong text-ink-soft hover:text-accent flex items-center justify-center cursor-pointer">
+                  <BookmarkSimple size={14} />
+                </a>
+              )}
             </div>
 
             {/* Body */}
@@ -428,11 +430,13 @@ export const ReaderTab: React.FC = () => {
                     <p style={{ margin: 0 }}>{selectedReaderItem.text}</p>
                   </div>
                 )}
-                <div className="flex items-center gap-2 mt-10 pt-6 border-t border-line">
-                  <a href={selectedReaderItem.link} target="_blank" rel="noreferrer" className="text-xs text-muted hover:text-accent transition flex items-center gap-1.5 font-semibold">
-                    <span>Original source</span><ArrowRight size={12} />
-                  </a>
-                </div>
+                {selectedReaderItem.link && (
+                  <div className="flex items-center gap-2 mt-10 pt-6 border-t border-line">
+                    <a href={selectedReaderItem.link} target="_blank" rel="noreferrer" className="text-xs text-muted hover:text-accent transition flex items-center gap-1.5 font-semibold">
+                      <span>Original source</span><ArrowRight size={12} />
+                    </a>
+                  </div>
+                )}
               </>
             )}
           </div>

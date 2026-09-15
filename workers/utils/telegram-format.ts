@@ -150,7 +150,7 @@ function buildTelegramCaption(item: FeedItem, settings: FormatSettings): string 
 
 function buildFooter(item: FeedItem, settings: FormatSettings): string {
 	const showAuthor = settings.author === 'enable' && item.author;
-	const postUrl = item.link;
+	const postUrl = item.link || item.feedLink || '';
 	const sourceName = item.feedTitle || 'Source';
 
 	let base = '\n\n';
@@ -164,17 +164,26 @@ function buildFooter(item: FeedItem, settings: FormatSettings): string {
 
 	switch (settings.sourceFormat) {
 		case 'title_link':
-			return showAuthor
-				? `${base}<a href="${postUrl}">View on ${escapeHtml(sourceName)}</a> | ${escapeHtml(item.author)}`
-				: `${base}<a href="${postUrl}">View on ${escapeHtml(sourceName)}</a>`;
+			if (postUrl) {
+				return showAuthor
+					? `${base}<a href="${postUrl}">View on ${escapeHtml(sourceName)}</a> | ${escapeHtml(item.author)}`
+					: `${base}<a href="${postUrl}">View on ${escapeHtml(sourceName)}</a>`;
+			}
+			return showAuthor ? `${base}${escapeHtml(item.author)}` : (base.length > 2 ? base.trimEnd() : '');
 		case 'link_only':
-			return showAuthor
-				? `${base}<a href="${postUrl}">${escapeHtml(item.author)} \u2014 ${escapeHtml(sourceName)}</a>`
-				: `${base}<a href="${postUrl}">${escapeHtml(sourceName)}</a>`;
+			if (postUrl) {
+				return showAuthor
+					? `${base}<a href="${postUrl}">${escapeHtml(item.author)} \u2014 ${escapeHtml(sourceName)}</a>`
+					: `${base}<a href="${postUrl}">${escapeHtml(sourceName)}</a>`;
+			}
+			return showAuthor ? `${base}${escapeHtml(item.author)}` : (base.length > 2 ? base.trimEnd() : '');
 		case 'bare_url':
-			return showAuthor
-				? `${base}${escapeHtml(item.author)}\n${postUrl}`
-				: `${base}${postUrl}`;
+			if (postUrl) {
+				return showAuthor
+					? `${base}${escapeHtml(item.author)}\n${postUrl}`
+					: `${base}${postUrl}`;
+			}
+			return showAuthor ? `${base}${escapeHtml(item.author)}` : (base.length > 2 ? base.trimEnd() : '');
 		case 'disable':
 			return showAuthor
 				? `${base}${escapeHtml(item.author)}`
