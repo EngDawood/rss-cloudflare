@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/EngDawood/rss-cloudflare/compare/v1.8.0...v1.9.0) (2026-09-15)
+
+
+### Features
+
+* update source link handling and visibility across components ([8d1a14e](https://github.com/EngDawood/rss-cloudflare/commit/8d1a14e7ea46ef950310e001265ebac9f767304c))
+
 # [1.8.0](https://github.com/EngDawood/rss-cloudflare/compare/v1.7.0...v1.8.0) (2026-08-30)
 
 
