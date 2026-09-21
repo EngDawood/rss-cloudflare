@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/EngDawood/rss-cloudflare/compare/v1.9.0...v1.10.0) (2026-09-21)
+
+
+### Features
+
+* Enhance format settings management and command handling ([71e2bb5](https://github.com/EngDawood/rss-cloudflare/commit/71e2bb5ecf1d31755375e0798588a729c81e4737))
+
 # [1.9.0](https://github.com/EngDawood/rss-cloudflare/compare/v1.8.0...v1.9.0) (2026-09-15)
 
 
