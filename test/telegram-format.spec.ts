@@ -51,4 +51,28 @@ describe('telegram-format', () => {
 		expect(result.caption).not.toContain('$19.99');
 		expect(result.caption).not.toContain('(Limited offer)');
 	});
+
+	it('should strip bare and parenthesized TikTok view counts', () => {
+		const tiktokItem: FeedItem = {
+			...mockItem,
+			link: 'https://www.tiktok.com/@user/video/1',
+			feedLink: 'https://www.tiktok.com/@user',
+		};
+		const settings = resolveFormatSettings(undefined, { removeTikTokViews: 'enable' });
+		for (const text of ['4236 views', '10.2K views', '1,234 views', 'Nice clip (1.2M views)']) {
+			const result = formatFeedItem({ ...tiktokItem, text }, settings);
+			expect(result.caption).not.toMatch(/views/i);
+		}
+	});
+
+	it('should layer global < channel < source format settings', () => {
+		const settings = resolveFormatSettings(
+			{ author: 'disable' },
+			{ hashtags: 'disable' },
+			{ author: 'enable', removeTikTokViews: 'enable' },
+		);
+		expect(settings.author).toBe('disable');
+		expect(settings.hashtags).toBe('disable');
+		expect(settings.removeTikTokViews).toBe('enable');
+	});
 });

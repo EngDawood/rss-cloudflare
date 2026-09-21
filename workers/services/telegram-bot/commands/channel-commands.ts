@@ -4,6 +4,7 @@ import { setAdminState } from '../storage/admin-state';
 import { resolveChannelArg } from '../helpers/channel-resolver';
 import { showChannelsList } from '../views/channel-views';
 import { addChannelDirect } from '../handlers/add-channel-flow';
+import { registerArgCommand, askForArg, channelPrompt } from '../helpers/command-args';
 
 /**
  * Register channel management commands.
@@ -52,9 +53,8 @@ export function registerChannelCommands(bot: Bot, env: Env, kv: KVNamespace): vo
 	});
 
 	// /enable @channel
-	bot.command('enable', async (ctx) => {
-		const arg = ctx.match?.trim();
-		if (!arg) { await ctx.reply('Usage: <code>/enable @channel</code>', { parse_mode: 'HTML' }); return; }
+	registerArgCommand(bot, 'enable', async (ctx, arg) => {
+		if (!arg) { await askForArg(ctx, kv, adminId, 'enable', '', channelPrompt('to enable.')); return; }
 		const resolved = await resolveChannelArg(bot, db, arg);
 		if (!resolved) { await ctx.reply('Channel not found.'); return; }
 		const config = await getChannelConfigFromD1(db, resolved.id);
@@ -65,9 +65,8 @@ export function registerChannelCommands(bot: Bot, env: Env, kv: KVNamespace): vo
 	});
 
 	// /disable @channel
-	bot.command('disable', async (ctx) => {
-		const arg = ctx.match?.trim();
-		if (!arg) { await ctx.reply('Usage: <code>/disable @channel</code>', { parse_mode: 'HTML' }); return; }
+	registerArgCommand(bot, 'disable', async (ctx, arg) => {
+		if (!arg) { await askForArg(ctx, kv, adminId, 'disable', '', channelPrompt('to disable.')); return; }
 		const resolved = await resolveChannelArg(bot, db, arg);
 		if (!resolved) { await ctx.reply('Channel not found.'); return; }
 		const config = await getChannelConfigFromD1(db, resolved.id);

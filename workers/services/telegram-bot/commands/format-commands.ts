@@ -1,21 +1,24 @@
 import type { Bot } from 'grammy';
-import { getChannelConfigFromD1 } from '../../../db/d1';
+import { getChannelConfigFromD1, getGlobalFormat } from '../../../db/d1';
 import { resolveChannelArg } from '../helpers/channel-resolver';
 import { resolveFormatSettings } from '../../../utils/telegram-format';
-import { buildFormatKeyboard } from '../views/keyboard-builders';
+import { buildFormatKeyboard, buildGlobalFormatView } from '../views/keyboard-builders';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
+import { registerArgCommand, askForArg, channelPrompt, channelSourcesHint } from '../helpers/command-args';
 
 /**
  * Register format settings commands.
  */
 export function registerFormatCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 	const db = env.DB;
+	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
 
-	// /set_default @channel — channel default format settings
+	// /set_default — bot-wide defaults; /set_default @channel — channel default format settings
 	bot.command('set_default', async (ctx) => {
 		const arg = ctx.match?.trim();
 		if (!arg) {
-			await ctx.reply('Usage: <code>/set_default @channel</code>', { parse_mode: 'HTML' });
+			const view = buildGlobalFormatView(await getGlobalFormat(db));
+			await ctx.reply(view.text, { parse_mode: 'HTML', reply_markup: view.keyboard });
 			return;
 		}
 		const resolved = await resolveChannelArg(bot, db, arg);
@@ -23,7 +26,7 @@ export function registerFormatCommands(bot: Bot, env: Env, kv: KVNamespace): voi
 		const config = await getChannelConfigFromD1(db, resolved.id);
 		if (!config) { await ctx.reply('Channel not registered.'); return; }
 
-		const current = resolveFormatSettings(config.defaultFormat);
+		const current = resolveFormatSettings(config.defaultFormat, undefined, await getGlobalFormat(db));
 		const keyboard = buildFormatKeyboard(
 			current,
 			`fd:${resolved.id}`,
@@ -38,12 +41,18 @@ export function registerFormatCommands(bot: Bot, env: Env, kv: KVNamespace): voi
 	});
 
 	// /set @channel @source — per-source format settings
-	bot.command('set', async (ctx) => {
-		const args = ctx.match?.trim().split(/\s+/);
-		if (!args || args.length < 2) {
-			await ctx.reply(
-				'Usage: <code>/set @channel source</code>\n\nExample: <code>/set @mychannel @natgeo</code>',
-				{ parse_mode: 'HTML' }
+	registerArgCommand(bot, 'set', async (ctx, argStr) => {
+		const args = argStr ? argStr.split(/\s+/) : [];
+		if (args.length === 0) {
+			await askForArg(ctx, kv, adminId, 'set', '', channelPrompt('whose source you want to format.'));
+			return;
+		}
+		if (args.length === 1) {
+			const ch = await resolveChannelArg(bot, db, args[0]);
+			if (!ch) { await ctx.reply(`Channel "${args[0]}" not found.`); return; }
+			await askForArg(ctx, kv, adminId, 'set', args[0],
+				`Send the source in <b>${escapeHtmlBot(ch.title)}</b> to format.` +
+				await channelSourcesHint(db, ch.id)
 			);
 			return;
 		}
@@ -61,7 +70,7 @@ export function registerFormatCommands(bot: Bot, env: Env, kv: KVNamespace): voi
 			return;
 		}
 
-		const current = resolveFormatSettings(config.defaultFormat, source.format);
+		const current = resolveFormatSettings(config.defaultFormat, source.format, await getGlobalFormat(db));
 		const keyboard = buildFormatKeyboard(
 			current,
 			`fs:${resolvedChannel.id}:${source.id}`,

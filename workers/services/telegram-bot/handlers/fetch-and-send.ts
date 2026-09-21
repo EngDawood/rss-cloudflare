@@ -6,7 +6,7 @@ import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
 import { sendMediaToChannel, FileTooLargeError } from './send-media';
 import { sendFallbackMessage } from '../helpers/fallback-sender';
 import { enrichFeedItems } from '../../../utils/media-enrichment';
-import { getChannelConfigFromD1 } from '../../../db/d1';
+import { getChannelConfigFromD1, getGlobalFormat } from '../../../db/d1';
 import { addFailedPost, getAdminConfig } from '../storage/kv-operations';
 import { buildSendTask } from '../../../types/queue';
 
@@ -37,8 +37,11 @@ export async function fetchAndSendLatest(
 ): Promise<void> {
 	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
 	try {
-		const config = await getChannelConfigFromD1(db ?? env.DB, String(chatId));
-		const settings = resolveFormatSettings(config?.defaultFormat, source.format);
+		const [config, globalFormat] = await Promise.all([
+			getChannelConfigFromD1(db ?? env.DB, String(chatId)),
+			getGlobalFormat(db ?? env.DB),
+		]);
+		const settings = resolveFormatSettings(config?.defaultFormat, source.format, globalFormat);
 
 		const result = await fetchForSource(source, env);
 		if (result.items.length === 0) {

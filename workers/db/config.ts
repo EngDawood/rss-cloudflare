@@ -1,3 +1,5 @@
+import type { FormatSettings } from '../types/telegram';
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 export async function getConfig(db: D1Database, key: string): Promise<string | null> {
@@ -10,6 +12,25 @@ export async function setConfig(db: D1Database, key: string, value: string): Pro
 	await db.prepare(
 		'INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
 	).bind(key, value).run();
+}
+
+// ── Global format defaults ────────────────────────────────────────────────────
+
+const GLOBAL_FORMAT_KEY = 'default_format';
+
+/** Bot-wide format overrides (sit between hardcoded defaults and channel defaults). */
+export async function getGlobalFormat(db: D1Database): Promise<Partial<FormatSettings>> {
+	const raw = await getConfig(db, GLOBAL_FORMAT_KEY);
+	if (!raw) return {};
+	try {
+		return JSON.parse(raw) as Partial<FormatSettings>;
+	} catch {
+		return {};
+	}
+}
+
+export async function setGlobalFormat(db: D1Database, format: Partial<FormatSettings>): Promise<void> {
+	await setConfig(db, GLOBAL_FORMAT_KEY, JSON.stringify(format));
 }
 
 // ── AI summary helpers ────────────────────────────────────────────────────────

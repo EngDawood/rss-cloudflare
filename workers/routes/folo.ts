@@ -7,7 +7,7 @@ import { sendMediaToChannel } from '../services/telegram-bot/handlers/send-media
 import { getAdminConfig } from '../services/telegram-bot/storage/kv-operations';
 import { enrichFeedItems } from '../utils/media-enrichment';
 import {
-	getFoloChannelIds, getChannelConfigFromD1, upsertFeedBySource, upsertItems,
+	getFoloChannelIds, getChannelConfigFromD1, getGlobalFormat, upsertFeedBySource, upsertItems,
 	addMcpSubscription, listCategories, createCategory, addFeedToCategory,
 	getFoloWebhook, getFoloWebhookChannels, getTelegramSubscriptionsByFeed,
 } from '../db/d1';
@@ -212,13 +212,14 @@ export async function handleFoloWebhook(c: Context<HonoEnv>): Promise<Response> 
 
 	const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
 	let sent = 0;
+	const globalFormat = await getGlobalFormat(env.DB);
 
 	for (const channelId of channelIds) {
 		try {
 			let formatSettings: FormatSettings | undefined;
 			const config = await getChannelConfigFromD1(env.DB, channelId);
 			if (config) {
-				formatSettings = resolveFormatSettings(config.defaultFormat);
+				formatSettings = resolveFormatSettings(config.defaultFormat, undefined, globalFormat);
 			}
 			const message = formatFeedItem(feedItem, formatSettings);
 			await sendMediaToChannel(bot, parseInt(channelId, 10), message, formatSettings);

@@ -15,7 +15,7 @@ export const BOT_COMMANDS = [
 	{ command: 'seed', description: 'Mark source(s) as read' },
 	{ command: 'delay', description: 'Set check interval in minutes' },
 	{ command: 'set', description: 'Source format settings' },
-	{ command: 'set_default', description: 'Channel default format' },
+	{ command: 'set_default', description: 'Bot or channel default format' },
 	{ command: 'enable', description: 'Enable a channel' },
 	{ command: 'disable', description: 'Disable a channel' },
 	{ command: 'test', description: 'Fetch & send latest post' },

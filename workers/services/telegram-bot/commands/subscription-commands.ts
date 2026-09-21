@@ -7,12 +7,14 @@ import { fetchAndSendLatest } from '../handlers/fetch-and-send';
 import { fetchForSource } from '../../source-fetcher';
 import { fetchFeed } from '../../feed-fetcher';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
+import { registerArgCommand, askForArg, channelPrompt, channelSourcesHint } from '../helpers/command-args';
 
 /**
  * Register subscription management commands.
  */
 export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace): void {
 	const db = env.DB;
+	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
 
 	// /list — List all subscriptions across all channels
 	bot.command('list', async (ctx) => {
@@ -47,17 +49,25 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 	});
 
 	// /sub @channel @iguser  OR  /sub @channel #hashtag  OR  /sub @channel https://...
-	bot.command('sub', async (ctx) => {
-		const args = ctx.match?.trim().split(/\s+/);
-		if (!args || args.length < 2) {
-			await ctx.reply(
-				'Usage:\n' +
-				'<code>/sub @channel @iguser</code> — Instagram user\n' +
-				'<code>/sub @channel #hashtag</code> — Instagram hashtag\n' +
-				'<code>/sub @channel tiktok @username</code> — TikTok user\n' +
-				'<code>/sub @channel https://feed-url</code> — RSS/Atom feed\n' +
-				'<code>/sub @channel @iguser 5</code> — with initial post count',
-				{ parse_mode: 'HTML' }
+	registerArgCommand(bot, 'sub', async (ctx, argStr) => {
+		const args = argStr ? argStr.split(/\s+/) : [];
+		if (args.length === 0) {
+			await askForArg(ctx, kv, adminId, 'sub', '', channelPrompt('to subscribe.'));
+			return;
+		}
+		if (args.length === 1) {
+			const ch = await resolveChannelArg(bot, db, args[0]);
+			if (!ch) {
+				await ctx.reply(`Channel "${args[0]}" not found. Register it first with <code>/add ${args[0]}</code>`, { parse_mode: 'HTML' });
+				return;
+			}
+			await askForArg(ctx, kv, adminId, 'sub', args[0],
+				`Send the source to subscribe <b>${escapeHtmlBot(ch.title)}</b> to:\n\n` +
+				'<code>@iguser</code> — Instagram user\n' +
+				'<code>#hashtag</code> — Instagram hashtag\n' +
+				'<code>tiktok @username</code> — TikTok user\n' +
+				'<code>https://feed-url</code> — RSS/Atom feed\n\n' +
+				'Add a number to also post the latest items, e.g. <code>@natgeo 5</code>'
 			);
 			return;
 		}
@@ -168,10 +178,19 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 	});
 
 	// /unsub @channel source
-	bot.command('unsub', async (ctx) => {
-		const args = ctx.match?.trim().split(/\s+/);
-		if (!args || args.length < 2) {
-			await ctx.reply('Usage: <code>/unsub @channel source</code>\n\nSource can be @username, #hashtag, or feed URL', { parse_mode: 'HTML' });
+	registerArgCommand(bot, 'unsub', async (ctx, argStr) => {
+		const args = argStr ? argStr.split(/\s+/) : [];
+		if (args.length === 0) {
+			await askForArg(ctx, kv, adminId, 'unsub', '', channelPrompt('to unsubscribe from.'));
+			return;
+		}
+		if (args.length === 1) {
+			const ch = await resolveChannelArg(bot, db, args[0]);
+			if (!ch) { await ctx.reply(`Channel "${args[0]}" not found.`); return; }
+			await askForArg(ctx, kv, adminId, 'unsub', args[0],
+				`Send the source to remove from <b>${escapeHtmlBot(ch.title)}</b> (@username, #hashtag, or feed URL).` +
+				await channelSourcesHint(db, ch.id)
+			);
 			return;
 		}
 		const [channelRef, ...sourceRefParts] = args;
@@ -199,10 +218,18 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 	});
 
 	// /delay @channel <minutes>
-	bot.command('delay', async (ctx) => {
-		const args = ctx.match?.trim().split(/\s+/);
-		if (!args || args.length < 2) {
-			await ctx.reply('Usage: <code>/delay @channel 30</code>', { parse_mode: 'HTML' });
+	registerArgCommand(bot, 'delay', async (ctx, argStr) => {
+		const args = argStr ? argStr.split(/\s+/) : [];
+		if (args.length === 0) {
+			await askForArg(ctx, kv, adminId, 'delay', '', channelPrompt('to set the check interval for.'));
+			return;
+		}
+		if (args.length === 1) {
+			const ch = await resolveChannelArg(bot, db, args[0]);
+			if (!ch) { await ctx.reply(`Channel "${args[0]}" not found.`); return; }
+			await askForArg(ctx, kv, adminId, 'delay', args[0],
+				`Send the check interval in minutes for <b>${escapeHtmlBot(ch.title)}</b> (minimum 5).\n\nExample: <code>30</code>`
+			);
 			return;
 		}
 		const [channelRef, mins] = args;
@@ -223,14 +250,12 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 	});
 
 	// /seed @channel [@source] — mark sources as read without sending
-	bot.command('seed', async (ctx) => {
-		const args = ctx.match?.trim().split(/\s+/);
-		if (!args || args.length < 1 || !args[0]) {
-			await ctx.reply(
-				'Usage:\n' +
-				'<code>/seed @channel</code> — mark ALL sources as read\n' +
-				'<code>/seed @channel @iguser</code> — mark single source as read',
-				{ parse_mode: 'HTML' }
+	registerArgCommand(bot, 'seed', async (ctx, argStr) => {
+		const args = argStr ? argStr.split(/\s+/) : [];
+		if (args.length === 0) {
+			await askForArg(ctx, kv, adminId, 'seed', '',
+				channelPrompt('to mark as read.') +
+				'\n\nAdd a source after it to seed only that one, e.g. <code>@mychannel @natgeo</code>'
 			);
 			return;
 		}

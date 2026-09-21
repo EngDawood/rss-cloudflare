@@ -51,7 +51,7 @@ export interface ChannelConfig {
 
 // Admin conversation state for multi-step flows
 export interface AdminState {
-	action: 'adding_channel' | 'adding_source' | 'removing_channel' | 'downloading_media' | 'setting_format_custom' | 'setting_telegraph_token' | 'setting_ai_model' | 'setting_ai_prompt' | 'testing_ai_summary' | 'testing_source';
+	action: 'adding_channel' | 'adding_source' | 'removing_channel' | 'downloading_media' | 'setting_format_custom' | 'setting_telegraph_token' | 'setting_ai_model' | 'setting_ai_prompt' | 'testing_ai_summary' | 'testing_source' | 'awaiting_command_args';
 	context?: {
 		channelId?: string;
 		sourceId?: string;
@@ -67,6 +67,9 @@ export interface AdminState {
 		directMediaUrl?: string;
 		/** Message ID of the in-progress status message (e.g. "Fetching..."), for /cancel cleanup */
 		statusMessageId?: number;
+		/** Command waiting for more args (awaiting_command_args) and the args collected so far */
+		command?: string;
+		collectedArgs?: string;
 	};
 }
 

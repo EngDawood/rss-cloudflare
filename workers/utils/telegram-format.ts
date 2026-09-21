@@ -3,14 +3,16 @@ import type { FormatSettings, TelegramMediaMessage } from '../types/telegram';
 import { DEFAULT_FORMAT_SETTINGS } from '../constants';
 
 /**
- * Merge hardcoded defaults < channel defaults < source overrides.
+ * Merge hardcoded defaults < global bot defaults < channel defaults < source overrides.
  */
 export function resolveFormatSettings(
 	channelDefaults?: Partial<FormatSettings>,
-	sourceOverrides?: Partial<FormatSettings>
+	sourceOverrides?: Partial<FormatSettings>,
+	globalDefaults?: Partial<FormatSettings>
 ): FormatSettings {
 	return {
 		...DEFAULT_FORMAT_SETTINGS,
+		...globalDefaults,
 		...channelDefaults,
 		...sourceOverrides,
 	};
@@ -99,8 +101,8 @@ function buildTelegramCaption(item: FeedItem, settings: FormatSettings): string 
 
 	// Handle TikTok views removal
 	if (settings.removeTikTokViews === 'enable' && isTikTokItem(item)) {
-		// Pattern matches " (123.4K views)" or " (1.2M views)" or " (100 views)"
-		text = text.replace(/\s?\(\d+(\.\d+)?[KM]?\s+views\)/gi, '').trim();
+		// Matches "4236 views", "10.2K views", "1,234 views" and the older " (1.2M views)" form
+		text = text.replace(/\s?\(?\d[\d,]*(\.\d+)?[KMB]?\s+views\)?/gi, '').trim();
 	}
 
 	// Handle hashtags

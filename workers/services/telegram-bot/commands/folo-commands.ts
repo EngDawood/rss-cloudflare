@@ -6,6 +6,7 @@ import {
 	getFoloWebhookChannels, addFoloWebhookChannel, removeFoloWebhookChannel,
 	getFoloFeeds, getTelegramSubscriptions, addTelegramSubscription, removeTelegramSubscription,
 } from '../../../db/d1';
+import { registerArgCommand, askForArg, channelPrompt } from '../helpers/command-args';
 
 /**
  * /folo                             — list all webhooks (legacy + named)
@@ -17,21 +18,25 @@ import {
  * /folo remove @channel             — unsubscribe from legacy webhook
  * /folo remove <id> @channel        — unsubscribe from a named webhook
  */
-export function registerFoloCommands(bot: Bot, env: Env, _kv: KVNamespace): void {
-	bot.command('folo', async (ctx) => {
-		const args = ctx.message?.text?.split(/\s+/).slice(1) || [];
+export function registerFoloCommands(bot: Bot, env: Env, kv: KVNamespace): void {
+	const adminId = parseInt(env.ADMIN_TELEGRAM_ID, 10);
+
+	registerArgCommand(bot, 'folo', async (ctx, argStr) => {
+		const args = argStr ? argStr.split(/\s+/) : [];
 		const subcommand = args[0]?.toLowerCase();
 
 		// /folo new <id> <name>
 		if (subcommand === 'new') {
 			const id = args[1];
 			const name = args.slice(2).join(' ');
-			if (!id || !name) {
-				await ctx.reply(
-					'Usage: <code>/folo new &lt;id&gt; &lt;name&gt;</code>\n' +
-					'Example: <code>/folo new personal Personal Feeds</code>',
-					{ parse_mode: 'HTML' }
-				);
+			if (!id) {
+				await askForArg(ctx, kv, adminId, 'folo', 'new',
+					'Send the new webhook <b>ID</b> and <b>name</b>.\n\nExample: <code>personal Personal Feeds</code>');
+				return;
+			}
+			if (!name) {
+				await askForArg(ctx, kv, adminId, 'folo', `new ${id}`,
+					`Send a display name for webhook <code>${id}</code>.\n\nExample: <code>Personal Feeds</code>`);
 				return;
 			}
 			if (await getFoloWebhook(env.DB, id)) {
@@ -54,7 +59,7 @@ export function registerFoloCommands(bot: Bot, env: Env, _kv: KVNamespace): void
 		if (subcommand === 'del') {
 			const id = args[1];
 			if (!id) {
-				await ctx.reply('Usage: <code>/folo del &lt;id&gt;</code>', { parse_mode: 'HTML' });
+				await askForArg(ctx, kv, adminId, 'folo', 'del', 'Send the ID of the webhook to delete.');
 				return;
 			}
 			const webhook = await getFoloWebhook(env.DB, id);
@@ -74,7 +79,7 @@ export function registerFoloCommands(bot: Bot, env: Env, _kv: KVNamespace): void
 		if (subcommand === 'info') {
 			const id = args[1];
 			if (!id) {
-				await ctx.reply('Usage: <code>/folo info &lt;id&gt;</code>', { parse_mode: 'HTML' });
+				await askForArg(ctx, kv, adminId, 'folo', 'info', 'Send the ID of the webhook to show.');
 				return;
 			}
 			const webhook = await getFoloWebhook(env.DB, id);
@@ -109,6 +114,12 @@ export function registerFoloCommands(bot: Bot, env: Env, _kv: KVNamespace): void
 		//   /folo add @channel          → legacy (env secret webhook)
 		//   /folo add <id> @channel     → named webhook
 		if (subcommand === 'add') {
+			if (!args[1]) {
+				await askForArg(ctx, kv, adminId, 'folo', 'add',
+					'Send the webhook <b>ID</b> and <b>channel</b>, or just the channel for the legacy webhook.\n\n' +
+					'Example: <code>personal @mychannel</code> or <code>@mychannel</code>');
+				return;
+			}
 			const isLegacy = args[1]?.startsWith('@') || (args[1] && /^-?\d+$/.test(args[1]));
 			if (isLegacy) {
 				// Legacy subscribe
@@ -140,8 +151,8 @@ export function registerFoloCommands(bot: Bot, env: Env, _kv: KVNamespace): void
 				// Named webhook subscribe
 				const id = args[1];
 				const channelArg = args[2];
-				if (!id || !channelArg) {
-					await ctx.reply('Usage: <code>/folo add &lt;webhookId&gt; @channel</code>', { parse_mode: 'HTML' });
+				if (!channelArg) {
+					await askForArg(ctx, kv, adminId, 'folo', `add ${id}`, channelPrompt(`to subscribe to webhook <code>${id}</code>.`));
 					return;
 				}
 				const webhook = await getFoloWebhook(env.DB, id);
@@ -167,6 +178,12 @@ export function registerFoloCommands(bot: Bot, env: Env, _kv: KVNamespace): void
 		//   /folo remove @channel          → legacy
 		//   /folo remove <id> @channel     → named webhook
 		if (subcommand === 'remove') {
+			if (!args[1]) {
+				await askForArg(ctx, kv, adminId, 'folo', 'remove',
+					'Send the webhook <b>ID</b> and <b>channel</b>, or just the channel for the legacy webhook.\n\n' +
+					'Example: <code>personal @mychannel</code> or <code>@mychannel</code>');
+				return;
+			}
 			const isLegacy = args[1]?.startsWith('@') || (args[1] && /^-?\d+$/.test(args[1]));
 			if (isLegacy) {
 				const channelArg = args[1];
@@ -180,8 +197,8 @@ export function registerFoloCommands(bot: Bot, env: Env, _kv: KVNamespace): void
 			} else {
 				const id = args[1];
 				const channelArg = args[2];
-				if (!id || !channelArg) {
-					await ctx.reply('Usage: <code>/folo remove &lt;webhookId&gt; @channel</code>', { parse_mode: 'HTML' });
+				if (!channelArg) {
+					await askForArg(ctx, kv, adminId, 'folo', `remove ${id}`, channelPrompt(`to unsubscribe from webhook <code>${id}</code>.`));
 					return;
 				}
 				const webhook = await getFoloWebhook(env.DB, id);
@@ -207,7 +224,7 @@ export function registerFoloCommands(bot: Bot, env: Env, _kv: KVNamespace): void
 		if (subcommand === 'sub' || subcommand === 'subscribe') {
 			const channelArg = args[1];
 			if (!channelArg) {
-				await ctx.reply('Usage: <code>/folo sub @channel</code>', { parse_mode: 'HTML' });
+				await askForArg(ctx, kv, adminId, 'folo', 'sub', channelPrompt('to manage Folo feeds for.'));
 				return;
 			}
 			const resolved = await resolveChannelArg(bot, env.DB, channelArg);

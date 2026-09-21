@@ -25,6 +25,7 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'/status — Overview of all channels\n\n' +
 				'<b>Configuration:</b>\n' +
 				'/set @channel source — Custom format for a source\n' +
+				'/set_default — Default format for all channels\n' +
 				'/set_default @channel — Default format for a channel\n' +
 				'/delay @channel 30 — Set check interval (min)\n' +
 				'/telegraph — Configure Telegraph Instant View\n' +

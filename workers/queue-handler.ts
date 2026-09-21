@@ -17,6 +17,7 @@ import {
 	getWorkflowsForFeed,
 	listNewItems,
 	recordFeedFetchSuccess,
+	getGlobalFormat,
 } from './db/d1';
 import { recordFailureAndAlert } from './services/feed-health';
 import { embedItems } from './services/embed';
@@ -130,6 +131,8 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 		threshold: adminConfig.telegraph.threshold,
 	});
 
+	const globalFormat = await getGlobalFormat(env.DB);
+
 	// For each subscribing channel, filter + dedup + queue.
 	for (const sub of subs) {
 		const channel = await getChannelById(env.DB, sub.channel_id);
@@ -158,7 +161,7 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 		const subFormat = sub.format
 			? (JSON.parse(sub.format) as Partial<FormatSettings>)
 			: undefined;
-		const settings = resolveFormatSettings(channelDefaultFormat, subFormat);
+		const settings = resolveFormatSettings(channelDefaultFormat, subFormat, globalFormat);
 
 		// AI summarization is per-subscription (channels may have different settings).
 		const aiEnabled = await resolveAiSummaryEnabled(env.DB, sub.channel_id, sub.feed_id);

@@ -4,11 +4,12 @@ import { fetchFeed } from '../services/feed-fetcher';
 import { fetchForSource } from '../services/source-fetcher';
 import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format';
 import { enrichFeedItems } from '../utils/media-enrichment';
+import { feedTitleFromSource } from '../utils/text';
 import { summarizeItem } from '../services/ai-summarizer';
 import {
 	getFeeds, getFeedById, getFeedByUrl, insertFeed, removeFeed, setFeedEnabled,
 	updateLastFetched, upsertItems, listNewItems, searchItems, getItemById,
-	markItemsRead, getConfig, setConfig, dbItemToFeedItem,
+	markItemsRead, getConfig, setConfig, getGlobalFormat, setGlobalFormat, dbItemToFeedItem,
 	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
 	insertNote, listNotes, searchNotes, deleteNote,
 	listPostLog, recall, updateItemSummary,
@@ -132,7 +133,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				}
 
 				const result = await fetchForSource({ type: internalType, value: sourceValue } as any, c.env);
-				const feedTitle = title || result.feedTitle || sourceValue;
+				const feedTitle = title || feedTitleFromSource(sourceValue, result.feedTitle);
 				const feed = await upsertFeedBySource(db, { sourceType: internalType, sourceValue, title: feedTitle });
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
@@ -302,7 +303,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				const item = dbItemToFeedItem(row, feedTitle, feedLink);
 				await enrichFeedItems([item], { token: c.env.TELEGRAPH_ACCESS_TOKEN });
 
-				const settings = resolveFormatSettings();
+				const settings = resolveFormatSettings(undefined, undefined, await getGlobalFormat(db));
 				const message = formatFeedItem(item, settings);
 
 				const bot = new Bot(c.env.TELEGRAM_BOT_TOKEN);
@@ -322,7 +323,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 					const feed = await getFeedById(db, row.feed_id);
 					const item = dbItemToFeedItem(row, feed?.title ?? '', feed?.url ?? '');
 					await enrichFeedItems([item], { token: c.env.TELEGRAPH_ACCESS_TOKEN });
-					message = formatFeedItem(item, resolveFormatSettings());
+					message = formatFeedItem(item, resolveFormatSettings(undefined, undefined, await getGlobalFormat(db)));
 					if (caption) message = { ...message, caption };
 				} else {
 					const msgType = type ?? 'text';
@@ -789,10 +790,11 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				const posts = await getFailedPosts(c.env.CACHE, channelId);
 				if (posts.length === 0) return c.json({ data: { queued: 0, message: 'No failed posts' } });
 				let queued = 0;
+				const retrySettings = resolveFormatSettings(undefined, undefined, await getGlobalFormat(db));
 				for (const item of posts) {
 					try {
 						await c.env.TELEGRAM_SEND_QUEUE.send(
-							buildSendTask(channelId, item, resolveFormatSettings()),
+							buildSendTask(channelId, item, retrySettings),
 						);
 						queued++;
 					} catch (err) {

@@ -1,9 +1,9 @@
 import type { Bot } from 'grammy';
 import type { FormatSettings } from '../../../types/telegram';
-import { getChannelConfigFromD1, saveChannelConfigToD1 } from '../../../db/d1';
+import { getChannelConfigFromD1, saveChannelConfigToD1, getGlobalFormat, setGlobalFormat } from '../../../db/d1';
 import { resolveFormatSettings } from '../../../utils/telegram-format';
 import { cycleFormatValue, formatValueText } from '../helpers/format-settings';
-import { buildFormatKeyboard } from '../views/keyboard-builders';
+import { buildFormatKeyboard, buildGlobalFormatView } from '../views/keyboard-builders';
 import { editOrReply } from '../helpers/edit-or-reply';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
 import { FORMAT_LABELS } from '../../../constants';
@@ -27,7 +27,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found' }); return; }
 
 		if (!source.format) source.format = {};
-		const current = resolveFormatSettings(config.defaultFormat, source.format);
+		const current = resolveFormatSettings(config.defaultFormat, source.format, await getGlobalFormat(db));
 		const nextVal = cycleFormatValue(setting, current[setting] as string | number);
 		if (setting === 'lengthLimit') {
 			source.format[setting] = parseInt(nextVal, 10);
@@ -36,7 +36,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		}
 		await saveChannelConfigToD1(db, channelId, config);
 
-		const updated = resolveFormatSettings(config.defaultFormat, source.format);
+		const updated = resolveFormatSettings(config.defaultFormat, source.format, await getGlobalFormat(db));
 		const keyboard = buildFormatKeyboard(
 			updated,
 			`fs:${channelId}:${sourceId}`,
@@ -75,7 +75,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 
 		if (!config.defaultFormat) config.defaultFormat = {};
-		const current = resolveFormatSettings(config.defaultFormat);
+		const current = resolveFormatSettings(config.defaultFormat, undefined, await getGlobalFormat(db));
 		const nextVal = cycleFormatValue(setting, current[setting] as string | number);
 		if (setting === 'lengthLimit') {
 			config.defaultFormat[setting] = parseInt(nextVal, 10);
@@ -84,7 +84,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		}
 		await saveChannelConfigToD1(db, channelId, config);
 
-		const updated = resolveFormatSettings(config.defaultFormat);
+		const updated = resolveFormatSettings(config.defaultFormat, undefined, await getGlobalFormat(db));
 		const keyboard = buildFormatKeyboard(
 			updated,
 			`fd:${channelId}`,
@@ -123,7 +123,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		const source = config.sources.find((s) => s.id === sourceId);
 		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found' }); return; }
 
-		const current = resolveFormatSettings(config.defaultFormat, source.format);
+		const current = resolveFormatSettings(config.defaultFormat, source.format, await getGlobalFormat(db));
 		const keyboard = buildFormatKeyboard(
 			current,
 			`fs:${channelId}:${sourceId}`,
@@ -144,7 +144,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		const config = await getChannelConfigFromD1(db, channelId);
 		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
 
-		const current = resolveFormatSettings(config.defaultFormat);
+		const current = resolveFormatSettings(config.defaultFormat, undefined, await getGlobalFormat(db));
 		const keyboard = buildFormatKeyboard(
 			current,
 			`fd:${channelId}`,
@@ -171,7 +171,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		delete source.format;
 		await saveChannelConfigToD1(db, channelId, config);
 
-		const current = resolveFormatSettings(config.defaultFormat);
+		const current = resolveFormatSettings(config.defaultFormat, undefined, await getGlobalFormat(db));
 		const keyboard = buildFormatKeyboard(
 			current,
 			`fs:${channelId}:${sourceId}`,
@@ -186,7 +186,53 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		await ctx.answerCallbackQuery({ text: 'Reset to defaults' });
 	});
 
-	// Reset channel defaults to system defaults: fd_r:CHID
+	// Cycle bot-wide default format setting: fg:SETTING
+	bot.callbackQuery(/^fg:([^:]+)$/, async (ctx) => {
+		const setting = ctx.match[1] as keyof FormatSettings;
+		const globalFormat = await getGlobalFormat(db);
+		const current = resolveFormatSettings(undefined, undefined, globalFormat);
+		const nextVal = cycleFormatValue(setting, current[setting] as string | number);
+		if (setting === 'lengthLimit') {
+			globalFormat[setting] = parseInt(nextVal, 10);
+		} else {
+			(globalFormat as any)[setting] = nextVal;
+		}
+		await setGlobalFormat(db, globalFormat);
+
+		const view = buildGlobalFormatView(globalFormat);
+		await editOrReply(ctx, view.text, { parse_mode: 'HTML', reply_markup: view.keyboard });
+		await ctx.answerCallbackQuery({ text: `${FORMAT_LABELS[setting].label}: ${formatValueText(setting, nextVal)}` });
+	});
+
+	// Trigger custom text input for bot-wide default: fgc:SETTING
+	bot.callbackQuery(/^fgc:([^:]+)$/, async (ctx) => {
+		const setting = ctx.match[1] as keyof FormatSettings;
+		const label = FORMAT_LABELS[setting].label;
+
+		await setAdminState(kv, adminId, {
+			action: 'setting_format_custom',
+			context: { settingKey: setting },
+		});
+
+		await ctx.reply(`Please send the bot default text for <b>${label}</b> (or send /skip to clear it):`, { parse_mode: 'HTML' });
+		await ctx.answerCallbackQuery();
+	});
+
+	// Reset bot-wide defaults to hardcoded defaults: fg_r
+	bot.callbackQuery('fg_r', async (ctx) => {
+		await setGlobalFormat(db, {});
+		const view = buildGlobalFormatView({});
+		await editOrReply(ctx, `${view.text}\n\n<i>Reset to system defaults.</i>`, { parse_mode: 'HTML', reply_markup: view.keyboard });
+		await ctx.answerCallbackQuery({ text: 'Reset to defaults' });
+	});
+
+	// Close bot-wide defaults page: fg_x
+	bot.callbackQuery('fg_x', async (ctx) => {
+		await ctx.deleteMessage().catch(() => {});
+		await ctx.answerCallbackQuery();
+	});
+
+	// Reset channel defaults to bot defaults: fd_r:CHID
 	bot.callbackQuery(/^fd_r:([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];
 		const config = await getChannelConfigFromD1(db, channelId);
@@ -195,7 +241,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		delete config.defaultFormat;
 		await saveChannelConfigToD1(db, channelId, config);
 
-		const current = resolveFormatSettings();
+		const current = resolveFormatSettings(undefined, undefined, await getGlobalFormat(db));
 		const keyboard = buildFormatKeyboard(
 			current,
 			`fd:${channelId}`,
@@ -204,7 +250,7 @@ export function registerFormatCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		);
 		await editOrReply(ctx,
 			`<b>Set the default settings for subscriptions.</b>\n\n` +
-			`The unset settings of a subscription will fall back to the settings on this page.\n\n<i>Reset to system defaults.</i>`,
+			`The unset settings of a subscription will fall back to the settings on this page.\n\n<i>Reset to bot defaults.</i>`,
 			{ parse_mode: 'HTML', reply_markup: keyboard }
 		);
 		await ctx.answerCallbackQuery({ text: 'Reset to defaults' });

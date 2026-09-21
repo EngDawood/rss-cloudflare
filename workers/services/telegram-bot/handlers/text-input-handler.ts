@@ -6,9 +6,9 @@ import { handleAddSourceValue, handleRemoveChannelConfirm } from './add-source-f
 import { detectMediaUrl } from '../../../utils/url-detector';
 import { downloadAndSendMedia } from './download-and-send';
 import { fetchYouTubeQualities, fetchFacebookInfo, fetchTikTokInfo } from '../../media-downloader';
-import { getChannelConfigFromD1, saveChannelConfigToD1 } from '../../../db/d1';
+import { getChannelConfigFromD1, saveChannelConfigToD1, getGlobalFormat, setGlobalFormat } from '../../../db/d1';
 import { resolveFormatSettings } from '../../../utils/telegram-format';
-import { buildFormatKeyboard } from '../views/keyboard-builders';
+import { buildFormatKeyboard, buildGlobalFormatView } from '../views/keyboard-builders';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
 import { handleSetTelegraphToken } from '../commands/telegraph-commands';
 import { setChannelAiModel, setChannelAiPrompt, setConfig, getConfig, resolveAiModel, resolveAiPrompt } from '../../../db/d1';
@@ -16,6 +16,7 @@ import { fetchFeed } from '../../feed-fetcher';
 import { summarizeItem } from '../../ai-summarizer';
 import { parseSourceRef } from '../helpers/source-parser';
 import { fetchAndSendLatest } from './fetch-and-send';
+import { resumeArgCommand } from '../helpers/command-args';
 import type { AdminState, ChannelSource } from '../../../types/telegram';
 
 /**
@@ -63,6 +64,14 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 					return;
 				}
 			}
+			return;
+		}
+
+		// A command waiting for its args takes the text as-is (even if it is a media URL)
+		const state = await getAdminState(kv, adminId);
+		if (state?.action === 'awaiting_command_args') {
+			await clearAdminState(kv, adminId);
+			await resumeArgCommand(ctx, state.context?.command ?? '', state.context?.collectedArgs ?? '', text);
 			return;
 		}
 
@@ -180,7 +189,6 @@ export function registerTextInputHandler(bot: Bot, env: Env, kv: KVNamespace): v
 			return;
 		}
 
-		const state = await getAdminState(kv, adminId);
 		if (!state) {
 			await ctx.reply('No active action. Use /start to see commands.');
 			return;
@@ -228,12 +236,25 @@ async function handleSetFormatCustom(
 	db: D1Database,
 ): Promise<void> {
 	const { channelId, sourceId, settingKey } = state.context || {};
-	if (!channelId || !settingKey) return;
+	if (!settingKey) return;
+
+	const value = text.trim();
+
+	if (!channelId) {
+		// Update bot-wide default setting
+		const globalFormat = await getGlobalFormat(db);
+		if (value === '') delete (globalFormat as any)[settingKey];
+		else (globalFormat as any)[settingKey] = value;
+		await setGlobalFormat(db, globalFormat);
+
+		const view = buildGlobalFormatView(globalFormat);
+		await ctx.reply(`<b>Updated bot default ${settingKey}</b>\n\n${view.text}`, { parse_mode: 'HTML', reply_markup: view.keyboard });
+		await clearAdminState(kv, adminId);
+		return;
+	}
 
 	const config = await getChannelConfigFromD1(db, channelId);
 	if (!config) { await ctx.reply('Channel not found.'); return; }
-
-	const value = text.trim();
 
 	if (sourceId) {
 		// Update source-specific setting
@@ -244,7 +265,7 @@ async function handleSetFormatCustom(
 		else (source.format as any)[settingKey] = value;
 		await saveChannelConfigToD1(db, channelId, config);
 
-		const current = resolveFormatSettings(config.defaultFormat, source.format);
+		const current = resolveFormatSettings(config.defaultFormat, source.format, await getGlobalFormat(db));
 		const keyboard = buildFormatKeyboard(
 			current,
 			`fs:${channelId}:${sourceId}`,
@@ -263,7 +284,7 @@ async function handleSetFormatCustom(
 		else (config.defaultFormat as any)[settingKey] = value;
 		await saveChannelConfigToD1(db, channelId, config);
 
-		const current = resolveFormatSettings(config.defaultFormat);
+		const current = resolveFormatSettings(config.defaultFormat, undefined, await getGlobalFormat(db));
 		const keyboard = buildFormatKeyboard(
 			current,
 			`fd:${channelId}`,

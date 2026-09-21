@@ -4,11 +4,12 @@ import { Bot } from 'grammy';
 import { fetchFeed } from '../services/feed-fetcher';
 import { formatFeedItem, resolveFormatSettings } from '../utils/telegram-format';
 import { enrichFeedItems } from '../utils/media-enrichment';
+import { feedTitleFromSource } from '../utils/text';
 import {
 	getFeeds, getFeedById, getFeedByUrl, insertFeed, upsertFeedBySource, removeFeed, setFeedEnabled,
 	updateLastFetched, upsertItems, getItemById,
 	listNewItemsMcp, searchItemsMcp, getItemByIdMcp, markMcpItemsRead,
-	getConfig, setConfig, dbItemToFeedItem,
+	getConfig, setConfig, getGlobalFormat, dbItemToFeedItem,
 	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
 	insertNote, listNotes, searchNotes, deleteNote,
 	listPostLog, recall,
@@ -40,7 +41,7 @@ export function registerTools(server: McpServer, env: Env): void {
 				if (existing) return ok({ message: 'Feed already exists', feed: existing });
 
 				const result = await fetchFeed(url, title);
-				const feedTitle = title || result.feedTitle || url;
+				const feedTitle = title || feedTitleFromSource(url, result.feedTitle);
 				const feed = await upsertFeedBySource(db, { sourceType: 'rss_url', sourceValue: url, title: feedTitle });
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
@@ -332,7 +333,7 @@ export function registerTools(server: McpServer, env: Env): void {
 				const item = dbItemToFeedItem(row, feedTitle, feedLink);
 				await enrichFeedItems([item], { token: env.TELEGRAPH_ACCESS_TOKEN });
 
-				const settings = resolveFormatSettings();
+				const settings = resolveFormatSettings(undefined, undefined, await getGlobalFormat(db));
 				const message = formatFeedItem(item, settings);
 
 				const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
@@ -564,7 +565,7 @@ export function registerTools(server: McpServer, env: Env): void {
 					const feed = await getFeedById(db, row.feed_id);
 					const item = dbItemToFeedItem(row, feed?.title ?? '', feed?.url ?? '');
 					await enrichFeedItems([item], { token: env.TELEGRAPH_ACCESS_TOKEN });
-					message = formatFeedItem(item, resolveFormatSettings());
+					message = formatFeedItem(item, resolveFormatSettings(undefined, undefined, await getGlobalFormat(db)));
 					if (caption) message = { ...message, caption };
 				} else {
 					const msgType = type ?? 'text';
