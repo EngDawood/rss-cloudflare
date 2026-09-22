@@ -286,7 +286,7 @@ function extractMedia(
 
 	// Atom enclosures: <link rel="enclosure">
 	entry.find('link[rel="enclosure"]').each((_, el) => {
-		const href = $(el).attr('href')?.replace(/\s+/g, '');
+		const href = cleanMediaUrl($(el).attr('href'));
 		const mimeType = $(el).attr('type') || '';
 		// ImgsedBridge pairs each post with a proxy enclosure (imginn.com — unfetchable by
 		// Telegram) followed by the real cdninstagram URL, both typed application/octet-stream.
@@ -306,11 +306,11 @@ function extractMedia(
 
 		// Video from <video><source src="...">
 		content$('video source, source[type^="video"]').each((_, el) => {
-			const src = content$(el).attr('src')?.replace(/\s+/g, '');
+			const src = cleanMediaUrl(content$(el).attr('src'));
 			if (src && !seen.has(src)) {
 				seen.add(src);
 				// Find poster/thumbnail
-				const poster = content$(el).closest('video').attr('poster')?.replace(/\s+/g, '');
+				const poster = cleanMediaUrl(content$(el).closest('video').attr('poster'));
 				media.push({ type: 'video', url: src, thumbnailUrl: poster });
 			}
 		});
@@ -320,7 +320,7 @@ function extractMedia(
 		// preferring it over the imginn <img> proxy below.
 		if (media.length === 0) {
 			content$('a[href]').each((_, el) => {
-				const href = content$(el).attr('href')?.replace(/\s+/g, '');
+				const href = cleanMediaUrl(content$(el).attr('href'));
 				if (href && /(?:cdninstagram\.com|fbcdn\.net)/i.test(href) && !isProxyMediaUrl(href) && !seen.has(href)) {
 					seen.add(href);
 					media.push({ type: isVideoMediaUrl(href) ? 'video' : 'photo', url: href });
@@ -331,7 +331,7 @@ function extractMedia(
 		// Images from <img> (only if nothing usable found above, to avoid duplicates)
 		if (media.length === 0) {
 			content$('img').each((_, el) => {
-				const src = content$(el).attr('src')?.replace(/\s+/g, '');
+				const src = cleanMediaUrl(content$(el).attr('src'));
 				if (src && !seen.has(src)) {
 					seen.add(src);
 					media.push({ type: 'photo', url: src });
@@ -356,7 +356,7 @@ function extractMediaFromRSS(
 
 	// RSS <enclosure>
 	entry.find('enclosure').each((_, el) => {
-		const url = $(el).attr('url')?.replace(/\s+/g, '');
+		const url = cleanMediaUrl($(el).attr('url'));
 		const mimeType = $(el).attr('type') || '';
 		if (url && !seen.has(url)) {
 			seen.add(url);
@@ -369,12 +369,12 @@ function extractMediaFromRSS(
 
 	// <media:content>
 	entry.find('media\\:content').each((_, el) => {
-		const url = $(el).attr('url')?.replace(/\s+/g, '');
+		const url = cleanMediaUrl($(el).attr('url'));
 		const medium = $(el).attr('medium') || '';
 		const mimeType = $(el).attr('type') || '';
 		if (url && !seen.has(url)) {
 			seen.add(url);
-			const thumbnail = entry.find('media\\:thumbnail').attr('url')?.replace(/\s+/g, '');
+			const thumbnail = cleanMediaUrl(entry.find('media\\:thumbnail').attr('url'));
 			media.push({
 				type: medium === 'video' || mimeType.startsWith('video/') ? 'video' : 'photo',
 				url,
@@ -388,7 +388,7 @@ function extractMediaFromRSS(
 		const content$ = cheerio.load(contentHtml);
 
 		content$('video source, source[type^="video"]').each((_, el) => {
-			const src = content$(el).attr('src')?.replace(/\s+/g, '');
+			const src = cleanMediaUrl(content$(el).attr('src'));
 			if (src && !seen.has(src)) {
 				seen.add(src);
 				media.push({ type: 'video', url: src });
@@ -397,7 +397,7 @@ function extractMediaFromRSS(
 
 		if (media.length === 0) {
 			content$('img').each((_, el) => {
-				const src = content$(el).attr('src')?.replace(/\s+/g, '');
+				const src = cleanMediaUrl(content$(el).attr('src'));
 				if (src && !seen.has(src)) {
 					seen.add(src);
 					media.push({ type: 'photo', url: src });
@@ -449,6 +449,22 @@ function extractTextFromHtml(html: string): string {
 		text = text.replace(/\s*by @[\w.]+\s*$/i, '').trim();
 	}
 	return text;
+}
+
+/**
+ * Normalize a media URL pulled from an attribute: strip whitespace and decode
+ * ampersand entities some bridges double-encode (`&amp;#38;` reaches us as a
+ * literal `&#38;`, turning the signed query string into a fragment → CDN 403).
+ */
+function cleanMediaUrl(url: string | undefined): string | undefined {
+	if (!url) return url;
+	let out = url.replace(/\s+/g, '');
+	let prev: string;
+	do {
+		prev = out;
+		out = out.replace(/&(?:amp|#38|#x26);/gi, '&');
+	} while (out !== prev);
+	return out;
 }
 
 function decodeHtmlEntities(text: string): string {

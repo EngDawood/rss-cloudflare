@@ -86,4 +86,20 @@ describe('feed-fetcher parser fallback id', () => {
 		expect(result.items.length).toBe(1);
 		expect(result.items[0].link).toBe('https://www.instagram.com/p/DVjsHcAEldb/');
 	});
+
+	it('should decode double-encoded ampersands in media URLs', () => {
+		const mockAtomXml = `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>edraakorg</title>
+  <entry>
+    <id>https://www.instagram.com/p/DVgqc2nETfs/</id>
+    <title>Post</title>
+    <link rel="enclosure" type="video/mp4" href="https://cdn.example.com/v.mp4?_nc_cat=103&amp;#38;oh=abc&amp;amp;oe=6A3912FC"/>
+    <content type="html">caption</content>
+  </entry>
+</feed>`;
+
+		const result = parseXML(mockAtomXml);
+		expect(result.items[0].media[0].url).toBe('https://cdn.example.com/v.mp4?_nc_cat=103&oh=abc&oe=6A3912FC');
+	});
 });
