@@ -22,7 +22,8 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'/channels — Manage your channels\n' +
 				'/add @channel — Register a new channel\n' +
 				'/list — See all active subscriptions\n' +
-				'/status — Overview of all channels\n\n' +
+				'/status — Overview of all channels\n' +
+				'/chats — Manage named chats (post targets & default)\n\n' +
 				'<b>Configuration:</b>\n' +
 				'/set @channel source — Custom format for a source\n' +
 				'/set_default — Default format for all channels\n' +
@@ -61,7 +62,13 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'<b>Telegraph Instant View:</b>\n' +
 				'Use <code>/telegraph</code> to enable/disable automatic Telegraph pages for long RSS articles, set the character threshold, and manage the access token.\n\n' +
 				'<b>AI Summaries:</b>\n' +
-				'Use <code>/ai</code> to enable AI-generated summaries at the global, channel, or source level.',
+				'Use <code>/ai</code> to enable AI-generated summaries at the global, channel, or source level.\n\n' +
+				'<b>Named Chats (post targets):</b>\n' +
+				'These are separate from your auto-post channels — used as manual/AI-agent post targets, one of which can be the default.\n' +
+				'• <code>/chats</code> — list named chats\n' +
+				'• <code>/addchat name @user_or_id [type] [default]</code> — add or update\n' +
+				'• <code>/defaultchat name</code> — set the default\n' +
+				'• <code>/rmchat name</code> — remove',
 			{ parse_mode: 'HTML' }
 		);
 	});

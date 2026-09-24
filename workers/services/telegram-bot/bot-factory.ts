@@ -1,6 +1,7 @@
 import { Bot } from 'grammy';
 import { registerInfoCommands } from './commands/info-commands';
 import { registerChannelCommands } from './commands/channel-commands';
+import { registerChatCommands } from './commands/chat-commands';
 import { registerSubscriptionCommands } from './commands/subscription-commands';
 import { registerFormatCommands } from './commands/format-commands';
 import { registerDiagnosticCommands } from './commands/diagnostic-commands';
@@ -71,6 +72,7 @@ export function createBot(env: Env): Bot {
 	// Register all command handlers (PRESERVE ORIGINAL ORDER)
 	registerInfoCommands(bot, env, kv);               // /start, /help, /cancel
 	registerChannelCommands(bot, env, kv);            // /add, /channels, /status, /enable, /disable
+	registerChatCommands(bot, env, kv);               // /chats, /addchat, /rmchat, /defaultchat
 	registerSubscriptionCommands(bot, env, kv);       // /sub, /unsub, /delay, /seed, /list
 	registerFormatCommands(bot, env, kv);             // /set_default, /set
 	registerDiagnosticCommands(bot, env, kv);         // /test, /debug
