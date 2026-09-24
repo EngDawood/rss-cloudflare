@@ -1,4 +1,5 @@
 import type { FormatSettings } from '../types/telegram';
+import { DEFAULT_CHECK_INTERVAL_MINUTES } from '../constants';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,21 @@ export async function getGlobalFormat(db: D1Database): Promise<Partial<FormatSet
 
 export async function setGlobalFormat(db: D1Database, format: Partial<FormatSettings>): Promise<void> {
 	await setConfig(db, GLOBAL_FORMAT_KEY, JSON.stringify(format));
+}
+
+// ── Global default check interval ─────────────────────────────────────────────
+
+const GLOBAL_CHECK_INTERVAL_KEY = 'default_check_interval_minutes';
+
+/** Bot-wide default check interval (minutes) applied to newly registered channels. */
+export async function getGlobalCheckInterval(db: D1Database): Promise<number> {
+	const raw = await getConfig(db, GLOBAL_CHECK_INTERVAL_KEY);
+	const parsed = raw ? parseInt(raw, 10) : NaN;
+	return Number.isFinite(parsed) && parsed >= 5 ? parsed : DEFAULT_CHECK_INTERVAL_MINUTES;
+}
+
+export async function setGlobalCheckInterval(db: D1Database, minutes: number): Promise<void> {
+	await setConfig(db, GLOBAL_CHECK_INTERVAL_KEY, String(minutes));
 }
 
 // ── AI summary helpers ────────────────────────────────────────────────────────

@@ -40,6 +40,7 @@ export const FEED_CACHE_TTL = 900;
 // Defaults
 export const RSS_ITEMS_LIMIT = 12;
 export const TITLE_MAX_LENGTH = 120;
+export const DEFAULT_CHECK_INTERVAL_MINUTES = 30;
 
 // Admin config KV key
 export const CACHE_KEY_ADMIN_CONFIG = 'admin:config';
