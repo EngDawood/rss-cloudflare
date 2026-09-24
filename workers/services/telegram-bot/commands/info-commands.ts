@@ -77,6 +77,7 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'Your own DM with the bot can be a subscription target too, managed exactly like a channel.\n' +
 				'• <code>/add me</code> — register this chat\n' +
 				'• Then <code>/sub Personal @iguser</code> etc. (use the name shown after registering)\n' +
+				'• <code>/sub Personal all</code> — copy every source already subscribed in your other channels\n' +
 				'• Shows up in <code>/channels</code> and <code>/status</code> alongside your real channels',
 			{ parse_mode: 'HTML' }
 		);

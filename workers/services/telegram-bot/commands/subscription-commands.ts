@@ -1,5 +1,5 @@
-import type { Bot } from 'grammy';
-import type { ChannelSource } from '../../../types/telegram';
+import type { Bot, Context } from 'grammy';
+import type { ChannelSource, ChannelConfig } from '../../../types/telegram';
 import { getChannelsListD1, getChannelConfigFromD1, saveChannelConfigToD1, upsertChannel, insertPostLog, getGlobalCheckInterval } from '../../../db/d1';
 import { resolveChannelArg } from '../helpers/channel-resolver';
 import { parseSourceRef, sourceTypeLabel, sourceTypeIcon, detectRSSBridgeSource } from '../helpers/source-parser';
@@ -66,7 +66,8 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 				'<code>@iguser</code> — Instagram user\n' +
 				'<code>#hashtag</code> — Instagram hashtag\n' +
 				'<code>tiktok @username</code> — TikTok user\n' +
-				'<code>https://feed-url</code> — RSS/Atom feed\n\n' +
+				'<code>https://feed-url</code> — RSS/Atom feed\n' +
+				'<code>all</code> — copy every source already subscribed in your other channels\n\n' +
 				'Add a number to also post the latest items, e.g. <code>@natgeo 5</code>'
 			);
 			return;
@@ -108,6 +109,12 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 				checkIntervalMinutes: defaultInterval,
 				lastCheckTimestamp: 0,
 			});
+		}
+
+		// /sub @channel all — copy every source already subscribed in your other channels
+		if (sourceRef.trim().toLowerCase() === 'all') {
+			await copyAllSources(ctx, db, resolved.id, resolved.title, config);
+			return;
 		}
 
 		let parsed = parseSourceRef(sourceRef);
@@ -321,4 +328,50 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 
 		await ctx.reply(`<b>Seed complete:</b>\n${results.join('\n')}`, { parse_mode: 'HTML' });
 	});
+}
+
+/**
+ * Copy every source already subscribed in any other channel into `config`
+ * (deduped by type+value), skipping ones already present. Used by "/sub @channel all".
+ * Sources are trusted as-is (no re-validation) since they're already confirmed
+ * working in their original channel.
+ */
+async function copyAllSources(
+	ctx: Context,
+	db: D1Database,
+	targetChannelId: string,
+	targetTitle: string,
+	config: ChannelConfig,
+): Promise<void> {
+	const allChannelIds = await getChannelsListD1(db);
+	const existingKeys = new Set(config.sources.map((s) => `${s.type}:${s.value}`));
+	const added: ChannelSource[] = [];
+	let scannedChannels = 0;
+
+	for (const otherId of allChannelIds) {
+		if (otherId === targetChannelId) continue;
+		const otherConfig = await getChannelConfigFromD1(db, otherId);
+		if (!otherConfig || otherConfig.sources.length === 0) continue;
+		scannedChannels++;
+		for (const src of otherConfig.sources) {
+			const key = `${src.type}:${src.value}`;
+			if (existingKeys.has(key)) continue;
+			existingKeys.add(key);
+			added.push({ ...src, enabled: true });
+		}
+	}
+
+	if (added.length === 0) {
+		await ctx.reply(`No new sources found across your other channels to copy into <b>${escapeHtmlBot(targetTitle)}</b>.`, { parse_mode: 'HTML' });
+		return;
+	}
+
+	config.sources.push(...added);
+	await saveChannelConfigToD1(db, targetChannelId, config);
+
+	const list = added.map((s) => `${sourceTypeIcon(s.type)} ${escapeHtmlBot(s.value)}`).join('\n');
+	await ctx.reply(
+		`✅ Copied <b>${added.length}</b> source(s) into <b>${escapeHtmlBot(targetTitle)}</b> from ${scannedChannels} channel(s):\n\n${list}`,
+		{ parse_mode: 'HTML' }
+	);
 }
