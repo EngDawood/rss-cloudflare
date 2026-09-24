@@ -6,7 +6,7 @@ type HonoEnv = { Bindings: Env };
 export const BOT_COMMANDS = [
 	{ command: 'start', description: 'Show all commands' },
 	{ command: 'help', description: 'How to use the bot' },
-	{ command: 'add', description: 'Register a channel: /add @channel' },
+	{ command: 'add', description: 'Register a channel, or /add me for this chat' },
 	{ command: 'sub', description: 'Subscribe to a source: /sub @channel @iguser' },
 	{ command: 'unsub', description: 'Unsubscribe from a source' },
 	{ command: 'list', description: 'List all subscriptions' },

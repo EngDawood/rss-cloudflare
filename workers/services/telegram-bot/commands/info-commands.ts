@@ -21,6 +21,7 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'<b>Management:</b>\n' +
 				'/channels — Manage your channels\n' +
 				'/add @channel — Register a new channel\n' +
+				'/add me — Register this chat (e.g. your personal DM) instead\n' +
 				'/list — See all active subscriptions\n' +
 				'/status — Overview of all channels\n' +
 				'/chats — Manage named chats (post targets & default)\n\n' +
@@ -71,7 +72,12 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'• <code>/chats</code> — list named chats\n' +
 				'• <code>/addchat name @user_or_id [type] [default]</code> — add or update\n' +
 				'• <code>/defaultchat name</code> — set the default\n' +
-				'• <code>/rmchat name</code> — remove',
+				'• <code>/rmchat name</code> — remove\n\n' +
+				'<b>Personal Mode:</b>\n' +
+				'Your own DM with the bot can be a subscription target too, managed exactly like a channel.\n' +
+				'• <code>/add me</code> — register this chat\n' +
+				'• Then <code>/sub Personal @iguser</code> etc. (use the name shown after registering)\n' +
+				'• Shows up in <code>/channels</code> and <code>/status</code> alongside your real channels',
 			{ parse_mode: 'HTML' }
 		);
 	});

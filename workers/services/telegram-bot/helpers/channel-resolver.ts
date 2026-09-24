@@ -37,8 +37,8 @@ export async function resolveChannelArg(
 	db: D1Database,
 	arg: string
 ): Promise<{ id: string; title: string; isMember: boolean } | null> {
-	// 1. If it's a numeric ID (-100123...)
-	if (/^-\d+$/.test(arg)) {
+	// 1. If it's a numeric ID (channel/group: -100123..., or a private chat: positive)
+	if (/^-?\d+$/.test(arg)) {
 		return resolveChannel(bot, arg);
 	}
 

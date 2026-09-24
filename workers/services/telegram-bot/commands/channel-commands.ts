@@ -3,7 +3,7 @@ import { getChannelsListD1, getChannelConfigFromD1, saveChannelConfigToD1 } from
 import { setAdminState } from '../storage/admin-state';
 import { resolveChannelArg } from '../helpers/channel-resolver';
 import { showChannelsList } from '../views/channel-views';
-import { addChannelDirect } from '../handlers/add-channel-flow';
+import { addChannelDirect, addPersonalChat } from '../handlers/add-channel-flow';
 import { registerArgCommand, askForArg, channelPrompt } from '../helpers/command-args';
 
 /**
@@ -16,7 +16,10 @@ export function registerChannelCommands(bot: Bot, env: Env, kv: KVNamespace): vo
 	// /add @channel or /add -100xxx
 	bot.command('add', async (ctx) => {
 		const arg = ctx.match?.trim();
-		if (arg) {
+		if (arg?.toLowerCase() === 'me') {
+			// Register this chat itself (e.g. your personal DM) as a manageable channel
+			await addPersonalChat(ctx, db, adminId, kv);
+		} else if (arg) {
 			// Direct add with argument
 			await addChannelDirect(ctx, bot, db, adminId, arg, kv);
 		} else {
@@ -24,6 +27,7 @@ export function registerChannelCommands(bot: Bot, env: Env, kv: KVNamespace): vo
 			await ctx.reply(
 				'Send me the channel <b>@username</b> or <b>ID</b>\n\n' +
 					'Example: <code>@mychannel</code> or <code>-1001234567890</code>\n\n' +
+					'Or send <code>/add me</code> to register <i>this chat</i> (e.g. your personal DM) instead.\n\n' +
 					'Use /cancel to abort.',
 				{ parse_mode: 'HTML' }
 			);
