@@ -1,5 +1,5 @@
 import type { Bot } from 'grammy';
-import { getChannelConfigFromD1, getGlobalFormat } from '../../../db/d1';
+import { getChannelConfigFromD1, getGlobalFormat, getGlobalCheckInterval, setGlobalCheckInterval } from '../../../db/d1';
 import { resolveChannelArg } from '../helpers/channel-resolver';
 import { resolveFormatSettings } from '../../../utils/telegram-format';
 import { buildFormatKeyboard, buildGlobalFormatView } from '../views/keyboard-builders';
@@ -18,9 +18,39 @@ export function registerFormatCommands(bot: Bot, env: Env, kv: KVNamespace): voi
 		const arg = ctx.match?.trim();
 		if (!arg) {
 			const view = buildGlobalFormatView(await getGlobalFormat(db));
-			await ctx.reply(view.text, { parse_mode: 'HTML', reply_markup: view.keyboard });
+			const interval = await getGlobalCheckInterval(db);
+			await ctx.reply(
+				view.text +
+					`\n\n⏱ Default check interval for <b>new</b> channels: <b>${interval} min</b>\n` +
+					'<code>/set_default delay &lt;minutes&gt;</code> to change it.',
+				{ parse_mode: 'HTML', reply_markup: view.keyboard }
+			);
 			return;
 		}
+
+		// /set_default delay [minutes] — bot-wide default check interval for new channels
+		if (/^delay\b/i.test(arg)) {
+			const minsArg = arg.replace(/^delay\s*/i, '').trim();
+			if (!minsArg) {
+				const current = await getGlobalCheckInterval(db);
+				await ctx.reply(
+					`⏱ Default check interval for new channels: <b>${current} min</b>\n\n` +
+						'Send <code>/set_default delay &lt;minutes&gt;</code> to change it (minimum 5).\n' +
+						'This only applies to newly registered channels — use <code>/delay @channel</code> to change an existing one.',
+					{ parse_mode: 'HTML' }
+				);
+				return;
+			}
+			const minutes = parseInt(minsArg, 10);
+			if (isNaN(minutes) || minutes < 5) {
+				await ctx.reply('Delay must be at least 5 minutes.');
+				return;
+			}
+			await setGlobalCheckInterval(db, minutes);
+			await ctx.reply(`⏱ Default check interval for new channels set to <b>${minutes} min</b>`, { parse_mode: 'HTML' });
+			return;
+		}
+
 		const resolved = await resolveChannelArg(bot, db, arg);
 		if (!resolved) { await ctx.reply(`Channel "${arg}" not found.`); return; }
 		const config = await getChannelConfigFromD1(db, resolved.id);

@@ -1,6 +1,6 @@
 import type { Bot } from 'grammy';
 import type { ChannelSource } from '../../../types/telegram';
-import { getChannelsListD1, getChannelConfigFromD1, saveChannelConfigToD1, upsertChannel, insertPostLog } from '../../../db/d1';
+import { getChannelsListD1, getChannelConfigFromD1, saveChannelConfigToD1, upsertChannel, insertPostLog, getGlobalCheckInterval } from '../../../db/d1';
 import { resolveChannelArg } from '../helpers/channel-resolver';
 import { parseSourceRef, sourceTypeLabel, sourceTypeIcon, detectRSSBridgeSource } from '../helpers/source-parser';
 import { fetchAndSendLatest } from '../handlers/fetch-and-send';
@@ -99,12 +99,13 @@ export function registerSubscriptionCommands(bot: Bot, env: Env, kv: KVNamespace
 		// Auto-register channel if not yet registered
 		let config = await getChannelConfigFromD1(db, resolved.id);
 		if (!config) {
-			config = { channelTitle: resolved.title, enabled: true, checkIntervalMinutes: 30, lastCheckTimestamp: 0, sources: [] };
+			const defaultInterval = await getGlobalCheckInterval(db);
+			config = { channelTitle: resolved.title, enabled: true, checkIntervalMinutes: defaultInterval, lastCheckTimestamp: 0, sources: [] };
 			await upsertChannel(db, {
 				id: resolved.id,
 				name: resolved.title,
 				enabled: true,
-				checkIntervalMinutes: 30,
+				checkIntervalMinutes: defaultInterval,
 				lastCheckTimestamp: 0,
 			});
 		}

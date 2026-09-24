@@ -1,7 +1,7 @@
 import { InlineKeyboard } from 'grammy';
 import type { Bot, Context } from 'grammy';
 import { resolveChannel } from '../helpers/channel-resolver';
-import { getChannelById, upsertChannel } from '../../../db/d1';
+import { getChannelById, upsertChannel, getGlobalCheckInterval } from '../../../db/d1';
 import { clearAdminState } from '../storage/admin-state';
 
 /**
@@ -45,7 +45,7 @@ export async function addChannelDirect(
 		id: resolved.id,
 		name: resolved.title,
 		enabled: true,
-		checkIntervalMinutes: 30,
+		checkIntervalMinutes: await getGlobalCheckInterval(db),
 		lastCheckTimestamp: 0,
 	});
 	await clearAdminState(kv, adminId);

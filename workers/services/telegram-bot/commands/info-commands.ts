@@ -22,11 +22,13 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'/channels — Manage your channels\n' +
 				'/add @channel — Register a new channel\n' +
 				'/list — See all active subscriptions\n' +
-				'/status — Overview of all channels\n\n' +
+				'/status — Overview of all channels\n' +
+				'/chats — Manage named chats (post targets & default)\n\n' +
 				'<b>Configuration:</b>\n' +
 				'/set @channel source — Custom format for a source\n' +
 				'/set_default — Default format for all channels\n' +
 				'/set_default @channel — Default format for a channel\n' +
+				'/set_default delay 30 — Default check interval for new channels\n' +
 				'/delay @channel 30 — Set check interval (min)\n' +
 				'/telegraph — Configure Telegraph Instant View\n' +
 				'/ai — Configure AI summary settings\n\n' +
@@ -60,8 +62,16 @@ export function registerInfoCommands(bot: Bot, env: Env, kv: KVNamespace): void 
 				'Simply paste a link from TikTok, Instagram, X/Twitter, YouTube, Facebook, Threads, SoundCloud, Spotify, or Pinterest to download and receive the media file directly.\n\n' +
 				'<b>Telegraph Instant View:</b>\n' +
 				'Use <code>/telegraph</code> to enable/disable automatic Telegraph pages for long RSS articles, set the character threshold, and manage the access token.\n\n' +
+				'<b>Default Check Interval:</b>\n' +
+				'Use <code>/set_default delay &lt;minutes&gt;</code> to change the default check interval applied to newly registered channels (existing channels keep <code>/delay @channel</code>).\n\n' +
 				'<b>AI Summaries:</b>\n' +
-				'Use <code>/ai</code> to enable AI-generated summaries at the global, channel, or source level.',
+				'Use <code>/ai</code> to enable AI-generated summaries at the global, channel, or source level.\n\n' +
+				'<b>Named Chats (post targets):</b>\n' +
+				'These are separate from your auto-post channels — used as manual/AI-agent post targets, one of which can be the default.\n' +
+				'• <code>/chats</code> — list named chats\n' +
+				'• <code>/addchat name @user_or_id [type] [default]</code> — add or update\n' +
+				'• <code>/defaultchat name</code> — set the default\n' +
+				'• <code>/rmchat name</code> — remove',
 			{ parse_mode: 'HTML' }
 		);
 	});
