@@ -61,7 +61,9 @@
 		"WORKER_URL": "https://rss-bridge.engdawood.workers.dev",
 		"DEFAULT_AI_MODEL": "custom-nvidia-nvm/llama-3.1-nemotron-70b-instruct",
 		"CHAT_AI_MODEL": "google-ai-studio/gemini-2.0-flash",
-		"EMDASH_URL": "https://engdawood.com"
+		"EMDASH_URL": "https://engdawood.com",
+		"RSSHUB_URL": "https://rsshub.engdawood.com"
+		// RSSHUB_ACCESS_KEY is a secret — set with: npx wrangler secret put RSSHUB_ACCESS_KEY
 		// Placeholder — override with: npx wrangler secret put MCP_AUTH_TOKEN
 		// "MCP_AUTH_TOKEN": ""
 		// EMDASH_TOKEN is a secret — set with: npx wrangler secret put EMDASH_TOKEN
