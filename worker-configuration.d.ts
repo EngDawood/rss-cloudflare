@@ -28,6 +28,8 @@ interface __BaseEnv_Env {
 	EMDASH_TOKEN: string;
 	EMDASH_URL: string;
 	FOLO_WEBHOOK_SECRET: string;
+	RSSHUB_URL: string;
+	RSSHUB_ACCESS_KEY: string;
 	RSSReaderMCP: DurableObjectNamespace<import("./workers/index").RSSReaderMCP>;
 	AGENT_WORKFLOW: Workflow<Parameters<import("./workers/index").AgentWorkflow['run']>[0]['payload']>;
 }

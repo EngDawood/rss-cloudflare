@@ -33,6 +33,23 @@ export const RSSHUB_INSTANCES = [
 ];
 
 /**
+ * Own RSSHub instance (env RSSHUB_URL), protected by an access key (secret RSSHUB_ACCESS_KEY).
+ * The key is appended only to URLs on this origin, never to public mirrors.
+ */
+function ownRsshubOrigin(env?: Env): string | null {
+	const base = env?.RSSHUB_URL?.trim().replace(/\/+$/, '');
+	return base || null;
+}
+
+export function withRsshubKey(url: string, env?: Env): string {
+	const base = ownRsshubOrigin(env);
+	if (!base || !env?.RSSHUB_ACCESS_KEY) return url;
+	if (url !== base && !url.startsWith(`${base}/`) && !url.startsWith(`${base}?`)) return url;
+	if (/[?&]key=/.test(url)) return url;
+	return `${url}${url.includes('?') ? '&' : '?'}key=${encodeURIComponent(env.RSSHUB_ACCESS_KEY)}`;
+}
+
+/**
  * Load instance list from D1 config (keys: instances_rssbridge / instances_tiktok / instances_rsshub).
  * Falls back to the hardcoded constants so the InstancesTab changes are actually honoured by the fetcher.
  */
@@ -42,12 +59,16 @@ async function getConfiguredInstances(env: Env | undefined, type: 'rssbridge' | 
 		type === 'tiktok' ? RSS_BRIDGE_TIKTOK_INSTANCES :
 		type === 'instagram' ? [...RSS_BRIDGE_INSTANCES, ...RSSHUB_INSTANCES] :
 		RSS_BRIDGE_INSTANCES;
-	if (!env?.DB) return defaults;
-	try {
-		const saved = await getConfig(env.DB, `instances_${type}`);
-		if (saved) return JSON.parse(saved) as string[];
-	} catch { /* non-fatal — fall through to defaults */ }
-	return defaults;
+	let list = defaults;
+	if (env?.DB) {
+		try {
+			const saved = await getConfig(env.DB, `instances_${type}`);
+			if (saved) list = JSON.parse(saved) as string[];
+		} catch { /* non-fatal — fall through to defaults */ }
+	}
+	// Own RSSHub instance goes first for generic RSSHub paths (Instagram routes differ per instance).
+	const own = type === 'rsshub' ? ownRsshubOrigin(env) : null;
+	return own ? [own, ...list.filter((i) => i !== own)] : list;
 }
 
 /**
@@ -119,7 +140,7 @@ const MAX_FAILOVER_ATTEMPTS = 5;
  */
 async function fetchRssUrl(url: string, env?: Env): Promise<FetchResult> {
 	// Try the original URL first
-	const result = await fetchFeed(url, undefined, env?.CACHE, FEED_CACHE_TTL);
+	const result = await fetchFeed(withRsshubKey(url, env), undefined, env?.CACHE, FEED_CACHE_TTL);
 	if (result.items.length > 0) return result;
 
 	// Check whether this URL belongs to a mirror family that can failover
@@ -139,7 +160,7 @@ async function fetchRssUrl(url: string, env?: Env): Promise<FetchResult> {
 			console.log(`[${family}] ${matchedInstance} failed, trying ${tried.length} of ${siblings.length} sibling instances...`);
 
 			for (const instance of tried) {
-				const altResult = await fetchFeed(instance + path, undefined, env?.CACHE, FEED_CACHE_TTL);
+				const altResult = await fetchFeed(withRsshubKey(instance + path, env), undefined, env?.CACHE, FEED_CACHE_TTL);
 				if (altResult.items.length > 0) {
 					console.log(`[${family}] Failover success with ${instance}`);
 					return altResult;
@@ -309,7 +330,7 @@ async function fetchFromRSSBridgeInstances(
 	const allErrors: FetchResult['errors'] = [];
 
 	for (const instance of instances) {
-		const url = buildUrl(instance);
+		const url = withRsshubKey(buildUrl(instance), env);
 		console.log(`[RSSBridge] Trying ${instance} for ${label}...`);
 
 		const result = await fetchFeed(url, undefined, env?.CACHE, FEED_CACHE_TTL);
