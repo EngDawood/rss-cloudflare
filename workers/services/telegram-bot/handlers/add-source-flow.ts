@@ -56,6 +56,8 @@ export async function handleAddSourceValue(
 		id = `igst_${shortHash(value)}`;
 	} else if (sourceType === 'tiktok_user') {
 		id = `tiktok_${shortHash(value)}`;
+	} else if (sourceType === 'twitter_user') {
+		id = `tw_${shortHash(value.toLowerCase())}`;
 	}
 
 	// Duplicate check by value (D1 sources use feed UUIDs as ids, not shortHash ids)

@@ -437,18 +437,24 @@ function extractTextFromHtml(html: string): string {
 		}
 	}
 
-	const raw = textSource
+	let text = htmlToPlainText(textSource);
+	if (isImgsed) {
+		text = text.replace(/\s*by @[\w.]+\s*$/i, '').trim();
+	}
+	return text;
+}
+
+/**
+ * Convert HTML to plain text, keeping every paragraph (no Instagram "last <br><br>" heuristic).
+ */
+export function htmlToPlainText(html: string): string {
+	const raw = html
 		.replace(/<br\s*\/?>/gi, '\n')
 		.replace(/<\/p>|<\/div>|<\/section>|<\/article>|<\/li>|<\/h[1-6]>|<\/blockquote>/gi, '\n\n')
 		.replace(/<[^>]+>/g, '')
 		.replace(/\n{3,}/g, '\n\n')
 		.trim();
-
-	let text = decodeHtmlEntities(raw);
-	if (isImgsed) {
-		text = text.replace(/\s*by @[\w.]+\s*$/i, '').trim();
-	}
-	return text;
+	return decodeHtmlEntities(raw);
 }
 
 function decodeHtmlEntities(text: string): string {
