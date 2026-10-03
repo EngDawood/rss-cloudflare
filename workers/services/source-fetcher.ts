@@ -1,6 +1,6 @@
 import type { FeedItem, FetchResult } from '../types/feed';
 import type { ChannelSource } from '../types/telegram';
-import { fetchFeed } from './feed-fetcher';
+import { fetchFeed, htmlToPlainText } from './feed-fetcher';
 import { getConfig } from '../db/d1';
 import { RSS_ITEMS_LIMIT, FEED_CACHE_TTL } from '../constants';
 
@@ -59,16 +59,12 @@ async function getConfiguredInstances(env: Env | undefined, type: 'rssbridge' | 
 		type === 'tiktok' ? RSS_BRIDGE_TIKTOK_INSTANCES :
 		type === 'instagram' ? [...RSS_BRIDGE_INSTANCES, ...RSSHUB_INSTANCES] :
 		RSS_BRIDGE_INSTANCES;
-	let list = defaults;
-	if (env?.DB) {
-		try {
-			const saved = await getConfig(env.DB, `instances_${type}`);
-			if (saved) list = JSON.parse(saved) as string[];
-		} catch { /* non-fatal — fall through to defaults */ }
-	}
-	// Own RSSHub instance goes first for generic RSSHub paths (Instagram routes differ per instance).
-	const own = type === 'rsshub' ? ownRsshubOrigin(env) : null;
-	return own ? [own, ...list.filter((i) => i !== own)] : list;
+	if (!env?.DB) return defaults;
+	try {
+		const saved = await getConfig(env.DB, `instances_${type}`);
+		if (saved) return JSON.parse(saved) as string[];
+	} catch { /* non-fatal — fall through to defaults */ }
+	return defaults;
 }
 
 /**
@@ -109,6 +105,8 @@ export async function fetchForSource(source: ChannelSource, env?: Env): Promise<
 			return await fetchRSSHubUrl(source.value, env);
 		case 'tiktok_user':
 			return await fetchTikTokUser(source.value, env);
+		case 'twitter_user':
+			return await fetchTwitterUser(source.value, env);
 		default:
 			return {
 				items: [],
@@ -192,6 +190,41 @@ async function fetchRSSHubUrl(path: string, env?: Env): Promise<FetchResult> {
 		instances,
 		env
 	);
+}
+
+/**
+ * Fetch an X (Twitter) user timeline from the own RSSHub instance (RSSHUB_URL + RSSHUB_ACCESS_KEY).
+ * RSSHub titles are truncated ("...") and carry no media, so the title is dropped here and the
+ * full text + media are filled in later by enrichFeedItems (FxTwitter API).
+ */
+export async function fetchTwitterUser(username: string, env?: Env): Promise<FetchResult> {
+	const base = ownRsshubOrigin(env);
+	if (!base) {
+		return {
+			items: [], feedTitle: '', feedLink: '',
+			errors: [{ tier: 'config', message: 'RSSHUB_URL is not configured (needed for twitter_user)' }],
+		};
+	}
+	const handle = username.replace(/^@/, '');
+	const url = withRsshubKey(`${base}/twitter/user/${encodeURIComponent(handle)}`, env);
+	const result = await fetchFeed(url, `X @${handle}`, env?.CACHE, FEED_CACHE_TTL);
+	return {
+		...result,
+		feedLink: `https://x.com/${handle}`,
+		items: result.items.slice(0, RSS_ITEMS_LIMIT).map((item) => {
+			// RSSHub appends a quoted tweet as `<hr …><div class="rsshub-quote">Name: text</div>`
+			const [own, quote] = (item.contentHtml ?? '').split(/<hr\b[^>]*>/i);
+			const quoteText = quote ? htmlToPlainText(quote) : '';
+			return {
+				...item,
+				title: '',
+				link: item.link.replace('twitter.com/', 'x.com/'),
+				text: own !== undefined ? htmlToPlainText(own) + (quoteText ? `\n\n↪ ${quoteText}` : '') : item.text,
+				contentHtml: undefined, // tweets never go to Telegraph
+			};
+		}),
+		errors: result.errors.map((e) => ({ ...e, tier: `rsshub:${base}` })),
+	};
 }
 
 /**

@@ -26,6 +26,8 @@ export function registerSourceCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 			.row()
 			.text('🎵 TikTok User', `src_type:${channelId}:tiktok_user`)
 			.row()
+			.text('🐦 X User', `src_type:${channelId}:twitter_user`)
+			.row()
 			.text('🌐 RSS/Atom URL', `src_type:${channelId}:rss_url`)
 			.row()
 			.text('« Back', `ch:${channelId}`);
@@ -48,6 +50,7 @@ export function registerSourceCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 			instagram_tag: '#️⃣ Send the <b>hashtag</b> (without #):',
 			instagram_story: '📸 Send the Instagram <b>username</b> for stories (without @):',
 			tiktok_user: '🎵 Send the TikTok <b>username</b> (without @):',
+			twitter_user: '🐦 Send the X <b>username</b> (without @):',
 			rss_url: '🌐 Send the <b>RSS/Atom feed URL</b>:',
 		};
 		await editOrReply(ctx, (prompts[sourceType] || 'Send the value:') + '\n\nUse /cancel to abort.', { parse_mode: 'HTML' });

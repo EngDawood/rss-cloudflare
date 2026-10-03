@@ -22,6 +22,8 @@ function detectRSSHubPath(url: string): string | null {
 	}
 }
 
+const X_RESERVED_PATHS = ['i', 'home', 'search', 'explore', 'hashtag', 'share', 'intent', 'settings', 'notifications', 'messages', 'compose'];
+
 /**
  * Generate a short hash for a URL to use as source ID suffix.
  */
@@ -57,6 +59,13 @@ export function parseSourceRef(ref: string): { type: SourceType; value: string; 
 		return { type: 'tiktok_user', value: tiktokUser, id: `tiktok_${shortHash(tiktokUser)}` };
 	}
 
+	// X (Twitter) explicit: "-x username", "x username" or "twitter username"
+	const xExplicitMatch = trimmed.match(/^(?:-x|x|twitter)\s+@?(\w{1,15})$/i);
+	if (xExplicitMatch) {
+		const xUser = xExplicitMatch[1];
+		return { type: 'twitter_user', value: xUser, id: `tw_${shortHash(xUser.toLowerCase())}` };
+	}
+
 	// Instagram explicit: "-i username" or "instagram username"
 	const igExplicitMatch = trimmed.match(/^(?:-i|instagram)\s+@?([\w.-]+)/i);
 	if (igExplicitMatch) {
@@ -78,6 +87,13 @@ export function parseSourceRef(ref: string): { type: SourceType; value: string; 
 		if (tiktokUrlMatch) {
 			const tiktokUser = tiktokUrlMatch[1];
 			return { type: 'tiktok_user', value: tiktokUser, id: `tiktok_${shortHash(tiktokUser)}` };
+		}
+
+		// X / Twitter Profile (or status) Link → the user's timeline
+		const xUrlMatch = trimmed.match(/^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/@?(\w{1,15})(?:[/?#]|$)/i);
+		if (xUrlMatch && !X_RESERVED_PATHS.includes(xUrlMatch[1].toLowerCase())) {
+			const xUser = xUrlMatch[1];
+			return { type: 'twitter_user', value: xUser, id: `tw_${shortHash(xUser.toLowerCase())}` };
 		}
 
 		// Instagram Profile Link
@@ -128,6 +144,8 @@ export function sourceTypeIcon(type: string): string {
 			return '📸';
 		case 'tiktok_user':
 			return '🎵';
+		case 'twitter_user':
+			return '🐦';
 		case 'rsshub_url':
 			return '📡';
 		case 'rss_url':
@@ -152,6 +170,8 @@ export function sourceTypeLabel(type: string): string {
 			return 'IG Story';
 		case 'tiktok_user':
 			return 'TikTok';
+		case 'twitter_user':
+			return 'X';
 		case 'rsshub_url':
 			return 'RSSHub';
 		case 'rss_url':

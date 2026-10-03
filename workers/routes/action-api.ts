@@ -122,6 +122,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 					'rsshub': 'rsshub_url',
 					'instagram': 'instagram_user',
 					'tiktok': 'tiktok_user',
+					'twitter': 'twitter_user', 'x': 'twitter_user',
 				};
 				const internalType: SourceType = typeMap[rawType] ?? 'rss_url';
 				const isUrlType = internalType === 'rss_url' || internalType === 'rsshub_url';

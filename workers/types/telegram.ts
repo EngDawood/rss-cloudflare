@@ -27,7 +27,7 @@ export interface AdminConfig {
 }
 
 // 'folo_push' is push-only: items arrive via the Folo webhook, never by polling.
-export type SourceType = 'instagram_user' | 'instagram_tag' | 'instagram_story' | 'rss_url' | 'rsshub_url' | 'tiktok_user' | 'folo_push';
+export type SourceType = 'instagram_user' | 'instagram_tag' | 'instagram_story' | 'rss_url' | 'rsshub_url' | 'tiktok_user' | 'twitter_user' | 'folo_push';
 
 // Channel source configuration
 export interface ChannelSource {
