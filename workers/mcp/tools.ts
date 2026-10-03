@@ -7,7 +7,7 @@ import { enrichFeedItems } from '../utils/media-enrichment';
 import { feedTitleFromSource } from '../utils/text';
 import {
 	getFeeds, getFeedById, getFeedByUrl, insertFeed, upsertFeedBySource, removeFeed, setFeedEnabled,
-	updateLastFetched, upsertItems, getItemById,
+	updateLastFetched, upsertItems, getItemById, addMcpSubscription,
 	listNewItemsMcp, searchItemsMcp, getItemByIdMcp, markMcpItemsRead,
 	getConfig, setConfig, getGlobalFormat, dbItemToFeedItem,
 	getChats, getChatByName, upsertChat, removeChat, setDefaultChat,
@@ -45,6 +45,8 @@ export function registerTools(server: McpServer, env: Env): void {
 				const feed = await upsertFeedBySource(db, { sourceType: 'rss_url', sourceValue: url, title: feedTitle });
 				const inserted = await upsertItems(db, feed.id, result.items);
 				await updateLastFetched(db, feed.id);
+				// Without an MCP subscription the hourly refresh cron would never poll it.
+				await addMcpSubscription(db, feed.id, feedTitle);
 				return ok({ feed, itemsInserted: inserted, errors: result.errors });
 			} catch (e) {
 				return err(e instanceof Error ? e.message : String(e));

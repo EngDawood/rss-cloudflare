@@ -320,6 +320,25 @@ export async function getMcpSubscribedFeedIds(db: D1Database): Promise<string[]>
 	return result.results.map(r => r.feed_id);
 }
 
+/**
+ * Feeds the MCP refresh cron should poll: enabled, MCP-subscribed, and not already
+ * fetched by the Telegram queue path (no enabled subscription on an enabled channel).
+ * Unused feeds (no consumer at all) are excluded, so they cost nothing.
+ */
+export async function getMcpOnlyFeedsToRefresh(db: D1Database): Promise<DbFeed[]> {
+	const result = await db.prepare(`
+		SELECT f.*, f.source_value AS url FROM feeds f
+		JOIN mcp_subscriptions m ON m.feed_id = f.id AND m.enabled = 1
+		WHERE f.enabled = 1
+		AND NOT EXISTS (
+			SELECT 1 FROM telegram_subscriptions s
+			JOIN channels c ON c.id = s.channel_id
+			WHERE s.feed_id = f.id AND s.enabled = 1 AND c.enabled = 1
+		)
+	`).all<DbFeed>();
+	return result.results;
+}
+
 export async function addMcpSubscription(db: D1Database, feedId: string, label?: string): Promise<void> {
 	const id = genId();
 	const now = Math.floor(Date.now() / 1000);
