@@ -1,21 +1,22 @@
-import { getFeeds, upsertItems, recordFeedFetchSuccess } from '../db/d1';
+import { getMcpOnlyFeedsToRefresh, upsertItems, recordFeedFetchSuccess } from '../db/d1';
 import { fetchForSource, isPushSource } from '../services/source-fetcher';
 import { recordFailureAndAlert } from '../services/feed-health';
 import type { ChannelSource } from '../types/telegram';
 
 /**
- * Cron handler: refresh all enabled saved feeds and upsert new items into D1.
- * Called from the scheduled() handler alongside checkAllFeeds().
+ * Cron handler (hourly): refresh MCP-subscribed feeds that the Telegram queue path
+ * does not already fetch, and upsert new items into D1. Feeds with no consumer
+ * (no Telegram or MCP subscription) are skipped entirely.
  *
- * Health is recorded here as well as on the queue path — feeds with no Telegram
- * subscription are never queue-fetched, so this is their only health signal.
+ * Health is recorded here as well as on the queue path — MCP-only feeds are never
+ * queue-fetched, so this is their only health signal.
  */
 export async function refreshSavedFeeds(env: Env): Promise<void> {
 	const db = env.DB;
-	const feeds = await getFeeds(db);
+	const feeds = await getMcpOnlyFeedsToRefresh(db);
 	// Push feeds (Folo webhook) have no pollable URL — polling them would produce
 	// an endless empty result and a bogus "feed degraded" alert.
-	const enabled = feeds.filter(f => f.enabled === 1 && !isPushSource(f.source_type));
+	const enabled = feeds.filter(f => !isPushSource(f.source_type));
 
 	await Promise.allSettled(
 		enabled.map(async (feed) => {

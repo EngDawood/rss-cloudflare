@@ -107,7 +107,10 @@ export default {
 			return;
 		}
 		ctx.waitUntil(checkAllFeeds(env));
-		ctx.waitUntil(refreshSavedFeeds(env));
+		// MCP-only feeds refresh hourly: first */5 tick of each hour.
+		if (new Date(event.scheduledTime).getUTCMinutes() < 5) {
+			ctx.waitUntil(refreshSavedFeeds(env));
+		}
 		ctx.waitUntil(checkCronWorkflows(env));
 	},
 	queue: async (batch: MessageBatch<QueueTask>, env: Env): Promise<void> => {
