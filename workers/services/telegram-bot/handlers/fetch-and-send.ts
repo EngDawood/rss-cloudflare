@@ -1,6 +1,7 @@
 import type { Bot } from 'grammy';
 import type { ChannelSource } from '../../../types/telegram';
 import { fetchForSource } from '../../source-fetcher';
+import { filterRetweets } from '../../../cron/check-feeds';
 import { formatFeedItem, resolveFormatSettings } from '../../../utils/telegram-format';
 import { escapeHtml as escapeHtmlBot } from '../../../utils/text';
 import { sendMediaToChannel, FileTooLargeError } from './send-media';
@@ -57,7 +58,7 @@ export async function fetchAndSendLatest(
 		}
 
 		// Send latest posts (oldest first)
-		const items = result.items.slice(0, count).reverse();
+		const items = filterRetweets(result.items, settings).slice(0, count).reverse();
 
 		// Enrich items that link to supported platforms (e.g. TikTok) or need Telegraph Instant View
 		const adminConfig = await getAdminConfig(env.CACHE);

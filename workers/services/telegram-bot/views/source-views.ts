@@ -17,12 +17,15 @@ export async function showSourceDetail(
 	const status = source.enabled ? '✅ Enabled' : '❌ Disabled';
 	const icon = sourceTypeIcon(source.type);
 	const currentFilter = source.mediaFilter ?? (source as any).mediaType ?? 'all';
+	const isX = source.type === 'twitter_user';
+	const retweetsOn = source.format?.includeRts !== 'disable';
 
 	const text = 
 		`${icon} <b>Source: ${escapeHtmlBot(source.value)}</b>\n` +
 		`Type: ${sourceTypeLabel(source.type)}\n` +
 		`Status: ${status}\n` +
-		`Media filter: <b>${currentFilter}</b>`;
+		`Media filter: <b>${currentFilter}</b>` +
+		(isX ? `\nRetweets: <b>${retweetsOn ? 'shown' : 'hidden'}</b>` : '');
 
 	const filters: FeedMediaFilter[] = ['all', 'photo', 'video', 'album'];
 	const keyboard = new InlineKeyboard()
@@ -35,7 +38,11 @@ export async function showSourceDetail(
 		const label = f === currentFilter ? `• ${f}` : f;
 		keyboard.text(label, `src_filter:${channelId}:${source.id}:${f}`);
 	}
-	keyboard.row()
+	keyboard.row();
+	if (isX) {
+		keyboard.text(`🔁 Retweets: ${retweetsOn ? 'ON' : 'OFF'}`, `src_rt:${channelId}:${source.id}`).row();
+	}
+	keyboard
 		.text('Format', `fs_v:${channelId}:${source.id}`)
 		.row()
 		.text('« Back to channel', `ch:${channelId}`);

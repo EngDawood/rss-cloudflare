@@ -33,6 +33,8 @@ export interface FeedItem {
 	topics?: string[];
 	/** AI-generated summary (populated by summarizer, stored in D1) */
 	summary?: string;
+	/** X (Twitter) only: the post is a retweet of someone else's post */
+	isRetweet?: boolean;
 }
 
 export interface FetchResult {

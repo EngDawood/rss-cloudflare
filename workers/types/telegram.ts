@@ -15,6 +15,8 @@ export interface FormatSettings {
 	customHashtags?: string;
 	cleanupText?: string;
 	removeTikTokViews: 'enable' | 'disable';
+	/** X sources only: 'disable' drops retweets. Unset = include. Not in the generic format keyboard (own button on the source screen). */
+	includeRts?: 'enable' | 'disable';
 }
 
 // Global admin configuration stored in KV

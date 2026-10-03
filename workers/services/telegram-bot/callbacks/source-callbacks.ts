@@ -100,6 +100,23 @@ export function registerSourceCallbacks(bot: Bot, env: Env, kv: KVNamespace): vo
 		await ctx.answerCallbackQuery({ text: 'Source removed' });
 	});
 
+	// Toggle retweets for an X source (stored in the subscription's format JSON)
+	bot.callbackQuery(/^src_rt:([^:]+):([^:]+)$/, async (ctx) => {
+		const channelId = ctx.match[1];
+		const sourceId = ctx.match[2];
+		const config = await getChannelConfigFromD1(db, channelId);
+		if (!config) { await ctx.answerCallbackQuery({ text: 'Channel not found' }); return; }
+
+		const source = config.sources.find((s) => s.id === sourceId);
+		if (!source) { await ctx.answerCallbackQuery({ text: 'Source not found' }); return; }
+
+		const next = source.format?.includeRts === 'disable' ? 'enable' : 'disable';
+		source.format = { ...source.format, includeRts: next };
+		await saveChannelConfigToD1(db, channelId, config);
+		await showSourceDetail(ctx, channelId, source);
+		await ctx.answerCallbackQuery({ text: next === 'disable' ? '🔁 Retweets hidden' : '🔁 Retweets shown' });
+	});
+
 	// Set source media filter
 	bot.callbackQuery(/^src_filter:([^:]+):([^:]+):([^:]+)$/, async (ctx) => {
 		const channelId = ctx.match[1];

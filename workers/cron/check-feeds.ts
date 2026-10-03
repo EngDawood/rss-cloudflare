@@ -1,6 +1,7 @@
 import { getChannels, getTelegramSubscriptions } from '../db/d1';
 import type { DbChannel } from '../db/d1';
 import type { FeedItem, FeedMediaFilter } from '../types/feed';
+import type { FormatSettings } from '../types/telegram';
 
 /**
  * Cron handler: determine which feeds are due (via D1 channels + subscriptions),
@@ -60,6 +61,12 @@ function isChannelDue(channel: DbChannel, now: number): boolean {
 /**
  * Filter items by media type.
  */
+/** Drop retweets when the source's includeRts setting is 'disable'. */
+export function filterRetweets(items: FeedItem[], settings: Pick<FormatSettings, 'includeRts'>): FeedItem[] {
+	if (settings.includeRts !== 'disable') return items;
+	return items.filter(item => !item.isRetweet);
+}
+
 export function filterItems(items: FeedItem[], filter: FeedMediaFilter): FeedItem[] {
 	if (filter === 'all') return items;
 	return items.filter(item => item.mediaType === filter);

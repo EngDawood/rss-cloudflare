@@ -25,7 +25,7 @@ import { launchWorkflowRun } from './workflows/trigger';
 import { maybeEnrichSummary } from './services/ai-summarizer';
 import { sendFallbackMessage } from './services/telegram-bot/helpers/fallback-sender';
 import { FileTooLargeError } from './services/telegram-bot/handlers/send-media';
-import { filterItems } from './cron/check-feeds';
+import { filterItems, filterRetweets } from './cron/check-feeds';
 import type { ChannelSource } from './types/telegram';
 import type { FormatSettings } from './types/telegram';
 
@@ -138,8 +138,20 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 		const channel = await getChannelById(env.DB, sub.channel_id);
 		if (!channel || !channel.enabled) continue;
 
-		// Filter by this subscription's media type.
-		const filtered = filterItems(recentItems, sub.media_filter as ChannelSource['mediaFilter']);
+		// Resolve format for this subscription.
+		const channelDefaultFormat = channel.default_format
+			? (JSON.parse(channel.default_format) as Partial<FormatSettings>)
+			: undefined;
+		const subFormat = sub.format
+			? (JSON.parse(sub.format) as Partial<FormatSettings>)
+			: undefined;
+		const settings = resolveFormatSettings(channelDefaultFormat, subFormat, globalFormat);
+
+		// Filter by this subscription's media type and retweet setting.
+		const filtered = filterRetweets(
+			filterItems(recentItems, sub.media_filter as ChannelSource['mediaFilter']),
+			settings,
+		);
 
 		// Dedup: skip items already successfully posted to this channel.
 		const newItems = [];
@@ -153,15 +165,6 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 		// Oldest first, cap at 5 per cycle.
 		newItems.reverse();
 		const toPost = newItems.slice(0, 5);
-
-		// Resolve format for this subscription.
-		const channelDefaultFormat = channel.default_format
-			? (JSON.parse(channel.default_format) as Partial<FormatSettings>)
-			: undefined;
-		const subFormat = sub.format
-			? (JSON.parse(sub.format) as Partial<FormatSettings>)
-			: undefined;
-		const settings = resolveFormatSettings(channelDefaultFormat, subFormat, globalFormat);
 
 		// AI summarization is per-subscription (channels may have different settings).
 		const aiEnabled = await resolveAiSummaryEnabled(env.DB, sub.channel_id, sub.feed_id);

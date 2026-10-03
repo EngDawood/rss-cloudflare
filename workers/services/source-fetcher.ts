@@ -218,6 +218,7 @@ export async function fetchTwitterUser(username: string, env?: Env): Promise<Fet
 			return {
 				...item,
 				title: '',
+				isRetweet: /^RT\s/.test(item.title), // RSSHub marks retweets with an "RT " title prefix
 				link: item.link.replace('twitter.com/', 'x.com/'),
 				text: own !== undefined ? htmlToPlainText(own) + (quoteText ? `\n\n↪ ${quoteText}` : '') : item.text,
 				contentHtml: undefined, // tweets never go to Telegraph
