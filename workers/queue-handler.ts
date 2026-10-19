@@ -281,6 +281,8 @@ async function processSendTask(task: SendTask, bot: Bot, env: Env): Promise<void
 					messageType: 'photo',
 					captionPreview: `[Fallback] ${item.title.slice(0, 180)}`,
 					status: 'ok',
+					// Keep the original failure so fallbacks are diagnosable later
+					error: err instanceof Error ? err.message : String(err),
 				});
 			} catch (logErr) {
 				console.error('[Queue Log] Failed to insert fallback success log:', logErr);
