@@ -89,7 +89,7 @@ workers/
 ├── services/
 │   ├── post-service.ts       # Canonical resolveTarget + logAndSend (shared by MCP + action-api)
 │   ├── instagram-client.ts   # RSS-Bridge fetching (primary)
-│   ├── media-downloader.ts   # Multi-platform media downloader (btch API, 9 platforms)
+│   ├── media-downloader.ts   # Client of the download-media API (no local downloaders)
 │   ├── feed-fetcher.ts       # Generic RSS/Atom feed parser
 │   ├── source-fetcher.ts     # Routes by SourceType → correct fetcher
 │   ├── user-resolver.ts      # Username → ID resolution + KV cache

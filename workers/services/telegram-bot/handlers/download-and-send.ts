@@ -1,6 +1,6 @@
 import { InlineKeyboard } from 'grammy';
 import type { Bot } from 'grammy';
-import { downloadMedia, formatFileSize } from '../../media-downloader';
+import { downloadMedia, formatFileSize, type DownloadMediaConfig } from '../../media-downloader';
 import { sendMediaToChannel, TelegramUrlFetchError } from './send-media';
 import { setAdminState } from '../storage/admin-state';
 import type { TelegramMediaMessage } from '../../../types/telegram';
@@ -13,6 +13,8 @@ import type { TelegramMediaMessage } from '../../../types/telegram';
  * @param options   When provided with kv + adminId, enables interactive mode:
  *                  if Telegram can't fetch the URL directly, shows a Download/Cancel picker
  *                  instead of auto-downloading through the Worker.
+ *                  `env` carries the download-media API config (URL + key) —
+ *                  without it, downloads fail with a not-configured error.
  */
 export async function downloadAndSendMedia(
 	bot: Bot,
@@ -22,7 +24,7 @@ export async function downloadAndSendMedia(
 	mode: 'auto' | 'audio' | 'hd' | 'sd' = 'auto',
 	statusMessageId?: number,
 	directUrl?: boolean,
-	options?: { kv?: KVNamespace; adminId?: number }
+	options?: { kv?: KVNamespace; adminId?: number; env?: DownloadMediaConfig }
 ): Promise<void> {
 	const interactive = !!(options?.kv && options?.adminId);
 	const modeText = mode === 'audio' ? 'audio' : 'media';
@@ -50,7 +52,7 @@ export async function downloadAndSendMedia(
 			return;
 		}
 
-		const result = await downloadMedia(url, mode);
+		const result = await downloadMedia(url, mode, options?.env, platform);
 
 		if (result.status === 'error') {
 			await bot.api.editMessageText(chatId, statusMessageId!, `Download failed: ${result.error || 'unknown error'}`);

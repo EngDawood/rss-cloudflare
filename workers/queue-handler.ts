@@ -129,7 +129,7 @@ async function processFetchTask(task: FetchTask, env: Env): Promise<void> {
 		token: adminConfig.telegraph.token || env.TELEGRAPH_ACCESS_TOKEN,
 		enabled: adminConfig.telegraph.enabled,
 		threshold: adminConfig.telegraph.threshold,
-	});
+	}, env);
 
 	const globalFormat = await getGlobalFormat(env.DB);
 

@@ -205,7 +205,7 @@ export async function handleFoloWebhook(c: Context<HonoEnv>): Promise<Response> 
 			token: adminConfig.telegraph.token || env.TELEGRAPH_ACCESS_TOKEN,
 			enabled: adminConfig.telegraph.enabled,
 			threshold: adminConfig.telegraph.threshold,
-		});
+		}, env);
 	} catch (err) {
 		console.warn('[folo] Enrichment failed:', err);
 	}

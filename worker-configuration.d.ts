@@ -30,6 +30,8 @@ interface __BaseEnv_Env {
 	FOLO_WEBHOOK_SECRET: string;
 	RSSHUB_URL: string;
 	RSSHUB_ACCESS_KEY: string;
+	DOWNLOAD_MEDIA_API_URL: "https://dl.engdawood.com";
+	DOWNLOAD_MEDIA_API_KEY: string;
 	RSSReaderMCP: DurableObjectNamespace<import("./workers/index").RSSReaderMCP>;
 	AGENT_WORKFLOW: Workflow<Parameters<import("./workers/index").AgentWorkflow['run']>[0]['payload']>;
 }

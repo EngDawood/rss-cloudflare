@@ -55,7 +55,7 @@ async function sendWithCaption(
 
 /**
  * Send a formatted media message to a Telegram chat.
- * Handles text, photo, video, audio, and media group types.
+ * Handles text, photo, video, audio, document, and media group types.
  *
  * @param interactive When true, throws TelegramUrlFetchError on URL rejection (for user-facing
  *   download flow). When false (default), auto-falls back to download+upload silently (for cron).
@@ -81,6 +81,9 @@ export async function sendMediaToChannel(
 			break;
 		case 'audio':
 			await sendAudioMessage(bot, chatId, message, disableNotification, interactive);
+			break;
+		case 'document':
+			await sendDocumentMessage(bot, chatId, message, disableNotification, interactive);
 			break;
 		case 'mediagroup':
 			await sendMediaGroupMessage(bot, chatId, message, disableNotification);
@@ -181,6 +184,33 @@ async function sendAudioMessage(
 		const file = await downloadAsInputFile(url, 'audio.mp3');
 		await sendWithCaption(
 			(caption) => bot.api.sendAudio(chatId, file, { caption, parse_mode: 'HTML', disable_notification: disableNotification }),
+			bot, chatId, message.caption, disableNotification
+		);
+	}
+}
+
+async function sendDocumentMessage(
+	bot: Bot,
+	chatId: number,
+	message: TelegramMediaMessage,
+	disableNotification: boolean,
+	interactive: boolean
+): Promise<void> {
+	if (!message.url) throw new Error('Document URL is missing');
+	const url = message.url;
+	try {
+		await sendWithCaption(
+			(caption) => bot.api.sendDocument(chatId, url, { caption, parse_mode: 'HTML', disable_notification: disableNotification }),
+			bot, chatId, message.caption, disableNotification
+		);
+	} catch (err) {
+		if (isTerminalError(err)) throw err;
+		if (interactive) throw new TelegramUrlFetchError(url);
+
+		console.log(`[sendDocument] URL fetch failed, trying download fallback for ${url}: ${err}`);
+		const file = await downloadAsInputFile(url, 'file');
+		await sendWithCaption(
+			(caption) => bot.api.sendDocument(chatId, file, { caption, parse_mode: 'HTML', disable_notification: disableNotification }),
 			bot, chatId, message.caption, disableNotification
 		);
 	}
