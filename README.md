@@ -18,7 +18,7 @@ Converts Instagram content into clean RSS 2.0 XML. Supports multiple content typ
 A feature-rich bot to manage your feeds and subscriptions:
 - **Subscription Management**: Subscribe/unsubscribe Telegram channels to Instagram profiles, TikTok users, or any RSS/Atom feed URL.
 - **Automated Posting**: Periodic checking of feeds (every 5 min via Cron) and automatic posting to configured channels.
-- **Multi-Platform Media**: Downloads and sends media from 9+ platforms — Instagram, TikTok, Twitter/X, YouTube, Facebook, Threads, SoundCloud, Spotify, Pinterest.
+- **Multi-Platform Media**: Downloads and sends media from 9+ platforms — Instagram, TikTok, Twitter/X, YouTube, Facebook, Threads, SoundCloud, Spotify, Pinterest. All extraction is delegated to the **download-media Worker API** (`POST /api/download`); this Worker keeps no downloader of its own.
 - **Customizable Formatting**: Per-channel and per-source formatting settings (author display, media toggles, source links, notification muting, hashtags, custom headers/footers).
 - **Telegraph Publishing**: Long posts automatically published to Telegraph and linked in Telegram.
 - **AI Summarization**: Concise Arabic summaries generated via Cloudflare AI Gateway, configurable per channel and per source.
@@ -99,6 +99,7 @@ npx wrangler secret put IG_DS_USER_ID
 npx wrangler secret put MCP_AUTH_TOKEN
 npx wrangler secret put AI_GATEWAY_TOKEN
 npx wrangler secret put FOLO_WEBHOOK_SECRET   # optional
+npx wrangler secret put DOWNLOAD_MEDIA_API_KEY # required for media downloads — same value as the download-media Worker's PUBLIC_API_KEY
 ```
 
 ### 5. Deploy
@@ -172,7 +173,7 @@ workers/               # Cloudflare Worker (entry: workers/index.ts)
 │   ├── chat-agent.ts         # OpenAI-compatible chat agent
 │   ├── feed-fetcher.ts       # Generic RSS/Atom parser (Cheerio)
 │   ├── instagram-client.ts   # Instagram RSS-Bridge fetching
-│   ├── media-downloader.ts   # Multi-platform media downloader (btch API)
+│   ├── media-downloader.ts   # Client of the download-media API (no local downloaders)
 │   ├── rss-builder.ts        # RSS 2.0 XML builder
 │   ├── source-fetcher.ts     # Multi-platform source routing
 │   ├── user-resolver.ts      # Instagram username→ID resolution + KV cache
@@ -224,6 +225,7 @@ The `vars` section allows you to customize runtime behavior:
 | `FEED_CACHE_TTL` | `900` | Feed XML cache TTL (seconds) |
 | `ADMIN_TELEGRAM_ID` | — | Your Telegram user ID (restricts bot access) |
 | `WORKER_URL` | — | Public URL of your deployed Worker |
+| `DOWNLOAD_MEDIA_API_URL` | `https://dl.engdawood.com` | Base URL of the download-media Worker API used for all media downloads |
 | `DEFAULT_AI_MODEL` | `nvidia/llama-3.1-nemotron-70b-instruct` | AI model for feed summarization |
 | `CHAT_AI_MODEL` | `google/gemini-2.0-flash` | AI model for the chat agent |
 

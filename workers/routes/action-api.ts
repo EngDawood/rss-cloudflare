@@ -302,7 +302,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 				const { chatId, chatName } = await resolveTarget(db, target);
 
 				const item = dbItemToFeedItem(row, feedTitle, feedLink);
-				await enrichFeedItems([item], { token: c.env.TELEGRAPH_ACCESS_TOKEN });
+				await enrichFeedItems([item], { token: c.env.TELEGRAPH_ACCESS_TOKEN }, c.env);
 
 				const settings = resolveFormatSettings(undefined, undefined, await getGlobalFormat(db));
 				const message = formatFeedItem(item, settings);
@@ -323,7 +323,7 @@ export async function handleActionApi(c: Context<HonoEnv>): Promise<Response> {
 					if (!row) return c.json({ error: `Item ${itemId} not found` }, 404);
 					const feed = await getFeedById(db, row.feed_id);
 					const item = dbItemToFeedItem(row, feed?.title ?? '', feed?.url ?? '');
-					await enrichFeedItems([item], { token: c.env.TELEGRAPH_ACCESS_TOKEN });
+					await enrichFeedItems([item], { token: c.env.TELEGRAPH_ACCESS_TOKEN }, c.env);
 					message = formatFeedItem(item, resolveFormatSettings(undefined, undefined, await getGlobalFormat(db)));
 					if (caption) message = { ...message, caption };
 				} else {

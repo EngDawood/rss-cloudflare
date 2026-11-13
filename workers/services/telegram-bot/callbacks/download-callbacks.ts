@@ -40,7 +40,7 @@ export function registerDownloadCallbacks(bot: Bot, env: Env, kv: KVNamespace): 
 			await clearAdminState(kv, adminId);
 			await ctx.answerCallbackQuery();
 			// directUrl=true skips platform detection; no kv/adminId = non-interactive (auto-fallback on error)
-			await downloadAndSendMedia(bot, chatId, directMediaUrl, downloadPlatform || 'media', 'auto', msgId, true);
+			await downloadAndSendMedia(bot, chatId, directMediaUrl, downloadPlatform || 'media', 'auto', msgId, true, { env });
 			return;
 		}
 
@@ -70,7 +70,7 @@ export function registerDownloadCallbacks(bot: Bot, env: Env, kv: KVNamespace): 
 					'auto',
 					msgId,
 					true, // directUrl flag — skip platform detection, download this URL directly
-					{ kv, adminId },
+					{ kv, adminId, env },
 				);
 				return;
 			}
@@ -78,6 +78,6 @@ export function registerDownloadCallbacks(bot: Bot, env: Env, kv: KVNamespace): 
 			mode = 'auto';
 		}
 
-		await downloadAndSendMedia(bot, chatId, downloadUrl, downloadPlatform || 'Unknown', mode, msgId, undefined, { kv, adminId });
+		await downloadAndSendMedia(bot, chatId, downloadUrl, downloadPlatform || 'Unknown', mode, msgId, undefined, { kv, adminId, env });
 	});
 }

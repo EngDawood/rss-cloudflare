@@ -75,7 +75,7 @@ export interface AdminState {
 
 // Formatted Telegram media message
 export interface TelegramMediaMessage {
-	type: 'photo' | 'video' | 'audio' | 'mediagroup' | 'text';
+	type: 'photo' | 'video' | 'audio' | 'document' | 'mediagroup' | 'text';
 	url?: string;
 	thumbnailUrl?: string;
 	caption: string;

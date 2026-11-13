@@ -1,5 +1,5 @@
 import type { FeedItem, FeedItemMedia, FeedItemMediaType } from '../types/feed';
-import { downloadMedia } from '../services/media-downloader';
+import { downloadMedia, type DownloadMediaConfig } from '../services/media-downloader';
 import { createTelegraphPage } from './telegraph';
 
 export interface TelegraphOptions {
@@ -10,11 +10,12 @@ export interface TelegraphOptions {
 
 /**
  * Enrich feed items that have no media but link to a supported platform (e.g. TikTok).
- * Uses the media downloader to resolve actual video/image URLs.
+ * Uses the media downloader (the download-media API — pass the Worker env as
+ * `downloadConfig`) to resolve actual video/image URLs.
  * Mutates items in-place. Non-fatal: failures leave items unchanged (sent as text).
  * If telegraph.token is set and telegraph.enabled is true, converts long articles into Telegraph pages.
  */
-export async function enrichFeedItems(items: FeedItem[], telegraph?: TelegraphOptions): Promise<void> {
+export async function enrichFeedItems(items: FeedItem[], telegraph?: TelegraphOptions, downloadConfig?: DownloadMediaConfig): Promise<void> {
 	const token = telegraph?.token;
 	const enabled = telegraph?.enabled ?? true;
 	const threshold = telegraph?.threshold ?? 500;
@@ -41,7 +42,7 @@ export async function enrichFeedItems(items: FeedItem[], telegraph?: TelegraphOp
 		if (item.media.length > 0 && !isShortVideo) continue;
 
 		try {
-			const result = await downloadMedia(item.link, 'auto');
+			const result = await downloadMedia(item.link, 'auto', downloadConfig);
 			if (result.status !== 'success' || !result.media?.length) continue;
 
 			const enriched: FeedItemMedia[] = result.media

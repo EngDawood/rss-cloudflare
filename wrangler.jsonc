@@ -62,7 +62,12 @@
 		"DEFAULT_AI_MODEL": "custom-nvidia-nvm/llama-3.1-nemotron-70b-instruct",
 		"CHAT_AI_MODEL": "google-ai-studio/gemini-2.0-flash",
 		"EMDASH_URL": "https://engdawood.com",
-		"RSSHUB_URL": "https://rsshub.engdawood.com"
+		"RSSHUB_URL": "https://rsshub.engdawood.com",
+		// Base URL of the download-media Worker whose API resolves all media
+		// downloads (POST /api/download + MCP get_media_info). Its API key is a
+		// secret — set with: npx wrangler secret put DOWNLOAD_MEDIA_API_KEY
+		// (same value as download-media's PUBLIC_API_KEY).
+		"DOWNLOAD_MEDIA_API_URL": "https://dl.engdawood.com"
 		// RSSHUB_ACCESS_KEY is a secret — set with: npx wrangler secret put RSSHUB_ACCESS_KEY
 		// Placeholder — override with: npx wrangler secret put MCP_AUTH_TOKEN
 		// "MCP_AUTH_TOKEN": ""
@@ -141,4 +146,5 @@
 	// - FOLO_WEBHOOK_SECRET  (optional: if set, Folo webhook requests must include ?token=<secret>)
 	// - MCP_AUTH_TOKEN       (overrides the empty var above for production auth)
 	// - AI_GATEWAY_TOKEN     (required: Cloudflare AI Gateway authenticated token)
+	// - DOWNLOAD_MEDIA_API_KEY (required for media downloads: download-media's PUBLIC_API_KEY)
 }

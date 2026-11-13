@@ -65,7 +65,7 @@ export async function fetchAndSendLatest(
 			token: adminConfig.telegraph.token || env.TELEGRAPH_ACCESS_TOKEN,
 			enabled: adminConfig.telegraph.enabled,
 			threshold: adminConfig.telegraph.threshold,
-		});
+		}, env);
 
 		let failures = 0;
 		for (const item of items) {

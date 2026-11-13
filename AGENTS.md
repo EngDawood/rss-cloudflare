@@ -57,6 +57,7 @@ A Cloudflare Worker that provides an RSS bridge for Instagram, a powerful Telegr
   - `npx wrangler secret put FOLO_WEBHOOK_SECRET`
   - `npx wrangler secret put MCP_AUTH_TOKEN`
   - `npx wrangler secret put AI_GATEWAY_TOKEN`
+  - `npx wrangler secret put DOWNLOAD_MEDIA_API_KEY` (same value as download-media's `PUBLIC_API_KEY`; media downloads fail closed without it)
 
 ## Developer Workflow
 
